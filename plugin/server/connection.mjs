@@ -42,6 +42,39 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         emit({ type: 'session.runtime_failed', sessionId: session.id,
             error: { message: `${reason}; review any partial file changes before retrying` } });
     }
+    function reportContainmentFailure(session, reason) {
+        session.broken = true;
+        session.containmentFailure = errorText(reason);
+        // A scope may still contain running commands. Never imply that an
+        // interrupted/failed turn was rolled back or the scope was stopped.
+        notice(session, 'containment-unconfirmed',
+            `Unable to confirm Mixdog process termination: ${session.containmentFailure}. `
+            + 'Inspect the user systemd scope and any outstanding file changes before reopening.', 'error');
+    }
+    function containAfterJournalFailure(session, cause) {
+        failSession(session, `Journal write failed: ${errorText(cause)}`);
+        if (session.active) {
+            // The accepted prompt may already have modified files. Leave its
+            // durable receipt running so the next open marks it uncertain.
+            session.active.canceled = true;
+            session.active.finished = true;
+            clearTimeout(session.active.timer);
+            emit({ type: 'session.turn', sessionId: session.id, turnId: session.active.id,
+                state: 'failed', error: { message: 'Journal persistence failed; execution outcome is uncertain' } });
+        }
+        if (session.containmentPromise) return;
+        const engine = session.active?.engine || session.engine;
+        session.containmentPromise = Promise.resolve().then(() => {
+            if (typeof engine?.kill !== 'function') throw new Error('No engine containment operation available');
+            return deadline(Promise.resolve().then(() => engine.kill()), stopMs,
+                'Engine containment confirmation timed out');
+        }).then(() => {
+            if (!session.closed && !session.closing)
+                notice(session, 'containment-confirmed', 'Mixdog process scope stopped after journal failure', 'warning');
+        }).catch((error) => reportContainmentFailure(session, error));
+        // The entire promise is observed; a failed systemd kill, synchronous
+        // exception or timeout cannot crash the provider process.
+    }
     function recordItem(session, item, timestamp = new Date().toISOString()) {
         if (session.closed) return;
         const index = session.record.items.findIndex((row) => row.item.id === item.id);
@@ -51,10 +84,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         if (!session.flushTimer) session.flushTimer = setTimeout(() => {
             session.flushTimer = null;
             try { store.save(session.record); }
-            catch (error) {
-                failSession(session, `Journal write failed: ${errorText(error)}`);
-                void session.active?.engine?.kill?.();
-            }
+            catch (error) { containAfterJournalFailure(session, error); }
         }, flushMs);
     }
     function flush(session) { clearTimeout(session.flushTimer); session.flushTimer = null; store.save(session.record); }
@@ -127,7 +157,8 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         if (model !== DEFAULT_MODEL && !route && model !== record.nativeRoute?.model && !config.providerOptions?.model) { release(); throw new Error('Unknown model route; configure PASEODOG_MODELS or providerOptions'); }
         const session = { id: input.sessionId, config, record, release, acked: new Set(), permissions: new Map(),
             engine: null, enginePromise: null, active: null, closed: false, closing: false, broken: false,
-            bootController: new AbortController(), flushTimer: null, closePromise: null, failureReported: false, unsubscribeCrash: null };
+            bootController: new AbortController(), flushTimer: null, closePromise: null, failureReported: false,
+            unsubscribeCrash: null, containmentPromise: null, containmentFailure: null };
         sessions.set(input.sessionId, session);
         let uncertain = null;
         try {
@@ -233,7 +264,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         if (response.interrupt) void interrupt(session);
     }
     function callbacksFor(session, turn) {
-        const live = () => !closed && !session.closed && !session.closing && !turn.canceled && !turn.finished;
+        const live = () => !closed && !session.closed && !session.closing && !session.broken && !turn.canceled && !turn.finished;
         let segment = 0, text = '', segmentClosed = false, lastCommitted = '';
         let reasoning = '';
         const push = () => recordItem(session, { type: 'assistant_message', id: `assistant:${turn.id}:${segment}`, text });

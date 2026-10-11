@@ -143,3 +143,17 @@ paseodog plugin ls
 상위 패키지 버전을 변경하려면 SDK 타입 검사, 실제 런타임 테스트, 권한·중단·복원·휴대폰 수용 검사를 다시 실행합니다. Mixdog 패치 해시는 의도적으로 자동 갱신하지 않습니다. 첫 인터넷 설치 후 생성된 세 개의 `package-lock.json`을 검토하고 프로젝트에 커밋합니다.
 
 롤백 시 서비스를 정지하고 이전 코드·정확한 의존성·그 버전의 데이터 백업을 함께 복원합니다. 이 버전의 journal v2를 starter v1에 그대로 읽히게 하지 않습니다. 삭제나 롤백 스크립트가 사용자 프로젝트 파일을 자동 제거하지 않도록 운영하세요.
+## rc.4 Android terminal typing/cursor
+
+The native terminal of the upstream Paseo Android app has an outstanding
+Samsung Keyboard input issue. PaseoDog's Linux update does **not** replace the
+Android APK. For a no-build alternative use **Settings → Diagnostics → Use
+legacy terminal renderer**, reopen the terminal, and retest; a separate SSH
+client is another bypass for command-line work. A reviewed opt-in client source
+patch and controlled Android test matrix are described in
+[`ANDROID-TERMINAL.md`](ANDROID-TERMINAL.md).
+
+When a journal error occurs during a running turn, do not assume that stopping
+or failing a turn undid file changes. If `containment-unconfirmed` appears,
+stop assigning work to that host, verify the actual systemd scope and its
+cgroup population, inspect `git diff`, and recover only once the scope is empty.

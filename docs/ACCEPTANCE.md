@@ -77,3 +77,18 @@
 - [ ] Real Mixdog native shell subprocesses, including detached process groups, stop writing after interrupt, crash, timeout and close; per-session scope cgroup is empty.
 - [ ] Text reset/retry does not duplicate or retract visible Paseo/mobile text.
 - [ ] All three `package-lock.json` files pass `npm ci` on Node 24 and the same files ship in the release ZIP.
+
+## rc.4 — journal containment and Android input verification
+
+Before using real project data, simulate `store.save` failure and rejected/hung
+native scope kill with `npm test`; ensure the session emits
+`containment-unconfirmed`, rejects a new turn, preserves recovery uncertainty
+and leaves unrelated sessions responsive. The release tests verify these paths
+without deliberately destroying user data.
+
+**Android is a separate binary.** The opt-in Paseo source patch and build flow
+are at `docs/ANDROID-TERMINAL.md`. The ordinary Play Store APK is unaffected by
+updating PaseoDog. To close the Samsung Keyboard duplication and Korean cursor
+issues, complete the English/Hangul mixed input and pixel alignment tests on a
+physical Android device. Client-side cursor positioning cannot be proven with
+server UTF-8 tests or TSX compilation alone.

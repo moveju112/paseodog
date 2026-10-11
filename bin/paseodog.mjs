@@ -15,7 +15,7 @@ function splitCommand(argv) {
 }
 const { before, command, args } = splitCommand(tokens);
 
-const help=`PaseoDog 1.0.0-rc.2 - Linux Mixdog engine, Paseo UI/CLI\n
+const help=`PaseoDog 1.0.0-rc.4 - Linux Mixdog engine, Paseo UI/CLI\n
 paseodog start                 Start the dedicated Paseo daemon
 paseodog serve                 Foreground daemon (systemd entrypoint)
 paseodog auth                  Open Mixdog TUI in the dedicated auth profile

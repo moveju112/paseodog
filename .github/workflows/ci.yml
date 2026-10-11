@@ -36,6 +36,30 @@ jobs:
       - name: Install SDK from committed lockfile
         run: npm --prefix plugin ci
       - run: npm run typecheck
+      - name: Check opt-in Android patch against audited Paseo source
+        run: |
+          # GitHub's immutable upstream file is checked by its Git blob SHA
+          # before any edits. This does not build or install an Android APK.
+          TARGET="$RUNNER_TEMP/paseo-source"
+          mkdir -p "$TARGET/packages/app/src/terminal/native-renderer"
+          curl --fail --location --silent --show-error --retry 2 --max-time 40 \
+            https://raw.githubusercontent.com/getpaseo/paseo/166aabd57b3f6c69f6a6f65b621aba167e7e3be8/packages/app/src/terminal/native-renderer/terminal-input.native.tsx \
+            -o "$TARGET/packages/app/src/terminal/native-renderer/terminal-input.native.tsx"
+          node scripts/patch-paseo-android.mjs --check "$TARGET"
+          node scripts/patch-paseo-android.mjs --apply "$TARGET"
+          node scripts/patch-paseo-android.mjs --check "$TARGET"
+          PASEODOG_ANDROID_PATCH_ROOT="$TARGET" node --input-type=module <<'JS'
+          import { readFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          import ts from './plugin/node_modules/typescript/lib/typescript.js';
+          const source = join(process.env.PASEODOG_ANDROID_PATCH_ROOT,
+              'packages/app/src/terminal/native-renderer/terminal-input.native.tsx');
+          const syntax = ts.createSourceFile(source, readFileSync(source,'utf8'),
+              ts.ScriptTarget.ESNext, true, ts.ScriptKind.TSX);
+          if (syntax.parseDiagnostics.length) throw new Error(
+              syntax.parseDiagnostics.map((d) => ts.flattenDiagnosticMessageText(d.messageText,'\n')).join('\n'));
+          console.log('Audited upstream Android patch: applies and parses as TSX');
+          JS
   native-contract:
     runs-on: ubuntu-latest
     steps:

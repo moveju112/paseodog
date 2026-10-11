@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0-rc.4 - 2026-10-12
+
+- Avoid unhandled rejections and silent containment failure when journal flush
+  and native scope kill both fail. Mark the accepted turn uncertain; stop sending
+  its callbacks; emit failure/containment notices; bound the kill confirmation.
+- Add deterministic regressions for rejected/thrown/hung/successful cleanup.
+- Provide an opt-in, exact-upstream-blob Paseo Android input patch (Samsung-style
+  callback reordering, Backspace and Hangul) with synthetic contract tests.
+  **Does not update APKs or prove physical cursor pixel alignment.**
+- Add upstream-source patch compilation check to SDK CI.
+
 ## 1.0.0-rc.3 - 2026-10-12
 
 - Make package security tests operate exclusively on isolated temporary source copies; never delete real source tree state.

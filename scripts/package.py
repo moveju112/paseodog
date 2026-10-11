@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # credential file or untracked artifact must never enter a source release.
 MANIFEST = "MANIFEST.sha256"
 ROOT_FILES = {".gitignore", "AGENTS.md", "CHANGELOG.md", "LICENSE", "NOTICE", "README.md", "package.json"}
-ROOT_FOLDERS = {".github", "bin", "config", "docs", "engine", "plugin", "reports", "scripts", "tests", "tools"}
+ROOT_FOLDERS = {".github", "bin", "config", "docs", "engine", "patches", "plugin", "reports", "scripts", "tests", "tools"}
 FORBIDDEN_PARTS = {"node_modules", ".git", "__pycache__", ".venv", "coverage", "state", "states", "tmp", ".paseo", ".mixdog", "secrets"}
 FORBIDDEN_NAMES = {".env", "auth.json", "credentials.json", "secrets.json", "token.json", "id_rsa", "id_ed25519"}
 

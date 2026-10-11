@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const VERSION = '1.0.0-rc.3';
+export const VERSION = '1.0.0-rc.4';
 export const DEFAULT_MODEL = 'mixdog-default';
 export const MAX_FRAME = 2 * 1024 * 1024;
 export const plainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);

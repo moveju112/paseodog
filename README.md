@@ -1,10 +1,10 @@
-# PaseoDog · 1.0.0-rc.3
+# PaseoDog · 1.0.0-rc.4
 
 **Linux에서 Mixdog 엔진을 실행하고, Paseo의 휴대폰·PC·웹·SSH 인터페이스로 같은 작업을 제어하는 독립 통합 프로젝트입니다.**
 
 ## 배포 상태
 
-이번 파일은 스타터가 아닌 **통합 구현과 운영 도구를 보완한 릴리스 후보(RC)**입니다. 의존성 없는 자동 테스트 **88개 통과**, JavaScript·JSON·Shell 구문 검사 통과, 실제 자식 프로세스와 디스크를 사용하는 통합 테스트를 포함합니다.
+이번 파일은 스타터가 아닌 **통합 구현과 운영 도구를 보완한 릴리스 후보(RC)**입니다. 회귀 검사 **100개 이상 통과**, JavaScript·JSON·Shell 구문 검사 통과, 실제 자식 프로세스와 디스크를 사용하는 통합 테스트를 포함합니다.
 
 그러나 **실제 Mixdog 모델 호출, Paseo 플러그인 로딩과 세션 생성, 휴대폰 외부망 연결, 서버 재부팅 검증은 완료하지 않았습니다. (GitHub CI에서 SDK 타입 검사와 Mixdog 설치 검사는 통과해야 합니다.)** 개발 컨테이너의 npm DNS 요청이 `EAI_AGAIN`으로 실패했고, 모델 계정·휴대폰·사용자 서버가 없습니다. 컨테이너 Node는 22.16.0으로 실제 설치 대상 버전보다 낮습니다. 모의 엔진 테스트 결과를 실계정 통합 성공으로 표시하지 않습니다.
 
@@ -124,6 +124,8 @@ npm test
 npm run typecheck      # plugin 의존성 설치 필요
 npm run package       # Python 3 필요
 ```
+
+Android native 터미널 입력 수정안은 **별도 Paseo 앱 소스 패치**이며 설치된 APK를 자동으로 바꾸지 않습니다. [Android 터미널 수정과 실기기 수용 검사](docs/ANDROID-TERMINAL.md)를 참조하세요.
 
 관련 문서: [아키텍처](docs/ARCHITECTURE.md), [운영](docs/OPERATIONS.md), [보안 경계](docs/SECURITY.md), [상위 프로젝트·패치](docs/UPSTREAM.md).
 
