@@ -1,0 +1,3 @@
+[
+  { "id": "my-route", "label": "My configured model", "provider": "REPLACE_WITH_CONFIGURED_PROVIDER", "model": "REPLACE_WITH_ACCESSIBLE_MODEL_ID", "effort": "low" }
+]

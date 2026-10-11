@@ -1,0 +1,11 @@
+node_modules/
+*.log
+.env
+.env.*
+!.env.example
+reports/*.local.json
+reports/*.local.txt
+*.tmp
+*.tgz
+*.zip
+__pycache__/

@@ -1,0 +1,55 @@
+name: PaseoDog checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      native_install:
+        description: "Install pinned Mixdog and verify the host patch (no model calls)"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm run check
+      - run: npm test
+      - run: python3 scripts/package.py
+  sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install SDK development dependencies
+        run: |
+          if [ -f plugin/package-lock.json ]; then
+            npm --prefix plugin ci
+          else
+            npm --prefix plugin install
+          fi
+      - run: npm run typecheck
+  native-contract:
+    if: github.event_name == 'workflow_dispatch' && inputs.native_install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install native dependency without model credentials
+        run: |
+          if [ -f engine/package-lock.json ]; then
+            npm --prefix engine ci
+          else
+            npm --prefix engine install
+          fi
+      - run: node scripts/patch-mixdog.mjs
+      - run: node engine/bin/paseodog-engine.mjs --check

@@ -1,0 +1,25 @@
+PaseoDog integration project, 2026.
+
+The integration source in this archive is provided under Apache License 2.0.
+This is an independent integration, not an official Paseo or Mixdog release.
+No upstream trademark, account entitlement or service availability is granted.
+
+Paseo upstream:
+  https://github.com/getpaseo/paseo
+  Copyright (c) 2025-present Mohamed Boudra
+  Apache License 2.0, except separately licensed third-party components.
+  Provider interface shapes and examples informed this adapter and its contract tests.
+
+Mixdog upstream:
+  https://github.com/tribgames/mixdog
+  Apache License 2.0; upstream third-party notices continue to apply.
+  tests/fixtures/upstream-turn-run.mjs.txt retains one unmodified source file:
+  src/session-runtime/turn/turn-run.mjs at commit
+  620a60919e04f09a477bc5104e07230d22217a17.
+  Original Git blob: 25339f8b798855011f30b5d51c5476602723f303.
+  The installer modifies an installed copy of that file by adding a documented
+  beforeSessionAsk callback. The injected code includes a modification notice.
+
+Complete upstream trees, binaries and node_modules are not bundled.
+Dependencies installed later retain their own LICENSE and NOTICE files.
+Redistributing a complete built product requires retaining those dependency notices.
