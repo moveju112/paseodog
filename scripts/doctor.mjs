@@ -1,0 +1,24 @@
+import { existsSync,readFileSync,lstatSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
+import { root,paseoHome,mixdogHome,journalRoot,paseoBin,nativeBin,supportedNode } from './paths.mjs';
+import { patch } from './patch-mixdog.mjs';
+const checks=[];
+const record=(name,ok,detail)=>checks.push({name,status:ok?'PASS':'FAIL',detail});
+record('node',supportedNode(),process.versions.node+'; required ^22.19.0 || >=24.0.0');
+record('git',spawnSync('git',['--version'],{encoding:'utf8'}).status===0,'Git executable');
+for(const [name,file] of [['Paseo CLI',paseoBin],['Mixdog CLI',nativeBin]])record(name,existsSync(file),file);
+for(const [name,path,pin] of [['Paseo','tools/node_modules/@getpaseo/cli/package.json','0.11.2'],['Mixdog','engine/node_modules/mixdog/package.json','1.0.12']]){
+    try{const m=JSON.parse(readFileSync(join(root,path),'utf8'));record(name+' version',m.version===pin,m.version);}catch{record(name+' version',false,'Not installed');}
+}
+try{patch(join(root,'engine/node_modules/mixdog'),{check:true});record('host policy patch',true,'Verified original Git blob and injected callback');}catch(e){record('host policy patch',false,e.message);}
+try{const c=JSON.parse(readFileSync(join(paseoHome,'config.json'),'utf8'));record('pluginsEnabled',c.pluginsEnabled===true,'Explicit trust required');record('provider command',Array.isArray(c.agents?.providers?.paseodog?.command),'Absolute Node + worker path');record('installed plugin',!!c.plugins?.['paseodog-provider'],'Paseo owns the source registration');
+    const listen=c.daemon?.listen||'unset';record('listen configured',typeof listen==='string',listen);
+}catch(e){record('Paseo config',false,e.message);}
+for(const path of [paseoHome,mixdogHome,journalRoot]){
+    const exists=existsSync(path);record('private state directory',exists&&!lstatSync(path).isSymbolicLink()&&(lstatSync(path).mode&0o077)===0,path);
+}
+const output={checkedAt:new Date().toISOString(),platform:process.platform,checks,
+    notChecked:['Live account authentication','Real model response','Native helper execution','Android LTE/5G pairing','Server reboot/service recovery'],
+    warning:'Passing doctor does not prove live production readiness; no inference request was made.'};
+console.log(JSON.stringify(output,null,2));process.exitCode=checks.some(x=>x.status==='FAIL')?1:0;

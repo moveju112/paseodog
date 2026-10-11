@@ -1,0 +1,436 @@
+TAP version 13
+# Subtest: configure requires explicit trust and does not enable plugins silently
+ok 1 - configure requires explicit trust and does not enable plugins silently
+  ---
+  duration_ms: 2.780083
+  type: 'test'
+  ...
+# Subtest: configure preserves unrelated config, backs it up, and uses absolute argv with no shell
+ok 2 - configure preserves unrelated config, backs it up, and uses absolute argv with no shell
+  ---
+  duration_ms: 2.642066
+  type: 'test'
+  ...
+# Subtest: malformed existing config fails without replacing it
+ok 3 - malformed existing config fails without replacing it
+  ---
+  duration_ms: 3.395249
+  type: 'test'
+  ...
+# Subtest: Node compatibility checker matches upstream supported ranges
+ok 4 - Node compatibility checker matches upstream supported ranges
+  ---
+  duration_ms: 0.229365
+  type: 'test'
+  ...
+# Subtest: text lifecycle emits a single acceptance, start, terminal, stable timeline and usage
+ok 5 - text lifecycle emits a single acceptance, start, terminal, stable timeline and usage
+  ---
+  duration_ms: 11.466464
+  type: 'test'
+  ...
+# Subtest: env, MCP servers, system prompt, native provider/model/effort reach factory
+ok 6 - env, MCP servers, system prompt, native provider/model/effort reach factory
+  ---
+  duration_ms: 4.023444
+  type: 'test'
+  ...
+# Subtest: config refuses silent policy downgrade, ephemeral persistence and unknown mode
+ok 7 - config refuses silent policy downgrade, ephemeral persistence and unknown mode
+  ---
+  duration_ms: 7.993323
+  type: 'test'
+  ...
+# Subtest: invalid or legacy persistence fails instead of creating fresh context
+ok 8 - invalid or legacy persistence fails instead of creating fresh context
+  ---
+  duration_ms: 2.348634
+  type: 'test'
+  ...
+# Subtest: same clientMessageId is idempotent while active and after completion
+ok 9 - same clientMessageId is idempotent while active and after completion
+  ---
+  duration_ms: 18.391634
+  type: 'test'
+  ...
+# Subtest: simultaneous distinct prompts never overlap
+ok 10 - simultaneous distinct prompts never overlap
+  ---
+  duration_ms: 6.557037
+  type: 'test'
+  ...
+# Subtest: replay preserves public IDs and does not display native synthetic instructions
+ok 11 - replay preserves public IDs and does not display native synthetic instructions
+  ---
+  duration_ms: 9.365212
+  type: 'test'
+  ...
+# Subtest: same native journal cannot be opened by two live connections
+ok 12 - same native journal cannot be opened by two live connections
+  ---
+  duration_ms: 5.016998
+  type: 'test'
+  ...
+# Subtest: uncertain receipt survives restart and refuses automatic replay
+ok 13 - uncertain receipt survives restart and refuses automatic replay
+  ---
+  duration_ms: 5.623752
+  type: 'test'
+  ...
+# Subtest: restored cwd or system-prompt mismatch never runs an engine
+ok 14 - restored cwd or system-prompt mismatch never runs an engine
+  ---
+  duration_ms: 7.082096
+  type: 'test'
+  ...
+# Subtest: unknown model and malformed route list fail explicitly
+ok 15 - unknown model and malformed route list fail explicitly
+  ---
+  duration_ms: 2.53242
+  type: 'test'
+  ...
+# Subtest: image, output schema, steering, unknown command and empty text are rejected
+ok 16 - image, output schema, steering, unknown command and empty text are rejected
+  ---
+  duration_ms: 14.056862
+  type: 'test'
+  ...
+# Subtest: /compact runs native compaction on same session with no model ask
+ok 17 - /compact runs native compaction on same session with no model ask
+  ---
+  duration_ms: 6.351171
+  type: 'test'
+  ...
+# Subtest: permission denial and allow-once both return exact native decision
+ok 18 - permission denial and allow-once both return exact native decision
+  ---
+  duration_ms: 14.022621
+  type: 'test'
+  ...
+# Subtest: timeout defaults to denial and leaves no approval pending
+ok 19 - timeout defaults to denial and leaves no approval pending
+  ---
+  duration_ms: 14.786139
+  type: 'test'
+  ...
+# Subtest: edited arguments and allow-always actions cannot bypass approved command
+ok 20 - edited arguments and allow-always actions cannot bypass approved command
+  ---
+  duration_ms: 20.121526
+  type: 'test'
+  ...
+# Subtest: foreign-session and oversize approvals are denied without a UI card
+ok 21 - foreign-session and oversize approvals are denied without a UI card
+  ---
+  duration_ms: 8.984494
+  type: 'test'
+  ...
+# Subtest: interrupt closes approval, suppresses late data and emits exactly one canceled terminal
+ok 22 - interrupt closes approval, suppresses late data and emits exactly one canceled terminal
+  ---
+  duration_ms: 6.598669
+  type: 'test'
+  ...
+# Subtest: noncooperative runtime is force-stopped within deadline and cannot accept more work
+ok 23 - noncooperative runtime is force-stopped within deadline and cannot accept more work
+  ---
+  duration_ms: 27.604937
+  type: 'test'
+  ...
+# Subtest: text resets trim exact native chars; tool boundaries keep separate assistant snapshots
+ok 24 - text resets trim exact native chars; tool boundaries keep separate assistant snapshots
+  ---
+  duration_ms: 5.787348
+  type: 'test'
+  ...
+# Subtest: early tool notifications do not finish a tool; orphan running tools close as failed
+ok 25 - early tool notifications do not finish a tool; orphan running tools close as failed
+  ---
+  duration_ms: 5.305323
+  type: 'test'
+  ...
+# Subtest: NaN and Infinity usage do not contaminate finite counters
+ok 26 - NaN and Infinity usage do not contaminate finite counters
+  ---
+  duration_ms: 4.955997
+  type: 'test'
+  ...
+# Subtest: receipt disk failure prevents inference before accepting prompt
+ok 27 - receipt disk failure prevents inference before accepting prompt
+  ---
+  duration_ms: 4.925362
+  type: 'test'
+  ...
+# Subtest: close before queued open cannot launch orphan runtime
+ok 28 - close before queued open cannot launch orphan runtime
+  ---
+  duration_ms: 10.709344
+  type: 'test'
+  ...
+# Subtest: startup failure has request.failed and no fake ready
+ok 29 - startup failure has request.failed and no fake ready
+  ---
+  duration_ms: 3.059303
+  type: 'test'
+  ...
+# Subtest: session list returns bridge records, filtered by cwd
+ok 30 - session list returns bridge records, filtered by cwd
+  ---
+  duration_ms: 3.001756
+  type: 'test'
+  ...
+# Subtest: effective native model echoed by Paseo can be restored without a catalog alias
+ok 31 - effective native model echoed by Paseo can be restored without a catalog alias
+  ---
+  duration_ms: 7.419925
+  type: 'test'
+  ...
+# Subtest: integrated disk restore replays stable timeline without executing a duplicate prompt
+ok 32 - integrated disk restore replays stable timeline without executing a duplicate prompt
+  ---
+  duration_ms: 130.086953
+  type: 'test'
+  ...
+# Subtest: integrated phone-style permission responses bind to one pending tool call
+ok 33 - integrated phone-style permission responses bind to one pending tool call
+  ---
+  duration_ms: 48.940711
+  type: 'test'
+  ...
+# Subtest: integrated stop unblocks a pending child turn and has one terminal event
+ok 34 - integrated stop unblocks a pending child turn and has one terminal event
+  ---
+  duration_ms: 83.887405
+  type: 'test'
+  ...
+# Subtest: integrated worker crash is recorded and never automatically replayed
+ok 35 - integrated worker crash is recorded and never automatically replayed
+  ---
+  duration_ms: 112.186004
+  type: 'test'
+  ...
+# Subtest: integrated compact response strips native model messages and opaque provider replay
+ok 36 - integrated compact response strips native model messages and opaque provider replay
+  ---
+  duration_ms: 37.878786
+  type: 'test'
+  ...
+# Subtest: compact projection permits only bounded scalars, even with cycles in native state
+ok 37 - compact projection permits only bounded scalars, even with cycles in native state
+  ---
+  duration_ms: 0.814125
+  type: 'test'
+  ...
+# Subtest: journal atomic persistence preserves native ID, receipts and 0600 permissions
+ok 38 - journal atomic persistence preserves native ID, receipts and 0600 permissions
+  ---
+  duration_ms: 3.982533
+  type: 'test'
+  ...
+# Subtest: live lock prevents simultaneous writers and release is idempotent
+ok 39 - live lock prevents simultaneous writers and release is idempotent
+  ---
+  duration_ms: 2.410817
+  type: 'test'
+  ...
+# Subtest: stale PID lock is recovered by one reaper and replaced
+ok 40 - stale PID lock is recovered by one reaper and replaced
+  ---
+  duration_ms: 0.80377
+  type: 'test'
+  ...
+# Subtest: foreign-host lock is never assumed stale
+ok 41 - foreign-host lock is never assumed stale
+  ---
+  duration_ms: 0.900615
+  type: 'test'
+  ...
+# Subtest: initializing/damaged lock fails closed rather than deleting it
+ok 42 - initializing/damaged lock fails closed rather than deleting it
+  ---
+  duration_ms: 1.283381
+  type: 'test'
+  ...
+# Subtest: path traversal and symlink journals are rejected
+ok 43 - path traversal and symlink journals are rejected
+  ---
+  duration_ms: 0.828056
+  type: 'test'
+  ...
+# Subtest: corrupt history is not replaced or silently reset
+ok 44 - corrupt history is not replaced or silently reset
+  ---
+  duration_ms: 0.536437
+  type: 'test'
+  ...
+# Subtest: UI history can be bounded but receipt deduplication ledger is retained
+ok 45 - UI history can be bounded but receipt deduplication ledger is retained
+  ---
+  duration_ms: 3.20327
+  type: 'test'
+  ...
+# Subtest: state directory cannot be world-readable or a symlink
+ok 46 - state directory cannot be world-readable or a symlink
+  ---
+  duration_ms: 0.722547
+  type: 'test'
+  ...
+# Subtest: JSONL decodes UTF-8 split byte-by-byte, including CRLF
+ok 47 - JSONL decodes UTF-8 split byte-by-byte, including CRLF
+  ---
+  duration_ms: 1.909763
+  type: 'test'
+  ...
+# Subtest: JSONL bounds each frame independently, not an aggregate chunk of valid frames
+ok 48 - JSONL bounds each frame independently, not an aggregate chunk of valid frames
+  ---
+  duration_ms: 0.512451
+  type: 'test'
+  ...
+# Subtest: oversized, malformed and truncated JSONL fail once
+ok 49 - oversized, malformed and truncated JSONL fail once
+  ---
+  duration_ms: 0.256536
+  type: 'test'
+  ...
+# Subtest: encoder refuses oversized messages rather than allocating an unbounded queue
+ok 50 - encoder refuses oversized messages rather than allocating an unbounded queue
+  ---
+  duration_ms: 0.371509
+  type: 'test'
+  ...
+# Subtest: every tool requires approval; original deny decisions remain authoritative
+ok 51 - every tool requires approval; original deny decisions remain authoritative
+  ---
+  duration_ms: 1.430792
+  type: 'test'
+  ...
+# Subtest: rewritten tools are checked after upstream hooks and cannot escape review mode
+ok 52 - rewritten tools are checked after upstream hooks and cannot escape review mode
+  ---
+  duration_ms: 0.210727
+  type: 'test'
+  ...
+# Subtest: delegation and automation are denied even in build mode
+ok 53 - delegation and automation are denied even in build mode
+  ---
+  duration_ms: 0.216556
+  type: 'test'
+  ...
+# Subtest: unknown tools are denied in review and require approval in ask mode
+ok 54 - unknown tools are denied in review and require approval in ask mode
+  ---
+  duration_ms: 0.165569
+  type: 'test'
+  ...
+# Subtest: repeated host-hook installation calls the original hook once, not a growing wrapper chain
+ok 55 - repeated host-hook installation calls the original hook once, not a growing wrapper chain
+  ---
+  duration_ms: 1.045713
+  type: 'test'
+  ...
+# Subtest: host prompt is injected once and invalidates old continuation; changed prompt is rejected
+ok 56 - host prompt is injected once and invalidates old continuation; changed prompt is rejected
+  ---
+  duration_ms: 0.466352
+  type: 'test'
+  ...
+# Subtest: MCP mapping preserves headers/args and rejects credential URLs and invalid names
+ok 57 - MCP mapping preserves headers/args and rejects credential URLs and invalid names
+  ---
+  duration_ms: 0.32561
+  type: 'test'
+  ...
+# Subtest: native adapter passes config, uses pinned beforeSessionAsk hook and disables delegation
+ok 58 - native adapter passes config, uses pinned beforeSessionAsk hook and disables delegation
+  ---
+  duration_ms: 0.474064
+  type: 'test'
+  ...
+# Subtest: native restore failure and mismatched cwd cannot silently create a different session
+ok 59 - native restore failure and mismatched cwd cannot silently create a different session
+  ---
+  duration_ms: 0.486452
+  type: 'test'
+  ...
+# Subtest: host-boundary source patch is hash-locked, idempotent and fails on upstream drift
+ok 60 - host-boundary source patch is hash-locked, idempotent and fails on upstream drift
+  ---
+  duration_ms: 0.551189
+  type: 'test'
+  ...
+# Subtest: native session owned by a raw Mixdog process is not remotely forwarded past the host guard
+ok 61 - native session owned by a raw Mixdog process is not remotely forwarded past the host guard
+  ---
+  duration_ms: 0.295224
+  type: 'test'
+  ...
+# Subtest: source archive has valid hashes, safe paths and no runtime state or dependencies
+ok 62 - source archive has valid hashes, safe paths and no runtime state or dependencies
+  ---
+  duration_ms: 1330.890614
+  type: 'test'
+  ...
+# Subtest: real child process JSONL open/stream/identity/result/close works without leaking native replay
+ok 63 - real child process JSONL open/stream/identity/result/close works without leaking native replay
+  ---
+  duration_ms: 40.995165
+  type: 'test'
+  ...
+# Subtest: simultaneous child engines have isolated per-session configuration
+ok 64 - simultaneous child engines have isolated per-session configuration
+  ---
+  duration_ms: 79.073611
+  type: 'test'
+  ...
+# Subtest: permission event round-trips allow and deny across an actual child process
+ok 65 - permission event round-trips allow and deny across an actual child process
+  ---
+  duration_ms: 86.11715
+  type: 'test'
+  ...
+# Subtest: child crash rejects pending inference; no implicit respawn or replay
+ok 66 - child crash rejects pending inference; no implicit respawn or replay
+  ---
+  duration_ms: 79.843861
+  type: 'test'
+  ...
+# Subtest: interrupt uses a separate RPC while ask is pending
+ok 67 - interrupt uses a separate RPC while ask is pending
+  ---
+  duration_ms: 82.543524
+  type: 'test'
+  ...
+# Subtest: closing hanging inference terminates child within bounded deadline
+ok 68 - closing hanging inference terminates child within bounded deadline
+  ---
+  duration_ms: 67.58863
+  type: 'test'
+  ...
+# Subtest: abort signal cancels worker startup and leaves no active child
+ok 69 - abort signal cancels worker startup and leaves no active child
+  ---
+  duration_ms: 0.831401
+  type: 'test'
+  ...
+# Subtest: retained upstream turn-run fixture matches the exact Git blob fetched from Mixdog
+ok 70 - retained upstream turn-run fixture matches the exact Git blob fetched from Mixdog
+  ---
+  duration_ms: 1.084752
+  type: 'test'
+  ...
+# Subtest: actual patched upstream runner invokes host guard before inference and settles errors
+ok 71 - actual patched upstream runner invokes host guard before inference and settles errors
+  ---
+  duration_ms: 3.437082
+  type: 'test'
+  ...
+1..71
+# tests 71
+# suites 0
+# pass 71
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1631.224186

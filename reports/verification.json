@@ -1,0 +1,62 @@
+{
+  "artifact": "PaseoDog",
+  "version": "1.0.0-rc.1",
+  "checkedAt": "2026-10-11T14:28:54.345530+00:00",
+  "readiness": "RELEASE_CANDIDATE_NOT_LIVE_ACCEPTED",
+  "environment": {
+    "os": "Linux",
+    "kernel": "6.18.44",
+    "arch": "x86_64",
+    "node": "v22.16.0",
+    "npm": "10.9.2",
+    "targetNode": "^22.19.0 || >=24.0.0",
+    "note": "Test harness runs on 22.16.0; real dependency installation requires the supported target."
+  },
+  "unitTests": {
+    "tests": 71,
+    "pass": 71,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "additionalFullSuiteRuns": 3,
+  "syntax": {
+    "status": "PASS",
+    "javascriptModules": 30,
+    "json": true,
+    "shellBashN": true
+  },
+  "actualProcessTests": "PASS_WITH_FAKE_NATIVE_MODEL",
+  "actualDiskJournalTests": "PASS",
+  "retainedUpstreamBlob": "25339f8b798855011f30b5d51c5476602723f303",
+  "upstreamPatchedRunnerTest": "PASS_WITH_MOCKED_HELPER_IMPORTS",
+  "sdkTypecheck": {
+    "status": "BLOCKED_FAILED_TO_EXECUTE_FULL_CHECK",
+    "exitCode": 2,
+    "error": "TS2688: Cannot find type definition file for node. Dependencies are not installed."
+  },
+  "dependencyInstall": {
+    "status": "BLOCKED",
+    "error": "npm registry DNS failed with EAI_AGAIN in this environment",
+    "lockfilesGenerated": false
+  },
+  "notRun": [
+    "Actual Mixdog model requests",
+    "Real installed Paseo plugin loader/SDK compatibility",
+    "Native helper execution on target Linux",
+    "Real native tool denial/allowance",
+    "Phone LTE/5G pairing and reconnect",
+    "Target server systemd and reboot",
+    "Custom branded APK/IPA build",
+    "Hosted GitHub CI"
+  ],
+  "zipReextractionTests": {
+    "status": "PASS",
+    "tests": 71,
+    "pass": 71,
+    "fail": 0,
+    "syntaxStatus": "PASS",
+    "note": "Re-extracted source artifact tested in a separate directory. Final packaging adds evidence files only; final CRC and manifest checked again."
+  }
+}

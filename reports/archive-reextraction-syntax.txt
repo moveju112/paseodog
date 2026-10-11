@@ -1,0 +1,5 @@
+
+> paseodog@1.0.0-rc.1 check
+> node scripts/check.mjs
+
+Checked 30 JavaScript modules, JSON and shell syntax; failures=0
