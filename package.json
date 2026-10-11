@@ -1,0 +1,19 @@
+{
+  "name": "paseodog",
+  "version": "1.0.0-rc.1",
+  "private": true,
+  "type": "module",
+  "description": "Linux-first Mixdog integration for Paseo desktop, mobile and SSH clients",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "typecheck": "npm --prefix plugin run typecheck",
+    "test:live": "node scripts/live-smoke.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "package": "python3 scripts/package.py"
+  },
+  "license": "Apache-2.0"
+}
