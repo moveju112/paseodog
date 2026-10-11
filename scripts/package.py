@@ -9,26 +9,44 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-EXCLUDED_DIRS = {"node_modules", ".git", "__pycache__", ".venv", "coverage", "tmp", ".paseo", ".mixdog"}
-EXCLUDED_NAMES = {".env", "MANIFEST.sha256"}
+# The reviewed manifest is an allowlist of source paths. A runtime directory,
+# credential file or untracked artifact must never enter a source release.
+MANIFEST = "MANIFEST.sha256"
+ROOT_FILES = {".gitignore", "AGENTS.md", "CHANGELOG.md", "LICENSE", "NOTICE", "README.md", "package.json"}
+ROOT_FOLDERS = {".github", "bin", "config", "docs", "engine", "plugin", "reports", "scripts", "tests", "tools"}
+FORBIDDEN_PARTS = {"node_modules", ".git", "__pycache__", ".venv", "coverage", "state", "states", "tmp", ".paseo", ".mixdog", "secrets"}
+FORBIDDEN_NAMES = {".env", "auth.json", "credentials.json", "secrets.json", "token.json", "id_rsa", "id_ed25519"}
+
 
 def source_files(root: Path) -> list[Path]:
-    result = []
-    for path in root.rglob("*"):
-        relative = path.relative_to(root)
-        if any(part in EXCLUDED_DIRS for part in relative.parts):
-            continue
-        if path.is_symlink():
-            raise RuntimeError(f"Refusing symlink in release tree: {relative}")
-        if not path.is_file():
-            continue
-        name = path.name
-        if name in EXCLUDED_NAMES or name.startswith(".env.") or ".local." in name:
-            continue
-        if name.endswith((".zip", ".tgz", ".log", ".tmp", ".pyc", ".pem", ".key")):
-            continue
-        result.append(path)
+    manifest = root / MANIFEST
+    if not manifest.is_file() or manifest.is_symlink():
+        raise RuntimeError("Source allowlist MANIFEST.sha256 is missing or unsafe")
+    result, seen = [], set()
+    for line in manifest.read_text().splitlines():
+        digest, sep, name = line.partition("  ")
+        if not sep or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+            raise RuntimeError("Invalid reviewed manifest entry")
+        relative = Path(name)
+        parts = relative.parts
+        if (not name or relative.is_absolute() or ".." in parts or name in seen
+                or name == MANIFEST or any(part in FORBIDDEN_PARTS for part in parts)):
+            raise RuntimeError(f"Unsafe release path: {name}")
+        if not (name in ROOT_FILES or (parts[0] in ROOT_FOLDERS and len(parts) > 1)):
+            raise RuntimeError(f"Non-source path in release allowlist: {name}")
+        if (parts[-1].lower() in FORBIDDEN_NAMES or parts[-1].lower().endswith((".key", ".pem", ".p12", ".pfx", ".env"))):
+            raise RuntimeError(f"Credential-like name in release allowlist: {name}")
+        candidate = root
+        for part in parts:
+            candidate /= part
+            if candidate.is_symlink():
+                raise RuntimeError(f"Refusing symlink in release tree: {name}")
+        if not candidate.is_file():
+            raise RuntimeError(f"Reviewed release source missing: {name}")
+        seen.add(name)
+        result.append(candidate)
     return sorted(result, key=lambda p: p.relative_to(root).as_posix())
+
 
 def package(root: Path, output: Path) -> dict:
     paths = source_files(root)

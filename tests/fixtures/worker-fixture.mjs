@@ -8,7 +8,7 @@ const server=serveWorker({input:process.stdin,output:process.stdout,onExit:()=>p
             if(text==='crash') process.exit(42);
             if(text==='hang') return new Promise(()=>{});
             if(text==='wait'){await new Promise(r=>{release=r;});if(aborted)throw new Error('aborted');}
-            emit('identity',{id:'sess_child',state:{model:'fixture'}});
+            callbacks.onIdentity?.({id:'sess_child',state:{model:'fixture'}});
             if(text==='permission'){const answer=await callbacks.onToolApproval({name:'shell',args:{command:'pwd'}});return {result:{content:answer.approved?'allowed':'denied'}};}
             callbacks.onTextDelta?.('child ');callbacks.onTextDelta?.('result');callbacks.onTextReset?.({chars:1});
             return {result:{content:args.config.env.TEST_VALUE||'child result',providerReplay:'MUST_NOT_CROSS_WIRE'},session:{secrets:'MUST_NOT_CROSS_WIRE'}};

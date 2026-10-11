@@ -41,6 +41,13 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
             if (runtime.session?.remoteAttached === true) throw new Error('Native session is owned by another live Mixdog process; close that writer before attaching');
             if (!resumed || resumed.id !== args.nativeSessionId) throw new Error('Native session not found; refusing a blank replacement');
             if (resolve(resumed.cwd) !== resolve(config.cwd)) throw new Error('Native session cwd differs from Paseo workspace');
+            // A journal/session-file mismatch must fail BEFORE any model inference.
+            // Effort may change independently through Mixdog automatic reasoning, so do not pin it.
+            for (const field of ['provider', 'model']) {
+                if (route[field] !== undefined && resumed[field] !== route[field]) {
+                    throw new Error(`Native session ${field} differs from the saved model route`);
+                }
+            }
         }
     } catch (error) { await runtime.close('paseodog-resume-failed'); throw error; }
     return {
@@ -52,11 +59,25 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
                 ...callbacks,
                 beforeSessionAsk(session) {
                     attachHostPolicy(session, { mode: config.mode || 'ask', systemPrompt: config.systemPrompt || '',
-                        onIdentity: (id, state) => emit('identity', { id, state }) });
+                        onIdentity: (id, state) => callbacks.onIdentity?.({ id, state }) });
                 },
             });
         },
-        compact: () => runtime.compact({ requireReduction: true }),
+        async compact() {
+            const counters = () => {
+                const session = runtime.session || {};
+                return { deltaInput: Number(session.totalInputTokens) || 0,
+                    deltaOutput: Number(session.totalOutputTokens) || 0,
+                    deltaCachedRead: Number(session.totalCachedReadTokens) || 0,
+                    deltaCacheWrite: Number(session.totalCacheWriteTokens) || 0 };
+            };
+            const before = counters();
+            const result = await runtime.compact({ requireReduction: true });
+            const after = counters();
+            const usageDelta = Object.fromEntries(Object.keys(before).map((key) =>
+                [key, Math.max(0, after[key] - before[key])]));
+            return { ...result, usageDelta };
+        },
         abort: (reason) => runtime.abort(reason),
         async close(reason) { if (closed) return; closed = true; await runtime.close(reason); },
     };

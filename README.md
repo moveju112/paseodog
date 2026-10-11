@@ -1,14 +1,14 @@
-# PaseoDog · 1.0.0-rc.1
+# PaseoDog · 1.0.0-rc.2
 
 **Linux에서 Mixdog 엔진을 실행하고, Paseo의 휴대폰·PC·웹·SSH 인터페이스로 같은 작업을 제어하는 독립 통합 프로젝트입니다.**
 
 ## 배포 상태
 
-이번 파일은 스타터가 아닌 **통합 구현과 운영 도구를 보완한 릴리스 후보(RC)**입니다. 의존성 없는 자동 테스트 **71개 통과**, JavaScript·JSON·Shell 구문 검사 통과, 실제 자식 프로세스와 디스크를 사용하는 통합 테스트를 포함합니다.
+이번 파일은 스타터가 아닌 **통합 구현과 운영 도구를 보완한 릴리스 후보(RC)**입니다. 의존성 없는 자동 테스트 **83개 통과**, JavaScript·JSON·Shell 구문 검사 통과, 실제 자식 프로세스와 디스크를 사용하는 통합 테스트를 포함합니다.
 
 그러나 **실제 Mixdog 모델 호출, 설치된 Paseo SDK를 사용하는 타입 검사·플러그인 로딩, 휴대폰 외부망 연결, 서버 재부팅 검증은 완료하지 않았습니다.** 개발 컨테이너의 npm DNS 요청이 `EAI_AGAIN`으로 실패했고, 모델 계정·휴대폰·사용자 서버가 없습니다. 컨테이너 Node는 22.16.0으로 실제 설치 대상 버전보다 낮습니다. 모의 엔진 테스트 결과를 실계정 통합 성공으로 표시하지 않습니다.
 
-검증 근거: [`reports/VERIFICATION.md`](reports/VERIFICATION.md), [`reports/unit-tests.tap`](reports/unit-tests.tap).
+검증 근거: [`reports/PREFLIGHT-FIXES.md`](reports/PREFLIGHT-FIXES.md), [`reports/VERIFICATION.md`](reports/VERIFICATION.md). 기존 `reports/unit-tests.tap`은 rc.1 실행 기록입니다.
 
 ## 포함된 구현
 
@@ -97,7 +97,7 @@ paseodog/
 
 Paseo `0.11.2`, Mixdog `1.0.12`를 직접 의존성으로 고정합니다. Mixdog의 특정 원본 파일 해시가 일치할 때에만 정책 콜백 패치를 적용합니다. 무조건 최신 버전으로 갱신하지 마세요.
 
-**전체 원본 저장소, node_modules, 실행 바이너리는 ZIP에 포함하지 않습니다.** 최초 인터넷 설치 시 내려받으며, 생성된 lockfile을 검토·커밋한 뒤 이후 설치에서는 `npm ci`를 사용합니다. 이번 ZIP에는 생성하지 못한 lockfile을 임의로 만들어 넣지 않았으므로 모든 전이 의존성이 동결된 오프라인 배포판은 아닙니다.
+**전체 원본 저장소, node_modules, 실행 바이너리는 ZIP에 포함하지 않습니다.** 최초 인터넷 설치 시 내려받으며, 생성된 lockfile을 검토·커밋한 뒤 이후 설치에서는 `npm ci`를 사용합니다. 검토한 lockfile이 저장소에 포함되지 않은 경우에는 모든 전이 의존성이 동결된 오프라인 배포판은 아닙니다.
 
 ```text
 plugin/        Paseo Provider와 영속 기록

@@ -14,7 +14,7 @@ export function createMixdogProvider(): ProviderRegistration {
             if (!launch) return { available: false, diagnostic: 'Install PaseoDog engine and configure its absolute executable path' };
             try {
                 const result = await execCommand(launch.command, [...launch.args, '--check'], { env: launch.env, timeout: 5000 });
-                if (!result.stdout.includes('1.0.0-rc.1')) return { available: false, diagnostic: 'PaseoDog engine version mismatch' };
+                if (!result.stdout.includes('1.0.0-rc.2')) return { available: false, diagnostic: 'PaseoDog engine version mismatch' };
                 return { available: true };
             } catch { return { available: false, diagnostic: 'Engine unavailable; run paseodog doctor' }; }
         },
@@ -23,7 +23,7 @@ export function createMixdogProvider(): ProviderRegistration {
             const capabilities = negotiateProviderCapabilities(request.capabilities, CAPABILITIES);
             const env = request.launch?.env || {};
             const root = env.PASEODOG_STATE_DIR || join(homedir(), '.local', 'state', 'paseodog', 'sessions');
-            return createProviderConnection({ capabilities, env, store: new JournalStore(root),
+            return createProviderConnection({ capabilities: [...capabilities], env, store: new JournalStore(root),
                 engineFactory: processEngineFactory({ launch: request.launch, spawnProcess, terminateProcess }),
             }) as ProviderConnection;
         },

@@ -34,6 +34,14 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         for (const listener of listeners) { try { listener(event); } catch {} }
     }
     function track(promise) { tasks.add(promise); void promise.finally(() => tasks.delete(promise)).catch(() => {}); return promise; }
+    function failSession(session, reason) {
+        if (session.closed || session.closing || session.failureReported) return;
+        session.failureReported = true;
+        session.broken = true;
+        releaseApprovals(session, 'Engine failed');
+        emit({ type: 'session.runtime_failed', sessionId: session.id,
+            error: { message: `${reason}; review any partial file changes before retrying` } });
+    }
     function recordItem(session, item, timestamp = new Date().toISOString()) {
         if (session.closed) return;
         const index = session.record.items.findIndex((row) => row.item.id === item.id);
@@ -44,9 +52,8 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             session.flushTimer = null;
             try { store.save(session.record); }
             catch (error) {
-                session.broken = true;
-                session.active?.engine?.kill?.();
-                emit({ type: 'session.runtime_failed', sessionId: session.id, error: { message: `Journal write failed: ${errorText(error)}` } });
+                failSession(session, `Journal write failed: ${errorText(error)}`);
+                void session.active?.engine?.kill?.();
             }
         }, flushMs);
     }
@@ -120,16 +127,18 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         if (model !== DEFAULT_MODEL && !route && model !== record.nativeRoute?.model && !config.providerOptions?.model) { release(); throw new Error('Unknown model route; configure PASEODOG_MODELS or providerOptions'); }
         const session = { id: input.sessionId, config, record, release, acked: new Set(), permissions: new Map(),
             engine: null, enginePromise: null, active: null, closed: false, closing: false, broken: false,
-            bootController: new AbortController(), flushTimer: null, closePromise: null };
+            bootController: new AbortController(), flushTimer: null, closePromise: null, failureReported: false, unsubscribeCrash: null };
         sessions.set(input.sessionId, session);
         let uncertain = null;
-        if (record.active) {
-            uncertain = record.active;
-            const receipt = record.receipts[uncertain.receiptKey];
-            if (receipt) receipt.state = 'uncertain';
-            record.active = null; flush(session);
-        }
         try {
+            // A crash-recovery write can fail too (ENOSPC, EIO). Keep that
+            // operation inside the ownership cleanup boundary, not outside it.
+            if (record.active) {
+                uncertain = record.active;
+                const receipt = record.receipts[uncertain.receiptKey];
+                if (receipt) receipt.state = 'uncertain';
+                record.active = null; flush(session);
+            }
             const requestedRoute = { provider: config.providerOptions?.provider || route?.provider || env.PASEODOG_PROVIDER || undefined,
                     model: config.providerOptions?.model || route?.model || undefined,
                     effort: config.providerOptions?.effort || route?.effort || config.thinkingOption || undefined };
@@ -145,6 +154,12 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             void created.then((engine) => { if (session.closed || session.broken) return engine.close('late-open'); }).catch(() => {});
             session.enginePromise = deadline(created, bootMs, 'Engine startup timed out');
             session.engine = await session.enginePromise;
+            // A child that dies after opening is not an ordinary model error.
+            // Do not queue another turn against its dead IPC transport.
+            session.unsubscribeCrash = session.engine.onCrash?.((error) => {
+                failSession(session, `Mixdog worker exited: ${errorText(error)}`);
+            }) || null;
+            if (session.broken) throw new Error('Mixdog engine exited during session open');
             if (session.closed || session.closing || closing) { await closeSession(session); return; }
             emit({ type: 'session.opened', requestId: input.requestId, sessionId: session.id,
                 capabilities: selected, restoration: 'core', persistence: persistence(session), cwd: config.cwd, title: config.title });
@@ -160,7 +175,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             emit({ type: 'session.ready', requestId: input.requestId, sessionId: session.id });
         } catch (error) {
             session.broken = true;
-            await closeSession(session);
+            try { await closeSession(session); } catch { /* preserve the originating error */ }
             sessions.delete(session.id);
             throw error;
         }
@@ -326,8 +341,15 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             if (turn.finished) return;
             if (turn.engine.id && !turn.canceled) identity(session, { id: turn.engine.id });
             if (!turn.canceled) {
-                if (parsed.command) notice(session, `compact:${turn.id}`, `Compaction result: ${display(answer?.result || answer, 1000)}`, 'info');
-                else callbacks.final(answer?.result?.content ?? answer?.content ?? '');
+                if (parsed.command) {
+                    const usageDelta = (answer?.result || answer)?.usageDelta;
+                    if (usageDelta) {
+                        turn.usage = tokenUsage(usageDelta, turn.usage);
+                        emit({ type: 'session.usage', sessionId: session.id, turnId: turn.id,
+                            usage: publicUsage(turn.usage) });
+                    }
+                    notice(session, `compact:${turn.id}`, `Compaction result: ${display(answer?.result || answer, 1000)}`, 'info');
+                } else callbacks.final(answer?.result?.content ?? answer?.content ?? '');
             }
             finishTurn(session, turn, turn.canceled ? 'canceled' : 'completed');
         } catch (error) {
@@ -356,9 +378,10 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             await deadline(Promise.resolve(turn.engine?.abort(reason)), stopMs, 'Engine abort timed out');
             if (turn.work) await deadline(Promise.resolve(turn.work).catch(() => {}), stopMs, 'Engine did not stop');
         } catch (error) {
-            session.broken = true;
-            turn.engine?.kill?.();
-            emit({ type: 'session.runtime_failed', sessionId: session.id, error: { message: 'Engine force-stopped; reopen the session. External side effects are not rolled back.' } });
+            failSession(session, 'Engine force-stopped; external side effects are not rolled back');
+            try { await turn.engine?.kill?.(); } catch (killError) {
+                notice(session, 'engine-kill-failed', `Failed to terminate worker group: ${errorText(killError)}`);
+            }
         }
         if (session.record.receipts[turn.receiptKey]) finishTurn(session, turn, 'canceled');
     }
@@ -373,7 +396,12 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                 if (engine) await deadline(Promise.resolve(engine.close('paseodog-session-close')), stopMs).catch(() => engine.kill?.());
                 releaseApprovals(session, 'Session closed');
                 flush(session);
-            } finally { clearTimeout(session.flushTimer); session.closed = true; session.release(); }
+            } finally {
+                clearTimeout(session.flushTimer);
+                session.closed = true;
+                session.unsubscribeCrash?.();
+                session.release();
+            }
         })();
         return session.closePromise;
     }

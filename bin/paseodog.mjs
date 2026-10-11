@@ -3,8 +3,19 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { root, paseoHome, paseoBin, nativeBin, runtimeEnv } from '../scripts/paths.mjs';
 import { join } from 'node:path';
-const args=process.argv.slice(2),command=args.shift();
-const help=`PaseoDog 1.0.0-rc.1 - Linux Mixdog engine, Paseo UI/CLI\n
+const tokens = process.argv.slice(2);
+const globalOptionsWithValue = new Set(['--host', '--home', '--password', '--timeout']);
+function splitCommand(argv) {
+    let index = 0;
+    while (index < argv.length && argv[index].startsWith('-') && argv[index] !== '--') {
+        const option = argv[index].split('=')[0];
+        index += globalOptionsWithValue.has(option) && !argv[index].includes('=') ? 2 : 1;
+    }
+    return { before: argv.slice(0, index), command: argv[index], args: argv.slice(index + 1) };
+}
+const { before, command, args } = splitCommand(tokens);
+
+const help=`PaseoDog 1.0.0-rc.2 - Linux Mixdog engine, Paseo UI/CLI\n
 paseodog start                 Start the dedicated Paseo daemon
 paseodog serve                 Foreground daemon (systemd entrypoint)
 paseodog auth                  Open Mixdog TUI in the dedicated auth profile
@@ -21,13 +32,13 @@ paseodog <paseo arguments>     Pass through to pinned Paseo CLI
 State: ${paseoHome}
 Mobile uses the existing Paseo app. No new Android APK is bundled.
 `;
-if(!command||['help','--help','-h'].includes(command)){console.log(help);process.exit(0);}
+if(!command||['help','--help','-h'].includes(command) || (before.length === 1 && ['--help','-h'].includes(before[0]))){console.log(help);process.exit(0);}
 let executable,argv;
 if(command==='doctor'){executable=process.execPath;argv=[join(root,'scripts/doctor.mjs'),...args];}
 else if(command==='live-test'){executable=process.execPath;argv=[join(root,'scripts/live-smoke.mjs'),...args];}
 else if(command==='auth'){executable=nativeBin;argv=args;}
 else{
-    executable=paseoBin;argv=['--home',paseoHome];
+    executable=paseoBin;argv=['--home',paseoHome,...before];
     if(command==='start')argv.push('daemon','start',...args);
     else if(command==='serve')argv.push('daemon','run',...args);
     else if(command==='password')argv.push('daemon','set-password',...args);

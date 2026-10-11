@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const VERSION = '1.0.0-rc.1';
+export const VERSION = '1.0.0-rc.2';
 export const DEFAULT_MODEL = 'mixdog-default';
 export const MAX_FRAME = 2 * 1024 * 1024;
 export const plainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -68,9 +68,14 @@ export function validateConfig(config) {
     }
     if (config.mode && !['ask', 'review'].includes(config.mode)) throw new Error(`Unsupported mode: ${config.mode}`);
     if (typeof config.persist !== 'boolean') throw new Error('persist must be boolean');
+    if (Object.keys(config.settings).length) throw new Error(`Unsupported session settings: ${Object.keys(config.settings).join(', ')}`);
     for (const [key, value] of Object.entries(config.env)) {
         if (typeof value !== 'string' || key.includes('\0') || key.includes('=') || value.includes('\0')) {
             throw new Error('Invalid environment variable');
+        }
+        // Configuration and identity belong to the daemon, never to the target workspace.
+        if (['NODE_OPTIONS', 'NODE_PATH', 'PASEO_HOME', 'MIXDOG_HOME', 'MIXDOG_DATA_DIR'].includes(key) || key.startsWith('PASEODOG_')) {
+            throw new Error(`Reserved environment variable: ${key}`);
         }
     }
     const options = config.providerOptions || {};

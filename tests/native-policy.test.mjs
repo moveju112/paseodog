@@ -34,7 +34,7 @@ test('native adapter passes config, uses pinned beforeSessionAsk hook and disabl
     let options,asks=0;const s=makeSession();const events=[];
     const runtime={id:'sess1',async ask(text,cb){asks++;await cb.beforeSessionAsk(s);return {result:{content:text}};},abort(){},close(){},resume(){},compact(){}};
     const engine=await createNativeEngine({config:{cwd:'/work',mode:'review',systemPrompt:'rules',mcpServers:{}},route:{provider:'p',model:'m',effort:'low'}}, {modules:{loadConfig:()=>({memory:{enabled:true},autoClear:{enabled:true}}),createMixdogSessionRuntime:async(o)=>{options=o;return runtime;}},emit:(...x)=>events.push(x)});
-    await engine.ask('hi',{});assert.equal(asks,1);assert.equal(options.disallowDelegation,true);assert.equal(options.toolMode,'readonly');assert.equal(options.initialConfig.memory.enabled,true);assert.equal(options.initialConfig.autoClear.enabled,true);assert.equal(events[0][0],'identity');assert.equal((await s.beforeToolHook({name:'shell',args:{}})).action,'deny');await engine.close('done');
+    await engine.ask('hi',{onIdentity:(info)=>events.push(['identity',info])});assert.equal(asks,1);assert.equal(options.disallowDelegation,true);assert.equal(options.toolMode,'readonly');assert.equal(options.initialConfig.memory.enabled,true);assert.equal(options.initialConfig.autoClear.enabled,true);assert.equal(events[0][0],'identity');assert.equal((await s.beforeToolHook({name:'shell',args:{}})).action,'deny');await engine.close('done');
 });
 test('native restore failure and mismatched cwd cannot silently create a different session',async()=>{
     for(const resumed of [null,{id:'wrong',cwd:'/work'},{id:'sess1',cwd:'/other'}]){

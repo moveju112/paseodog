@@ -10,7 +10,7 @@ export function configure({home=paseoHome, enginePath=worker, nativeHome=mixdogH
     if(existsSync(file)&&lstatSync(file).isSymbolicLink())throw new Error('Refusing symlink config');
     const previous=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):{version:1};
     const providers={...(previous.agents?.providers||{})};
-    providers.paseodog={...(providers.paseodog||{}),enabled:true,command:[process.execPath,enginePath],env:{...(providers.paseodog?.env||{}),MIXDOG_HOME:nativeHome,PASEODOG_STATE_DIR:stateDir}};
+    providers.paseodog={...(providers.paseodog||{}),enabled:true,command:[process.execPath,enginePath],env:{...(providers.paseodog?.env||{}),MIXDOG_HOME:nativeHome,MIXDOG_DATA_DIR:join(nativeHome,'data'),PASEODOG_STATE_DIR:stateDir}};
     // Never add plugin source entries by hand: Paseo owns their install lifecycle.
     const config={...previous,version:1,pluginsEnabled:true,
         daemon:previous.daemon||{listen:'127.0.0.1:6767',hostnames:['localhost','127.0.0.1'],relay:{enabled:false}},
