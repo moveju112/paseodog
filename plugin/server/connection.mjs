@@ -240,9 +240,17 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         function setText(value, append = false) {
             if (!live()) return;
             if (segmentClosed) { segment++; text = ''; segmentClosed = false; }
-            text = append ? text + value : value;
-            if (text.length > 1024 * 1024) throw new Error('Assistant output exceeds bridge safety limit');
-            push();
+            const next = append ? text + value : value;
+            if (!append && text && !next.startsWith(text)) {
+                // Paseo maps same-ID text snapshots to append-only deltas. Replacing
+                // an already visible prefix would duplicate text on mobile/CLI.
+                notice(session, `assistant-prefix-mismatch:${turn.id}:${segment}`,
+                    'Mixdog final output did not extend the streamed reply; visible text was preserved. Inspect the native transcript.');
+                return;
+            }
+            if (next.length > 1024 * 1024) throw new Error('Assistant output exceeds bridge safety limit');
+            if (next === text) return;
+            text = next; push();
         }
         function toolStart(call) {
             if (!live() || !call?.id) return;
@@ -256,12 +264,9 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         return {
             onIdentity: (info) => identity(session, info),
             onTextDelta: (chunk) => setText(String(chunk || ''), true),
-            onTextReset: (reset) => {
-                if (!live() || segmentClosed) return false;
-                const count = Number(reset?.chars);
-                if (!Number.isFinite(count) || count < 0) return false;
-                text = text.slice(0, Math.max(0, text.length - Math.trunc(count))); push(); return true;
-            },
+            // The upstream snapshot-to-delta adapter cannot express text deletion.
+            // Never acknowledge a reset that clients cannot actually apply.
+            onTextReset: () => false,
             onAssistantText: (full) => {
                 if (!live() || typeof full !== 'string') return;
                 if (segmentClosed && full === lastCommitted) return;

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0-rc.3 - 2026-10-12
+
+- Make package security tests operate exclusively on isolated temporary source copies; never delete real source tree state.
+- Observe worker `exit` rather than only stream `close` and immediately settle uncertain RPCs.
+- Require a separate Linux systemd user scope/cgroup per session, fail closed without systemd --user, and verify cgroup population is empty after stop.
+- Refuse native text resets because the pinned Paseo adapter cannot retract previously displayed deltas; enforce monotonic assistant snapshots.
+- Commit exact CI-produced npm lockfiles, use `npm ci` for all dependencies and verify integrity in CI.
+- Add real-process, scope contract, replay and package-isolation regression tests.
+- Still requires a real systemd host / model / mobile acceptance run before production.
+
 ## 1.0.0-rc.2 - 2026-10-12
 
 - Fix pinned Paseo SDK readonly capability typecheck failure (TS4104).

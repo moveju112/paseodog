@@ -57,7 +57,7 @@ def package(root: Path, output: Path) -> dict:
     # Fixed release timestamp for deterministic archives; zip is a source artifact.
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for name, content in entries.items():
-            info = zipfile.ZipInfo("paseodog/" + name, date_time=(2026, 10, 11, 0, 0, 0))
+            info = zipfile.ZipInfo("paseodog/" + name, date_time=(2026, 10, 12, 0, 0, 0))
             info.create_system = 3
             executable = name.endswith(".sh") or name.startswith("bin/") or name.startswith("engine/bin/")
             info.external_attr = ((stat.S_IFREG | (0o755 if executable else 0o644)) << 16)

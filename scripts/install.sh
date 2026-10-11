@@ -7,20 +7,27 @@ command -v node >/dev/null || { echo "Install Node 24 LTS first." >&2; exit 1; }
 command -v npm >/dev/null
 command -v git >/dev/null
 node --input-type=module -e "import {supportedNode} from './scripts/paths.mjs';if(!supportedNode()){console.error('Node 22.19+ (22.x) or 24+ required');process.exit(1)}"
+if [ "$(uname -s)" = Linux ] && ! systemctl --user show-environment >/dev/null 2>&1; then
+    echo 'PaseoDog requires a running systemd --user manager for safe per-session cgroups.' >&2
+    echo 'Use a normal systemd-backed SSH login or configure user lingering before installation.' >&2
+    exit 1
+fi
 echo "This installs third-party npm code and enables an UNSANDBOXED Paseo provider."
 echo "Agents/MCP servers run with this Unix user's access. Use disposable repos first."
 if [ "${1:-}" != "--trust-plugins" ]; then
     read -r -p "Type TRUST to continue: " answer
     [ "$answer" = TRUST ] || { echo "Canceled; no dependencies/config changed."; exit 1; }
 fi
-# The first online install generates lockfiles. Subsequent installs use them.
-# Commit reviewed lockfiles before distributing your own production release.
+# Reviewed lockfiles are part of the release: install must never resolve new dependency versions.
+for package in tools engine plugin; do
+    [ -f "$package/package-lock.json" ] || { echo "Missing $package/package-lock.json; use a complete release checkout" >&2; exit 1; }
+done
 for package in tools engine plugin; do
     if [ "$package" = engine ]; then
         # Mixdog 1.0.12 postinstall expects its own nested node_modules tree.
-        if [ -f "$package/package-lock.json" ]; then npm --prefix "$package" ci --install-strategy=nested; else npm --prefix "$package" install --install-strategy=nested; fi
+        npm --prefix "$package" ci --install-strategy=nested
     else
-        if [ -f "$package/package-lock.json" ]; then npm --prefix "$package" ci; else npm --prefix "$package" install; fi
+        npm --prefix "$package" ci
     fi
 done
 node scripts/patch-mixdog.mjs

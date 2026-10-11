@@ -88,7 +88,10 @@ paseodog stop <agent-id>
 
 기본 모드에서는 모든 도구가 1회 승인을 요청합니다. 승인 대기 중 휴대폰이 사라지면 120초 뒤 거절합니다. `stop`은 향후 실행을 중단하지만 이미 수정한 파일이나 외부 요청을 롤백하지 않습니다.
 
-## 5. systemd 사용자 서비스
+## 5. systemd 사용자 서비스 및 작업별 cgroup
+
+PaseoDog는 각 Mixdog 작업 세션을 별도의 `systemd-run --user --scope` cgroup에 생성합니다. 서버에서 먼저 `systemctl --user show-environment`를 검사하세요. 이 사용자 매니저가 없으면 프로세스 그룹 우회로 실행하지 않고 실패합니다. systemd 없는 Docker 실행은 현재 지원하지 않습니다.
+
 
 서비스 파일 생성은 서버에서 명시적으로 실행합니다. 설치 스크립트는 systemd를 자동 활성화하지 않습니다.
 
@@ -108,7 +111,7 @@ journalctl --user -u paseodog.service -n 100 --no-pager
 sudo loginctl enable-linger USER
 ```
 
-모든 환경이 systemd 사용자 세션을 제공하는 것은 아닙니다. 컨테이너나 제한된 서버는 해당 supervisor에서 `paseodog serve`를 실행합니다. **관리형 `daemon start`와 systemd의 foreground `serve`를 동시에 실행하지 마세요.** 재부팅 뒤 프로필·자격 증명 접근·모델 실행·휴대폰 재연결을 각각 확인해야 합니다.
+Linux에서는 실행 중인 systemd **사용자** 매니저가 반드시 필요합니다. 터미널에서 `systemctl --user show-environment`가 정상 종료되는지 먼저 확인하세요. 불가능한 컨테이너·제한 환경에서는 에이전트를 시작하지 않으며, 컨테이너의 프로세스 관리자만으로 무단 우회하지 마세요. 서버 로그아웃 후에도 유지하려면 관리자가 `loginctl enable-linger <계정명>`을 설정해야 할 수 있습니다. **관리형 `daemon start`와 systemd의 foreground `serve`를 동시에 실행하지 마세요.** 재부팅 뒤 프로필·자격 증명 접근·모델 실행·휴대폰 재연결을 각각 확인해야 합니다.
 
 ## 6. 진단
 

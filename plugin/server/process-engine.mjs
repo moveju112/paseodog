@@ -1,5 +1,6 @@
 import { createJsonLineDecoder, encodeFrame } from './json-lines.mjs';
 import { deferred, deadline, errorText } from './util.mjs';
+import { createProcessScope } from './process-scope.mjs';
 
 /**
  * The child is spawned with detached:true on Unix, so its pid is a dedicated
@@ -31,7 +32,8 @@ export async function stopEngineProcessGroup(child, terminateProcess, graceMs = 
     }
 }
 
-export function processEngineFactory({ launch, spawnProcess, terminateProcess, timeoutMs = 60000, stopMs = 8000 }) {
+export function processEngineFactory({ launch, spawnProcess, terminateProcess, timeoutMs = 60000, stopMs = 8000,
+    scopeMode = 'strict', scopeFactory = createProcessScope }) {
     return {
         async create(args, { signal } = {}) {
             if (signal?.aborted) throw new Error('Engine startup canceled');
@@ -42,8 +44,12 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
                 else delete env[key];
             }
             for (const key of ['NODE_OPTIONS', 'NODE_PATH']) delete env[key];
-            const child = spawnProcess(launch.command, [...launch.args, '--stdio'], {
-                env, cwd: args.config.cwd, stdio: 'pipe', detached: process.platform !== 'win32',
+            const scope = scopeFactory({ launch, mode: scopeMode });
+            // Fail closed before launching an unsupervised native shell. On Linux,
+            // systemd --user is mandatory so setpgid() descendants stay in scope.
+            await scope.preflight();
+            const child = spawnProcess(scope.command, scope.args, {
+                env, cwd: args.config.cwd, stdio: 'pipe', detached: scope.detached,
             });
             let sequence = 0, dead = false, closing = false, ready = false;
             let nativeId = args.nativeSessionId || '', activeCallbacks = null, activeToken = null;
@@ -52,7 +58,8 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
             // One termination promise is shared by crash, timeout, explicit
             // close and provider interrupt, so no double-signaling races.
             function terminateScope() {
-                if (!stopPromise) stopPromise = stopEngineProcessGroup(child, terminateProcess, Math.min(250, stopMs));
+                if (!stopPromise) stopPromise = scope.stop
+                    ? scope.stop() : stopEngineProcessGroup(child, terminateProcess, Math.min(250, stopMs));
                 return stopPromise;
             }
             function failAll(error) {
@@ -123,18 +130,34 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
             if (signal?.aborted) onAbort();
             child.stdout.on('data', (chunk) => decoder.write(chunk));
             child.stdin.on('error', (error) => failAndStop(error));
+            const exitError = (code, signalName) => new Error(
+                `Engine exited (${signalName || code}); request outcome may be uncertain`
+            );
             child.on('error', (error) => { failAndStop(error); exited.resolve(); });
-            child.on('close', (code, codeSignal) => {
-                decoder.end();
-                failAll(new Error(`Engine exited (${codeSignal || code}); request outcome may be uncertain`));
+            // 'close' waits for descendant-held pipe handles. 'exit' doesn't:
+            // fail outstanding requests and stop the whole scope immediately.
+            child.on('exit', (code, signalName) => {
                 exited.resolve();
-                // If the leader exited but its shell subprocesses survived,
-                // the group can still be alive. Reap it on ALL exit paths.
-                void terminateScope().catch(() => {});
+                failAll(exitError(code, signalName));
+                void terminateScope().catch((error) => {
+                    process.stderr.write(`[paseodog] process scope cleanup failed: ${errorText(error)}\n`);
+                });
             });
+            child.on('close', (code, signalName) => {
+                decoder.end();
+                failAll(exitError(code, signalName));
+                exited.resolve();
+                void terminateScope().catch((error) => {
+                    process.stderr.write(`[paseodog] process scope cleanup failed: ${errorText(error)}\n`);
+                });
+            });
+            // Native stdout is the authenticated JSONL channel. Avoid relaying stderr
+            // into client-visible errors: diagnostics can include credentials.
             child.stderr.on('data', () => {});
             try { await send('open', args); ready = true; }
-            catch (error) { await terminateScope().catch(() => {}); await deadline(exited.promise, stopMs).catch(() => {}); throw error; }
+            catch (error) { await terminateScope().catch((cleanup) => {
+                error.message += `; containment cleanup failed: ${errorText(cleanup)}`;
+            }); await deadline(exited.promise, stopMs).catch(() => {}); throw error; }
             finally { signal?.removeEventListener('abort', onAbort); }
             return {
                 get id() { return nativeId; },
@@ -153,7 +176,7 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
                     child.stdin.end();
                     try { await deadline(exited.promise, stopMs); }
                     catch { await terminateScope().catch(() => {}); await deadline(exited.promise, stopMs).catch(() => {}); }
-                    await terminateScope().catch(() => {});
+                    await terminateScope();
                     failAll(new Error('Engine closed'));
                     listeners.clear();
                 },

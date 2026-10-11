@@ -116,7 +116,6 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
                 if (op === 'compact') value = await engine.compact();
                 else {
                     const callbacks = {};
-                    let streamChars = 0, resettable = true;
                     const stream = (kind, part) => {
                         if (!live(turn)) return;
                         const text = String(part || '');
@@ -126,7 +125,6 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
                     };
                     callbacks.onTextDelta = (chunk) => {
                         if (!live(turn)) return;
-                        resettable = true; streamChars += String(chunk || '').length;
                         stream('onTextDelta', chunk);
                     };
                     callbacks.onReasoningDelta = (chunk) => stream('onReasoningDelta', chunk);
@@ -135,25 +133,22 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
                     callbacks.onIdentity = (info) => turnEvent(turn, 'identity', info);
                     callbacks.onToolCall = (iter, calls) => {
                         if (!live(turn)) return;
-                        resettable = false; streamChars = 0;
                         for (let at = 0; at < (calls || []).length; at += 20) {
                             turnEvent(turn, 'onToolCall', [iter, calls.slice(at, at + 20).map(projectedCall)]);
                         }
                     };
                     callbacks.onAssistantToolCallObserved = (call) => {
                         if (!live(turn)) return;
-                        resettable = false; streamChars = 0;
                         turnEvent(turn, 'onAssistantToolCallObserved', [projectedCall(call)]);
                     };
                     callbacks.onToolResult = (result) => turnEvent(turn, 'onToolResult', [projectToolResult(result)]);
                     callbacks.onUsageDelta = (delta) => turnEvent(turn, 'onUsageDelta', [delta]);
                     callbacks.onCompactEvent = (event) => turnEvent(turn, 'onCompactEvent', [display(event, 4000)]);
-                    callbacks.onTextReset = (reset) => {
-                        if (!live(turn)) return false;
-                        const count = Number(reset?.chars);
-                        if (!resettable || !Number.isFinite(count) || count <= 0 || count > streamChars) return false;
-                        streamChars -= Math.trunc(count); turnEvent(turn, 'onTextReset', [reset]); return true;
-                    };
+                    // Paseo's pinned provider translates assistant snapshots into append-only
+                    // deltas. It cannot retract bytes already delivered to a client. Mixdog
+                    // explicitly requires an affirmative acknowledgement before replaying
+                    // replacement output. Rejecting resets preserves the original partial.
+                    callbacks.onTextReset = () => false;
                     callbacks.onToolApproval = async (info) => {
                         if (!live(turn)) return { approved: false, reason: 'Turn no longer active' };
                         // Never present an abbreviated command for approval;

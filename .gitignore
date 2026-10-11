@@ -9,3 +9,7 @@ reports/*.local.txt
 *.tgz
 *.zip
 __pycache__/
+
+# Never commit local credential/session state, even if moved into the checkout
+state/
+secrets/

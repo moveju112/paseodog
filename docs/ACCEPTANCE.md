@@ -69,3 +69,11 @@
 ## 출시 판정
 
 현재 판정은 **RC / 실제 배포 수용 검사 미완료**입니다. 위 실제 설치·모델·권한·휴대폰·재부팅 검사가 통과한 환경에 대해서만 운영 가능 판정을 내립니다. 자체 브랜드 APK/IPA 및 상위 앱의 모든 기능 호환은 이 ZIP의 완료 범위가 아닙니다.
+## rc.3 safety acceptance
+
+- [ ] Production Linux host has a working `systemctl --user show-environment` (user scope manager).
+- [ ] In a disposable repo, `npm test` preserves an existing `state/` canary and install does not delete it.
+- [ ] Unexpected native worker death produces a `session.runtime_failed` event without waiting for descendants' pipes.
+- [ ] Real Mixdog native shell subprocesses, including detached process groups, stop writing after interrupt, crash, timeout and close; per-session scope cgroup is empty.
+- [ ] Text reset/retry does not duplicate or retract visible Paseo/mobile text.
+- [ ] All three `package-lock.json` files pass `npm ci` on Node 24 and the same files ship in the release ZIP.

@@ -96,7 +96,7 @@ test('unexpected worker death notifies provider and rejects new turn before ackn
     const events = [];
     const script = fileURLToPath(new URL('./fixtures/worker-fixture.mjs', import.meta.url));
     const factory = processEngineFactory({ launch: { command: process.execPath, args: [script], env: { ...process.env } },
-        spawnProcess: spawn, terminateProcess: (c) => c.kill('SIGKILL'), timeoutMs: 3000, stopMs: 150 });
+        spawnProcess: spawn, terminateProcess: (c) => c.kill('SIGKILL'), timeoutMs: 3000, stopMs: 150, scopeMode: 'test-only-process-group' });
     const connection = createProviderConnection({ store: new MemoryJournalStore(), engineFactory: factory,
         flushMs: 2, stopMs: 200 });
     connection.onEvent((x) => events.push(x));
@@ -195,19 +195,31 @@ test('CLI detects run after global host option, keeps explicit provider choices'
 test('packager ignores custom state directory and credential files not on reviewed allowlist', () => {
     const root = mkdtempSync(join(tmpdir(), 'paseodog-package-'));
     try {
-        // The release manifest comes from the committed checkout.
-        copyFileSync(join(repoRoot, 'MANIFEST.sha256'), join(root, 'MANIFEST.sha256'));
-        // Keep a full reviewed source, place additional fake credentials next to it.
-        const bad = join(repoRoot, 'state', 'mixdog', 'data', 'auth.json');
+        // NEVER create or remove state under repoRoot: install.sh also runs npm test.
+        // Exercise the packager on a separate copy of exactly the reviewed sources.
+        const sandbox = join(root, 'source');
+        mkdirSync(sandbox, { recursive: true });
+        const manifest = readFileSync(join(repoRoot, 'MANIFEST.sha256'), 'utf8');
+        for (const line of manifest.split('\n').filter(Boolean)) {
+            const relative = line.slice(66);
+            if (!/^[a-f0-9]{64}  /.test(line) || !relative || relative.startsWith('/') || relative.split('/').includes('..')) {
+                throw new Error('Unsafe fixture manifest path');
+            }
+            const destination = join(sandbox, relative);
+            mkdirSync(join(destination, '..'), { recursive: true });
+            copyFileSync(join(repoRoot, relative), destination);
+        }
+        writeFileSync(join(sandbox, 'MANIFEST.sha256'), manifest);
+        const bad = join(sandbox, 'state', 'mixdog', 'data', 'auth.json');
         mkdirSync(join(bad, '..'), { recursive: true });
         writeFileSync(bad, '{"token":"NOT_REAL"}');
         const output = join(root, 'release.zip');
-        const proc = spawnSync('python3', ['scripts/package.py', '--output', output], { cwd: repoRoot, encoding: 'utf8' });
+        const proc = spawnSync('python3', ['scripts/package.py', '--output', output], { cwd: sandbox, encoding: 'utf8' });
         assert.equal(proc.status, 0, proc.stderr);
         const scan = spawnSync('python3', ['-c', `import zipfile,sys\nwith zipfile.ZipFile(sys.argv[1]) as z:\n assert not any('state/' in x or 'auth.json' in x for x in z.namelist())`, output], { encoding: 'utf8' });
         assert.equal(scan.status, 0, scan.stderr);
-        rmSync(join(repoRoot, 'state'), { recursive: true, force: true });
-    } finally { rmSync(join(repoRoot, 'state'), { recursive: true, force: true }); rmSync(root, { recursive: true, force: true }); }
+        assert.equal(readFileSync(bad, 'utf8'), '{"token":"NOT_REAL"}', 'Test must not delete even its sandbox input state');
+    } finally { rmSync(root, { recursive: true, force: true }); }
 });
 const orphanWorker = fileURLToPath(new URL('./fixtures/orphan-worker.mjs', import.meta.url));
 test('Linux force-kill stops a worker and its shell descendants', { skip: process.platform !== 'linux' }, async () => {
@@ -215,7 +227,7 @@ test('Linux force-kill stops a worker and its shell descendants', { skip: proces
     const heartbeat = join(root, 'heartbeat'), pidfile = join(root, 'pid'); let pid, engine;
     const factory = processEngineFactory({ launch: { command: process.execPath, args: [orphanWorker],
         env: { ...process.env, REPRO_HEARTBEAT: heartbeat, REPRO_PIDFILE: pidfile } },
-        spawnProcess: spawn, terminateProcess: (c) => c.kill('SIGKILL'), timeoutMs: 1000, stopMs: 100 });
+        spawnProcess: spawn, terminateProcess: (c) => c.kill('SIGKILL'), timeoutMs: 1000, stopMs: 100, scopeMode: 'test-only-process-group' });
     try {
         engine = await factory.create({ config: { cwd: root, env: {}, mcpServers: {}, settings: {}, persist: true } });
         const task = engine.ask('spawn-child', {}).catch((e) => e);

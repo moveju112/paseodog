@@ -120,9 +120,22 @@ test('noncooperative runtime is force-stopped within deadline and cannot accept 
     await f.connection.send({type:'session.interrupt',requestId:'stop',sessionId:'p1'});await until(f.events,e=>e.type==='request.completed');assert.ok(f.calls.some(x=>x.kill));assert.equal(terminal(f.events)[0].state,'canceled');
     await f.connection.send({...f.prompt,prompt:{...f.prompt.prompt,clientMessageId:'m2'}});const e=await until(f.events,e=>e.type==='session.prompt_result'&&e.clientMessageId==='m2');assert.equal(e.result.type,'failed');
 });
-test('text resets trim exact native chars; tool boundaries keep separate assistant snapshots',async(t)=>{
-    const f=fixture({async ask(_t,cb){cb.onTextDelta('abXYZ');cb.onTextReset({chars:3});cb.onAssistantText('ab');cb.onToolCall(1,[{id:'tool1',name:'read'}]);cb.onToolResult({toolCallId:'tool1',content:'ok'});cb.onTextDelta('final');return {content:'final'};}});t.after(()=>f.connection.close());await f.ready();await f.run();
-    const items=f.store.list()[0].items.filter(x=>x.item.type==='assistant_message');assert.deepEqual(items.map(x=>x.item.text),['ab','final']);
+test('Paseo resets are rejected and native tool boundaries keep monotonic assistant snapshots',async(t)=>{
+    let acknowledged;
+    const f=fixture({async ask(_t,cb){cb.onTextDelta('abXYZ');acknowledged=cb.onTextReset({chars:3});
+        if(acknowledged)cb.onAssistantText('ab');else cb.onAssistantText('abXYZ');
+        cb.onToolCall(1,[{id:'tool1',name:'read'}]);cb.onToolResult({toolCallId:'tool1',content:'ok'});
+        cb.onTextDelta('final');return {content:'final'};}});
+    t.after(()=>f.connection.close());await f.ready();await f.run();
+    assert.equal(acknowledged,false);
+    const items=f.store.list()[0].items.filter(x=>x.item.type==='assistant_message');
+    assert.deepEqual(items.map(x=>x.item.text),['abXYZ','final']);
+});
+test('incorrect shorter native final cannot shrink already emitted Paseo text',async(t)=>{
+    const f=fixture({async ask(_t,cb){cb.onTextDelta('unchanged');cb.onAssistantText('unchange');return {content:'unchange'};}});
+    t.after(()=>f.connection.close());await f.ready();await f.run();
+    assert.deepEqual(f.store.list()[0].items.filter(x=>x.item.type==='assistant_message').map(x=>x.item.text),['unchanged']);
+    assert.ok(f.events.some(x=>x.type==='session.notice'&&x.notice.id.startsWith('assistant-prefix-mismatch:')));
 });
 test('early tool notifications do not finish a tool; orphan running tools close as failed',async(t)=>{
     const f=fixture({async ask(_t,cb){cb.onToolCall(1,[{id:'a',name:'read'},{id:'b',name:'read'}]);cb.onToolResult({toolCallId:'a',__earlyNotify:true,content:'early'});cb.onToolResult({toolCallId:'a',content:'done'});return {content:'done'};}});t.after(()=>f.connection.close());await f.ready();await f.run();

@@ -9,9 +9,8 @@ default. An approved shell command has that user's filesystem and network privil
 
 Installation asks for TRUST or an explicit `--trust-plugins` flag before running npm
 installation or enabling unsandboxed plugin code. Native/MCP/extension dependencies and
-their install scripts are part of the trusted software supply chain. Direct dependency
-versions are pinned, but this delivery could not generate verified registry lockfiles.
-Review generated lockfiles after the first successful online install and commit them.
+their install scripts are part of the trusted software supply chain. Direct dependency versions and CI-generated registry lockfiles are pinned.
+The installer uses `npm ci` only; verify the locks again whenever dependencies change.
 
 Default agent tools, including reads, require allow-once approval. No allow-always is
 implemented. Argument edits, permission-policy changes, stale approvals, oversized
@@ -25,6 +24,22 @@ command before any individual tool approval. Denying one MCP tool does not undo 
 startup effects. The host guard cannot contain malicious dependencies, plugins or
 programs launched by an approved command. Use OS/container isolation separately when
 needed, and validate it on the target server.
+
+
+## Linux process containment (required)
+
+Ordinary Linux process groups are not a security boundary: Mixdog native shells
+may create new process groups. Each PaseoDog session therefore starts in a
+unique `systemd-run --user --scope` cgroup. A running user systemd manager is
+mandatory; startup fails closed if it cannot be contacted. Stop/force-kill
+requests signal the *entire* cgroup and check that no tasks remain. The
+`test-only-process-group` override exists solely for CI fixtures and must
+never be configured in the public provider. Scope membership should also be
+verified on the deployment server, including Mixdog native helpers.
+
+This does not sandbox approved commands. Processes intentionally escaping the
+user cgroup through privileged services or other process managers are beyond
+this containment; use an isolated VM/container and limited credentials.
 
 ## Data and networking
 

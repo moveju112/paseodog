@@ -17,7 +17,7 @@ function fixture(t) {
     const root=mkdtempSync(join(tmpdir(),'paseodog-integration-'));
     const log=join(root,'asks.log'); const connections=[];
     const store=new JournalStore(join(root,'journal'));
-    const factory=processEngineFactory({launch:{command:process.execPath,args:[worker],env:{...process.env}},spawnProcess:spawn,terminateProcess:(child)=>child.kill('SIGKILL'),timeoutMs:2000,stopMs:100});
+    const factory=processEngineFactory({launch:{command:process.execPath,args:[worker],env:{...process.env}},spawnProcess:spawn,terminateProcess:(child)=>child.kill('SIGKILL'),timeoutMs:2000,stopMs:100,scopeMode:'test-only-process-group'});
     function client(){const events=[];const connection=createProviderConnection({engineFactory:factory,store,bootMs:3000,stopMs:200,permissionMs:500,flushMs:5,maxTurnMs:5000});connection.onEvent(e=>events.push(e));connections.push({connection,events});return{connection,events};}
     const config={cwd:root,env:{ASK_LOG:log},settings:{},mcpServers:{},persist:true};
     const open=(sessionId='p1',persistence)=>({type:'session.open',requestId:'open:'+sessionId,sessionId,config,persistence,history:persistence?'replay':'skip'});
