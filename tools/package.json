@@ -1,0 +1,4 @@
+{
+  "name": "paseodog-host-tools", "version": "1.0.0-rc.1", "private": true,
+  "dependencies": { "@getpaseo/cli": "0.11.2" }
+}
