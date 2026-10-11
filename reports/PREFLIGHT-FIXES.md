@@ -25,3 +25,7 @@ Previous audit: R01–R12 in `PaseoDog-preflight-audit.md` (not part of this rel
 - An actual Ubuntu account, Android LTE/5G pairing, tool authorization through the native model, and reboot persistence remain on the acceptance checklist.
 - Existing `reports/unit-tests.tap` and `reports/VERIFICATION.md` are retained as historical **rc.1** evidence; do not mistake them for this revision's CI outcome.
 - **Safety:** Approval remains mandatory for every tool by default. No unrestricted unattended execution is enabled. Unix process-group cleanup cannot guarantee termination of tasks that deliberately detach into new sessions, remote jobs or other processes outside that group.
+
+## rc.2 native installation CI follow-up
+
+The first rc.2 workflow exposed a new install failure in Mixdog 1.0.12: its postinstall script resolves @huggingface/transformers under `mixdog/node_modules`, but npm hoisted it. The engine install now requests npm `--install-strategy=nested`. This requires a fresh GitHub Actions native-contract result and is not yet proof of real model inference.

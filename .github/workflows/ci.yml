@@ -46,9 +46,9 @@ jobs:
       - name: Install native dependency without model credentials
         run: |
           if [ -f engine/package-lock.json ]; then
-            npm --prefix engine ci
+            npm --prefix engine ci --install-strategy=nested
           else
-            npm --prefix engine install
+            npm --prefix engine install --install-strategy=nested
           fi
       - run: node scripts/patch-mixdog.mjs
       - run: node engine/bin/paseodog-engine.mjs --check
@@ -63,7 +63,7 @@ jobs:
       - name: Generate pinned dependency lockfiles for review
         run: |
           for package in tools engine plugin; do
-            npm --prefix "$package" install --package-lock-only --ignore-scripts
+            npm --prefix "$package" install --package-lock-only --ignore-scripts $([ "$package" = engine ] && echo "--install-strategy=nested")
           done
       - uses: actions/upload-artifact@v4
         with:

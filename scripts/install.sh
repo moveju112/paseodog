@@ -16,7 +16,12 @@ fi
 # The first online install generates lockfiles. Subsequent installs use them.
 # Commit reviewed lockfiles before distributing your own production release.
 for package in tools engine plugin; do
-    if [ -f "$package/package-lock.json" ]; then npm --prefix "$package" ci; else npm --prefix "$package" install; fi
+    if [ "$package" = engine ]; then
+        # Mixdog 1.0.12 postinstall expects its own nested node_modules tree.
+        if [ -f "$package/package-lock.json" ]; then npm --prefix "$package" ci --install-strategy=nested; else npm --prefix "$package" install --install-strategy=nested; fi
+    else
+        if [ -f "$package/package-lock.json" ]; then npm --prefix "$package" ci; else npm --prefix "$package" install; fi
+    fi
 done
 node scripts/patch-mixdog.mjs
 node scripts/patch-mixdog.mjs --check
