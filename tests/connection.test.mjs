@@ -20,6 +20,20 @@ test('env, MCP servers, system prompt, native provider/model/effort reach factor
     assert.deepEqual(f.creates[0].route,{provider:'p',model:'m',effort:'low'});
     assert.doesNotMatch(JSON.stringify(f.store.list()),/private|MY_KEY/);
 });
+// 기본 연결 모델은 절약 설정을 전달하되 명시적인 모델 선택은 우선한다.
+test('saved connection defaults select the subscription route with low-cost settings', async(t)=>{
+    const env={PASEODOG_PROVIDER:'openai-oauth',PASEODOG_MODEL:'gpt-6-luna',
+        PASEODOG_EFFORT:'low',PASEODOG_AUTO_EFFORT:'false',PASEODOG_FAST:'false'};
+    const f=fixture({}, {env});t.after(()=>f.connection.close());await f.ready();
+    assert.deepEqual(f.creates[0].route,{provider:'openai-oauth',model:'gpt-6-luna',
+        effort:'low',autoEffort:false,fast:false});
+    const g=fixture({}, {env});t.after(()=>g.connection.close());
+    g.open.config.providerOptions={provider:'explicit',model:'chosen',effort:'high'};
+    await g.ready();
+    assert.equal(g.creates[0].route.provider,'explicit');
+    assert.equal(g.creates[0].route.model,'chosen');
+    assert.equal(g.creates[0].route.effort,'high');
+});
 test('config refuses silent policy downgrade, ephemeral persistence and unknown mode', async(t)=>{
     for(const update of [{toolPolicy:{preapproved:[{kind:'mcp',server:'x',tool:'x'}]}},{persist:false},{mode:'implicit'}]) {
         const f=fixture(); t.after(()=>f.connection.close()); f.open.config={...f.open.config,...update};

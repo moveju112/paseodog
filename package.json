@@ -12,7 +12,9 @@
     "check": "node scripts/check.mjs",
     "typecheck": "npm --prefix plugin run typecheck",
     "test:live": "node scripts/live-smoke.mjs",
+    "test:native": "node tests/native-orchestration-smoke.mjs",
     "doctor": "node scripts/doctor.mjs",
+    "upstream:check": "node scripts/check-upstream.mjs",
     "package": "python3 scripts/package.py"
   },
   "license": "Apache-2.0"

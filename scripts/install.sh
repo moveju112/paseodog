@@ -24,7 +24,7 @@ for package in tools engine plugin; do
 done
 for package in tools engine plugin; do
     if [ "$package" = engine ]; then
-        # Mixdog 1.0.12 postinstall expects its own nested node_modules tree.
+        # Mixdog postinstall expects its own nested node_modules tree.
         npm --prefix "$package" ci --install-strategy=nested
     else
         npm --prefix "$package" ci

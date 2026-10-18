@@ -39,7 +39,7 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
             if (signal?.aborted) throw new Error('Engine startup canceled');
             if (!launch?.command) throw new Error('paseodog-engine executable not resolved');
             const env = { ...launch.env, ...args.config.env };
-            for (const key of ['MIXDOG_HOME', 'MIXDOG_DATA_DIR', 'PASEO_HOME', 'PASEODOG_STATE_DIR']) {
+            for (const key of ['MIXDOG_HOME', 'MIXDOG_DATA_DIR', 'PASEO_HOME', 'PASEODOG_STATE_DIR', 'OPENAI_OAUTH_CREDENTIALS_PATH']) {
                 if (launch.env?.[key] !== undefined) env[key] = launch.env[key];
                 else delete env[key];
             }
@@ -76,7 +76,7 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
                 failAll(error);
                 void terminateScope().catch(() => {});
             }
-            function send(op, body = {}, { waitMs = timeoutMs, callbacks } = {}) {
+            function send(op, body = {}, { waitMs = timeoutMs, callbacks, fatalOnTimeout = true } = {}) {
                 if (dead || (closing && op !== 'close')) return Promise.reject(new Error('Engine process unavailable'));
                 const id = `rpc_${++sequence}`, p = deferred();
                 if (callbacks) { activeCallbacks = callbacks; activeToken = id; }
@@ -84,7 +84,8 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
                     if (!pending.has(id)) return;
                     pending.delete(id);
                     const error = new Error(`Engine ${op} timed out; side effects may be uncertain`);
-                    p.reject(error); failAndStop(error);
+                    p.reject(error);
+                    if (fatalOnTimeout) failAndStop(error);
                 }, waitMs) : null;
                 pending.set(id, { ...p, timer });
                 try {
@@ -168,6 +169,8 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
                 },
                 ask(text, callbacks) { return send('ask', { text }, { waitMs: 0, callbacks }); },
                 compact(callbacks = {}) { return send('compact', {}, { waitMs: 0, callbacks }); },
+                status() { return send('status', {}, { waitMs: 5000, fatalOnTimeout: false }); },
+                auth(request) { return send('auth', request); },
                 async abort() { if (!dead) await send('abort', {}, { waitMs: stopMs }); },
                 async close() {
                     if (closing) return;

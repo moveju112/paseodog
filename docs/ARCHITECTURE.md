@@ -36,9 +36,34 @@ fails closed. It does not search heuristically for a different insertion point.
 
 The host callback places stable Paseo system instructions in native context and wraps
 `session.beforeToolHook`. Native deny decisions remain deny; rewritten calls are checked
-again. Every accepted tool needs an allow-once response. Native background delegation,
-automation and desktop/configuration mutations are excluded from this release scope.
+again. Every accepted tool needs an allow-once response. Native delegation uses the
+existing agent `sessionSurface` hook, exposed by hash-locked boot patches. The host
+wraps child turns, not the scheduler, agent definitions or native model context.
+Automation and desktop/configuration mutations remain excluded.
 This is not an operating-system sandbox; see SECURITY.md.
+
+`engine/src/orchestration.mjs` validates parent ownership, inherits the host policy,
+maps child approvals to the owning Paseo turn with the child's identity in the reason,
+and namespaces child tool IDs. Native usage is forwarded without mixing child text into
+the Lead's answer. Existing native hooks and turn-review callbacks remain intact.
+Only enabled roles are exposed. The explicit `PASEODOG_ENABLE_WORKER=true` host option
+enables Worker on the parent's exact model with Fast, Auto effort and fallbacks off.
+It changes only the in-memory host config, not the native profile or other roles.
+Injected host configuration remains authoritative through lazy-secret/config reloads
+and native agent planning; these paths must not reload an unrelated profile and
+silently discard the host MCP, update or role boundaries.
+
+The parent waits on native job-status events and continues through the native pending
+completion queue before returning a terminal result. Auto-wake and the manager's
+unawaited follow-up kicks are disabled for host-managed turns; queue processing within
+an awaited native ask remains enabled. An empty native continuation may legitimately
+return no result when its queue entries were already delivered; the last real result
+is retained. No UI snapshot is replayed into model history.
+
+Cancellation invalidates the captured turn, rejects late approvals and closes owned
+agent jobs, including preparation jobs. Native sessions/tags may be reused while the
+worker stays open; closing the worker does not promise to revive an unfinished child.
+Paseo's existing cgroup fallback remains responsible for noncooperative processes.
 
 The original engine's own startup and authorization code can still access the user's
 machine. The patch protects the reviewed agent tool-dispatch boundary, not arbitrary

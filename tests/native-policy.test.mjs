@@ -30,11 +30,13 @@ test('MCP mapping preserves headers/args and rejects credential URLs and invalid
     const out=mapMcpServers({one:{type:'stdio',command:'node',args:['a'],env:{KEY:'x'}},two:{type:'http',url:'https://localhost/mcp',headers:{Authorization:'Bearer x'}}});
     assert.equal(out.one.env.KEY,'x');assert.equal(out.two.headers.Authorization,'Bearer x');assert.throws(()=>mapMcpServers({a:{type:'http',url:'https://u:p@host/'}}));assert.throws(()=>mapMcpServers(JSON.parse('{"__proto__":{"type":"stdio","command":"x"}}')));
 });
-test('native adapter passes config, uses pinned beforeSessionAsk hook and disables delegation',async()=>{
+test('native adapter passes config and enables only host-managed delegation',async()=>{
     let options,asks=0;const s=makeSession();const events=[];
     const runtime={id:'sess1',async ask(text,cb){asks++;await cb.beforeSessionAsk(s);return {result:{content:text}};},abort(){},close(){},resume(){},compact(){}};
-    const engine=await createNativeEngine({config:{cwd:'/work',mode:'review',systemPrompt:'rules',mcpServers:{}},route:{provider:'p',model:'m',effort:'low'}}, {modules:{loadConfig:()=>({memory:{enabled:true},autoClear:{enabled:true}}),createMixdogSessionRuntime:async(o)=>{options=o;return runtime;}},emit:(...x)=>events.push(x)});
-    await engine.ask('hi',{onIdentity:(info)=>events.push(['identity',info])});assert.equal(asks,1);assert.equal(options.disallowDelegation,true);assert.equal(options.toolMode,'readonly');assert.equal(options.initialConfig.memory.enabled,true);assert.equal(options.initialConfig.autoClear.enabled,true);assert.equal(events[0][0],'identity');assert.equal((await s.beforeToolHook({name:'shell',args:{}})).action,'deny');await engine.close('done');
+    const tool={getStatus:()=>({jobs:[]}),onStatusChange:()=>()=>{},closeAll:async()=>({failed:[]})};
+    const engine=await createNativeEngine({config:{cwd:'/work',mode:'review',systemPrompt:'rules',mcpServers:{}},route:{provider:'p',model:'m',effort:'low',fast:false,autoEffort:false}}, {modules:{loadConfig:()=>({memory:{enabled:true},autoClear:{enabled:true}}),createMixdogSessionRuntime:async(o)=>{options=o;o.agentSessionSurface({mgr:{},getAgentTool:()=>tool});return runtime;}},emit:(...x)=>events.push(x)});
+    assert.equal(options.fast,false);assert.equal(options.autoEffort,false);
+    await engine.ask('hi',{onIdentity:(info)=>events.push(['identity',info])});assert.equal(asks,1);assert.equal(options.disallowDelegation,false);assert.equal(options.toolMode,'readonly');assert.equal(options.initialConfig.memory.enabled,true);assert.equal(options.initialConfig.autoClear.enabled,true);assert.equal(events[0][0],'identity');assert.equal((await s.beforeToolHook({name:'shell',args:{}})).action,'deny');await engine.close('done');
 });
 test('native restore failure and mismatched cwd cannot silently create a different session',async()=>{
     for(const resumed of [null,{id:'wrong',cwd:'/work'},{id:'sess1',cwd:'/other'}]){
@@ -47,4 +49,53 @@ test('host-boundary source patch is hash-locked, idempotent and fails on upstrea
 });
 test('native session owned by a raw Mixdog process is not remotely forwarded past the host guard',async()=>{
     let closed=0,asked=0;await assert.rejects(createNativeEngine({config:{cwd:'/work',mcpServers:{}},nativeSessionId:'sess1'}, {modules:{loadConfig:()=>({}),createMixdogSessionRuntime:async()=>({session:{remoteAttached:true},ask(){asked++;},abort(){},close(){closed++;},compact(){},resume:()=>({id:'sess1',cwd:'/work'})})}}),/another live/);assert.equal(asked,0);assert.equal(closed,1);
+});
+
+// 엔진 설정 유지 및 자동 업데이트 차단을 검증한다.
+test('Mixdog retains native compaction and model settings without staging engine updates', async () => {
+    const base = { compaction: { enabled: true }, models: { saved: { autoEffort: true } },
+        update: { auto: true }, mcpServers: { hidden: { type: 'stdio', command: 'hidden' } } };
+    let options;
+    const runtime = { ask() {}, abort() {}, close() {}, resume() {}, compact() {} };
+    const engine = await createNativeEngine({ config: { cwd: '/work', mcpServers: {} } }, {
+        modules: { loadConfig: () => base, createMixdogSessionRuntime: async (value) => {
+            options = value;
+            return runtime;
+        } },
+    });
+    assert.deepEqual(options.initialConfig.compaction, base.compaction);
+    assert.deepEqual(options.initialConfig.models, base.models);
+    assert.equal(options.initialConfig.update.auto, false);
+    assert.equal(base.update.auto, true);
+    assert.deepEqual(Object.keys(options.initialConfig.mcpServers), []);
+    await engine.close('done');
+});
+
+// Worker opt-in은 호스트 설정에만 적용하고 원래 프로필·다른 역할은 바꾸지 않는다.
+test('Paseo Worker opt-in follows the parent route without API fallbacks or profile writes', async (t) => {
+    const previous = process.env.PASEODOG_TEST_PARENT_WORKER;
+    process.env.PASEODOG_TEST_PARENT_WORKER = 'true';
+    t.after(() => {
+        if (previous === undefined) delete process.env.PASEODOG_TEST_PARENT_WORKER;
+        else process.env.PASEODOG_TEST_PARENT_WORKER = previous;
+    });
+    const base = { disabledAgents: ['worker', 'advisor'],
+        agents: { worker: { provider: 'api', model: 'other', fallbacks: [{ provider: 'api', model: 'paid' }] } } };
+    let options;
+    const engine = await createNativeEngine({
+        config: { cwd: '/work', mcpServers: {} },
+        route: { provider: 'openai-oauth', model: 'gpt-6-luna', effort: 'low' },
+    }, { modules: { loadConfig: () => base, createMixdogSessionRuntime: async (value) => {
+        options = value;
+        return { ask() {}, abort() {}, close() {}, resume() {}, compact() {} };
+    } } });
+    assert.deepEqual(options.initialConfig.disabledAgents, ['advisor']);
+    assert.deepEqual(options.initialConfig.agents.worker, {
+        provider: 'openai-oauth', model: 'gpt-6-luna', effort: 'low', fast: false, autoEffort: false, fallbacks: [],
+    });
+    assert.deepEqual(base.disabledAgents, ['worker', 'advisor']);
+    assert.equal(base.agents.worker.provider, 'api');
+    await engine.close('done');
+    await assert.rejects(createNativeEngine({ config: { cwd: '/work' } },
+        { modules: { loadConfig: () => base } }), /explicit parent model route/);
 });

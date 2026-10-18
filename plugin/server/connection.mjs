@@ -22,11 +22,28 @@ function catalogFrom(env) {
     } };
 }
 export function createProviderConnection({ capabilities = CAPABILITIES, engineFactory, store,
+    loadCatalog,
     env = {}, canonicalPath = (path) => { if (!isAbsolute(path)) throw new Error('cwd must be absolute'); return realpathSync(path); },
     bootMs = 60000, stopMs = 8000, permissionMs = 120000, maxTurnMs = 3600000, flushMs = 250 }) {
     if (!store) throw new Error('JournalStore is required');
     const selected = [...new Set(capabilities.filter((c) => CAPABILITIES.includes(c)))];
     const { routes, catalog } = catalogFrom(env);
+    const configuredRoutes = [...routes];
+    let profileRoute;
+    // Mixdog 카탈로그를 새 세션의 선택 목록으로 투영하고 기존 세션 경로는 유지한다.
+    async function refreshCatalog() {
+        if (!loadCatalog) return;
+        const snapshot = await loadCatalog();
+        profileRoute = snapshot.route;
+        const nativeRoutes = snapshot.models.map((row) => ({
+            id: `${row.provider}/${row.id}`, provider: row.provider, model: row.id,
+            label: `${row.label} · ${row.provider}`, effortOptions: row.effortOptions,
+        }));
+        routes.splice(0, routes.length, ...nativeRoutes,
+            ...configuredRoutes.filter((row) => !nativeRoutes.some((native) => native.id === row.id)));
+        catalog.models = [{ id: DEFAULT_MODEL, label: 'Mixdog profile default' },
+            ...routes.map((row) => ({ id: row.id, label: row.label || row.id, thinkingOptions: row.effortOptions || [] }))];
+    }
     const sessions = new Map(), listeners = new Set(), tasks = new Set();
     let closing = false, closed = false, closingPromise;
     function emit(event) {
@@ -133,6 +150,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         }
     }
     async function openSession(input) {
+        await refreshCatalog();
         if (sessions.has(input.sessionId)) throw new Error('Session already exists');
         if (!selected.includes('prompt.message')) throw new Error('prompt.message was not negotiated');
         if (input.persistence && !selected.includes('session.persistence')) throw new Error('Persistence was not negotiated');
@@ -153,7 +171,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             if (record.promptHash !== promptHash) throw new Error('System prompt changed; start a new session instead of reusing old context');
         } catch (error) { release(); throw error; }
         const model = config.model || DEFAULT_MODEL;
-        const route = routes.find((row) => row.id === model);
+        const route = model === DEFAULT_MODEL && profileRoute ? profileRoute : routes.find((row) => row.id === model);
         if (model !== DEFAULT_MODEL && !route && model !== record.nativeRoute?.model && !config.providerOptions?.model) { release(); throw new Error('Unknown model route; configure PASEODOG_MODELS or providerOptions'); }
         const session = { id: input.sessionId, config, record, release, acked: new Set(), permissions: new Map(),
             engine: null, enginePromise: null, active: null, closed: false, closing: false, broken: false,
@@ -171,9 +189,14 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                 record.active = null; flush(session);
             }
             const requestedRoute = { provider: config.providerOptions?.provider || route?.provider || env.PASEODOG_PROVIDER || undefined,
-                    model: config.providerOptions?.model || route?.model || undefined,
-                    effort: config.providerOptions?.effort || route?.effort || config.thinkingOption || undefined };
+                    model: config.providerOptions?.model || route?.model || env.PASEODOG_MODEL || undefined,
+                    effort: config.providerOptions?.effort || config.thinkingOption || route?.effort || (!profileRoute ? env.PASEODOG_EFFORT : undefined),
+                    ...(profileRoute ? { autoEffort: profileRoute.autoEffort, fast: profileRoute.fast } : {
+                        ...(env.PASEODOG_AUTO_EFFORT === 'false' ? { autoEffort: false } : {}),
+                        ...(env.PASEODOG_FAST === 'false' ? { fast: false } : {}) }) };
             if (record.nativeSessionId && record.nativeRoute) {
+                if (loadCatalog && !Object.keys(config.providerOptions || {}).length && (model === DEFAULT_MODEL || model === record.nativeRoute.model)
+                    && !config.thinkingOption) Object.assign(requestedRoute, record.nativeRoute);
                 for (const key of ['provider', 'model', 'effort']) {
                     if (requestedRoute[key] !== undefined && requestedRoute[key] !== record.nativeRoute[key])
                         throw new Error(`Cannot change native ${key} while restoring; create a new session`);
@@ -244,7 +267,8 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                 emit({ type: 'session.permission_resolved', sessionId: session.id, permissionId: id });
                 resolve({ approved: false, reason: 'Approval timed out; no action was authorized' });
             }, permissionMs);
-            session.permissions.set(id, { resolve, timer, turnId: turn.id });
+            session.permissions.set(id, { resolve, timer, turnId: turn.id,
+                childSessionId: info?.childSessionId || null, tool: String(info?.name || 'tool') });
             emit({ type: 'session.permission', sessionId: session.id, request: {
                 id, name: String(info?.name || 'tool'), kind: 'tool', title: `Allow ${String(info?.name || 'tool')} once?`,
                 description: String(info?.reason || 'PaseoDog requires explicit approval'), input,
@@ -443,7 +467,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
     }
     async function route(input) {
         switch (input.type) {
-            case 'catalog': emit({ type: 'catalog', requestId: input.requestId, catalog }); return;
+            case 'catalog': await refreshCatalog(); emit({ type: 'catalog', requestId: input.requestId, catalog }); return;
             case 'sessions': {
                 if (!selected.includes('session.list')) throw new Error('Session listing not negotiated');
                 const limit = Math.max(1, Math.min(100, Number(input.limit) || 50));
@@ -471,6 +495,25 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
     }
     return {
         version: 1, capabilities: selected,
+        // 현재 연결이 소유한 세션만 조회하고 종료된 프로세스는 오류 상태로 구분한다.
+        async engineStatus() {
+            return Promise.all([...sessions.values()].map(async (session) => {
+                try {
+                    const native = session.engine ? await session.engine.status() : {};
+                    const approvals = [...session.permissions.values()];
+                    return { id: session.id, running: Boolean(session.active),
+                        ...native,
+                        state: !session.engine ? 'opening' : session.broken ? 'failed'
+                            : approvals.length ? 'waiting-approval' : session.active ? 'running' : 'idle',
+                        approvalCount: approvals.length,
+                        jobs: (native.jobs || []).map((job) => ({
+                            ...job, waitingApproval: approvals.some((approval) => approval.childSessionId === job.sessionId),
+                        })),
+                    };
+                }
+                catch { return { id: session.id, state: 'unavailable' }; }
+            }));
+        },
         async send(input) {
             if (closing || closed) throw new Error('Provider connection closed');
             if (!input || typeof input.type !== 'string') throw new Error('Invalid provider input');

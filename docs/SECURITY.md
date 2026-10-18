@@ -15,7 +15,8 @@ The installer uses `npm ci` only; verify the locks again whenever dependencies c
 Default agent tools, including reads, require allow-once approval. No allow-always is
 implemented. Argument edits, permission-policy changes, stale approvals, oversized
 approval payloads, unrelated sessions and expired requests cannot grant access. Review
-mode only permits an explicit native read-tool name allowlist and still asks approval.
+mode only permits an explicit native read-tool name allowlist plus managed agent/task
+control and still asks approval. Children inherit the same review restriction.
 Tool name classification is not proof that arbitrary code is safe.
 
 Configured upstream hooks remain trusted executable code. They may act before the agent
@@ -24,6 +25,19 @@ command before any individual tool approval. Denying one MCP tool does not undo 
 startup effects. The host guard cannot contain malicious dependencies, plugins or
 programs launched by an approved command. Use OS/container isolation separately when
 needed, and validate it on the target server.
+
+## Managed orchestration
+
+The native agent tool retains scheduling, role configuration, sessions and results.
+Every child turn passes through the host-owned surface before inference; foreign or
+cyclic parent chains fail closed. Tool approval preserves the full arguments and
+identifies the child, while the request stays bound to the parent's active Paseo turn.
+Cross-terminal/global/recovery control is refused. Automation and setup remain denied.
+
+Completion continuations carry the same approval callbacks and cancellation boundary.
+Neither native auto-wake nor manager background follow-up can start an unmanaged model
+turn. Abort closes owned child jobs; a late approval cannot revive one. This does not
+undo a tool that already executed or sandbox an approved shell command.
 
 
 ## Linux process containment (required)

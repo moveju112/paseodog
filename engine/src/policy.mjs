@@ -20,7 +20,7 @@ export function mapMcpServers(servers = {}) {
     }
     return out;
 }
-export function attachHostPolicy(session, { mode = 'ask', systemPrompt = '', onIdentity }) {
+export function attachHostPolicy(session, { mode = 'ask', systemPrompt = '', onIdentity, orchestration = false }) {
     if (!session?.id || !Array.isArray(session.messages)) throw new Error('Mixdog session contract mismatch');
     if (!['ask', 'review'].includes(mode)) throw new Error('Invalid host mode');
     // Explicit app-level instructions stay stable. Never silently change an established prefix.
@@ -41,8 +41,11 @@ export function attachHostPolicy(session, { mode = 'ask', systemPrompt = '', onI
         const rewritten = ['ask', 'modify', 'rewrite'].includes(action);
         const name = rewritten && decision?.name ? decision.name : input.name;
         const args = rewritten && decision?.args ? decision.args : input.args;
-        if (FORBIDDEN.test(name)) return { action: 'deny', reason: 'Delegation, automation, configuration mutation and desktop control are disabled in PaseoDog' };
-        if (mode === 'review' && !READ_TOOLS.has(String(name).toLowerCase())) return { action: 'deny', reason: 'Review mode permits only the explicit read-tool allowlist' };
+        const managed = orchestration && ['agent', 'task'].includes(String(name).toLowerCase());
+        if (managed && (args?.allTerminals || args?.global || args?.recover))
+            return { action: 'deny', reason: 'Cross-session agent control is disabled in PaseoDog' };
+        if (FORBIDDEN.test(name) && !managed) return { action: 'deny', reason: 'Unmanaged delegation, automation, configuration mutation and desktop control are disabled in PaseoDog' };
+        if (mode === 'review' && !managed && !READ_TOOLS.has(String(name).toLowerCase())) return { action: 'deny', reason: 'Review mode permits only the explicit read-tool allowlist' };
         const fingerprint = createHash('sha256').update(JSON.stringify({ name, args })).digest('hex').slice(0, 16);
         // Always ask, including on read tools: upstream annotation is not authorization.
         return { ...decision, name, args, action: 'ask', reason: `${decision?.reason ? decision.reason + '\n' : ''}PaseoDog allow-once approval (${fingerprint})` };

@@ -2,7 +2,7 @@ import { existsSync,readFileSync,lstatSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { root,paseoHome,mixdogHome,journalRoot,paseoBin,nativeBin,supportedNode } from './paths.mjs';
-import { patch } from './patch-mixdog.mjs';
+import { patch, PIN } from './patch-mixdog.mjs';
 const checks=[];
 const record=(name,ok,detail)=>checks.push({name,status:ok?'PASS':'FAIL',detail});
 record('node',supportedNode(),process.versions.node+'; required ^22.19.0 || >=24.0.0');
@@ -12,7 +12,7 @@ if (process.platform === 'linux') {
     record('systemd user scope',scope.status===0,scope.status===0?'User cgroup manager available':'Per-session Linux shell containment unavailable; check XDG_RUNTIME_DIR and lingering');
 }
 for(const [name,file] of [['Paseo CLI',paseoBin],['Mixdog CLI',nativeBin]])record(name,existsSync(file),file);
-for(const [name,path,pin] of [['Paseo','tools/node_modules/@getpaseo/cli/package.json','0.11.2'],['Mixdog','engine/node_modules/mixdog/package.json','1.0.12']]){
+for(const [name,path,pin] of [['Paseo','tools/node_modules/@getpaseo/cli/package.json','0.11.2'],['Mixdog','engine/node_modules/mixdog/package.json',PIN]]){
     try{const m=JSON.parse(readFileSync(join(root,path),'utf8'));record(name+' version',m.version===pin,m.version);}catch{record(name+' version',false,'Not installed');}
 }
 try{patch(join(root,'engine/node_modules/mixdog'),{check:true});record('host policy patch',true,'Verified original Git blob and injected callback');}catch(e){record('host policy patch',false,e.message);}

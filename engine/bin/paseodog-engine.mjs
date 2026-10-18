@@ -12,6 +12,30 @@ if (process.argv.includes('--check')) {
     } catch (error) { console.error(error.message); process.exit(1); }
     process.exit(0);
 }
+if (process.argv.includes('--controls-stdio')) {
+    const wire = { write: process.stdout.write.bind(process.stdout) };
+    process.stdout.write = process.stderr.write.bind(process.stderr);
+    console.log = console.error;
+    const { serveControlsStdio } = await import('../src/controls.mjs');
+    const server = serveControlsStdio({ input: process.stdin, output: wire, onExit: () => process.exit(0) });
+    process.on('SIGINT', () => void server.stop());
+    process.on('SIGTERM', () => void server.stop());
+    process.on('uncaughtException', () => void server.stop());
+    process.on('unhandledRejection', () => void server.stop());
+} else if (process.argv.includes('--controls')) {
+    const write = process.stdout.write.bind(process.stdout);
+    process.stdout.write = process.stderr.write.bind(process.stderr);
+    console.log = console.error;
+    try {
+        const { runControls } = await import('../src/controls.mjs');
+        const result = await runControls(JSON.parse(process.argv[process.argv.indexOf('--controls') + 1] || '{}'));
+        write(`${JSON.stringify(result)}\n`);
+        process.exit(0);
+    } catch {
+        write(`${JSON.stringify({ error: 'Engine settings failed; inspect local engine diagnostics' })}\n`);
+        process.exit(1);
+    }
+} else {
 if (!process.argv.includes('--stdio')) { console.error('Use paseo/paseodog to launch this worker; --stdio required.'); process.exit(2); }
 // Capture the wire before redirecting third-party console/stdout diagnostics.
 // Mixdog must not corrupt the JSONL channel with startup logs.
@@ -22,5 +46,6 @@ const { serveWorker } = await import('../src/worker.mjs');
 const server = serveWorker({ input: process.stdin, output: wire, onExit: () => process.exit(0) });
 process.on('SIGINT', () => void server.stop('sigint'));
 process.on('SIGTERM', () => void server.stop('sigterm'));
-process.on('uncaughtException', (e) => { console.error(e.message); void server.stop('uncaught exception'); });
-process.on('unhandledRejection', (e) => { console.error(String(e)); void server.stop('unhandled rejection'); });
+    process.on('uncaughtException', (e) => { console.error(e.message); void server.stop('uncaught exception'); });
+    process.on('unhandledRejection', (e) => { console.error(String(e)); void server.stop('unhandled rejection'); });
+}

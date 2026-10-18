@@ -95,6 +95,12 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
             }
             if (op === 'close') { reply(id, null); await stop('paseodog-worker-close'); return; }
             if (!engine || !opened) throw new Error('Worker is not open');
+            if (op === 'status') { reply(id, await engine.status()); return; }
+            if (op === 'auth') {
+                try { reply(id, await engine.auth(args)); }
+                catch { failed(id, 'Account connection failed; retry from the account screen'); }
+                return;
+            }
             if (op === 'permission') {
                 const permission = permissions.get(args.id);
                 if (!permission || permission.token !== args.token || !live(permission.turn)) throw new Error('Stale permission response');
