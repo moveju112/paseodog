@@ -22,9 +22,9 @@ export const engineControls = defineRpc({
     name: 'engine-controls',
     input: z.object({
         action: z.enum([
-            'read', 'main', 'agent', 'compaction', 'autoClear',
+            'read', 'main', 'agent', 'agentDefinition', 'compaction', 'autoClear',
             'workflow', 'workflowPack', 'workflowSave', 'workflowCreate', 'workflowDelete',
-            'orchestration',
+            'orchestration', 'instructionFiles',
         ]).default('read'),
         refresh: z.boolean().optional(),
         agent: z.string().max(100).optional(),

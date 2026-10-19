@@ -42,7 +42,9 @@ a verified lockfile does not freeze all transitive dependencies.
 adapter. It is not a substitute for compiling against @getpaseo/plugin or actually
 loading the plugin in Paseo.
 
-CI includes dependency-free tests and a separate actual SDK typecheck job. A manual
+CI installs the plugin development dependencies for the client rendering tests and
+keeps a separate actual SDK typecheck job. Server/adapter unit tests remain dependency-light.
+A manual
 `native_install` workflow input can install Mixdog and verify the patch without model
 credentials. The workflow file exists locally; no GitHub repository, workflow run or
 passing hosted CI is claimed by this archive.

@@ -2,7 +2,10 @@
   "name": "paseodog-host-tools",
   "version": "1.0.0-rc.4",
   "private": true,
+  "scripts": {
+    "postinstall": "node ../scripts/patch-paseo-cli.mjs --apply && node ../scripts/patch-paseo-terminal.mjs --apply"
+  },
   "dependencies": {
-    "@getpaseo/cli": "0.11.2"
+    "@getpaseo/cli": "0.11.4"
   }
 }

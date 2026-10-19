@@ -1,21 +1,21 @@
 # Upstream compatibility record
 
-Mixdog's current compatibility target is the published npm `mixdog@1.2.5` artifact.
+Mixdog's current compatibility target is the published npm `mixdog@1.2.6` artifact.
 The original Paseo review below remains unchanged. Source review and local checks
 do not establish real-account or mobile acceptance.
 
 | Component | Version | Git commit |
 |---|---|---|
-| Paseo / plugin SDK | 0.11.2 | 804335bc00bff52f2652f5de9e6227f013322948 |
-| Mixdog | 1.2.5 | npm artifact; gitHead not supplied |
+| Paseo / plugin SDK | 0.11.4 | npm artifacts; custom Android base `dc5b02f` |
+| Mixdog | 1.2.6 | npm artifact; compared against tag `v1.2.6` |
 
 ## Primary source references
 
-Current Mixdog source: https://registry.npmjs.org/mixdog/-/mixdog-1.2.5.tgz
+Current Mixdog source: https://registry.npmjs.org/mixdog/-/mixdog-1.2.6.tgz
 
 The commit links below retain the original `1.0.12` integration references; the
 current runtime, callback bridge and pre-tool policy were reviewed in the npm
-artifact. The retained turn-run fixture and blob gate below target `1.2.5`.
+artifact. The retained turn-run fixture and blob gate below target `1.2.6`.
 
 - Paseo provider contract: https://github.com/getpaseo/paseo/blob/804335bc00bff52f2652f5de9e6227f013322948/packages/plugin/src/server/provider.ts
 - Provider guide: https://github.com/getpaseo/paseo/blob/804335bc00bff52f2652f5de9e6227f013322948/public-docs/plugins/providers.md
@@ -52,14 +52,14 @@ upstream commit. `--check` refuses missing/changed patches. No bypass flag is in
 The source has been statically reviewed and the patched original runner tested with
 mocked helpers; downstream full engine behavior still requires live validation.
 
-`scripts/patch-mixdog.mjs` also pins these `1.2.5` source blobs:
+`scripts/patch-mixdog.mjs` also pins these `1.2.6` source blobs:
 
 | File under `src/` | Original Git blob | Purpose |
 |---|---|---|
 | `session-runtime/runtime-core.mjs` | `14ae394742a849f5cfd5bdc18123d9779ec6a7d3` | Pass the host agent surface through boot |
 | `session-runtime/boot/tools.mjs` | `704c7bcc84c8d6a52b0d13ea7412ba287d40b9fd` | Inject the native agent sessionSurface and retain host config during planning |
 | `session-runtime/boot/providers.mjs` | `34fc9fec9d09ac3b21d9a88b8e5468f3927992f3` | Preserve explicitly injected host config across lazy-secret/config reloads |
-| `session-runtime/turn/turn-run/ask-callbacks.mjs` | `e465d24ca613787b1369c2642709286bb6acd49b` | Carry host completion ownership |
+| `session-runtime/turn/turn-run/ask-callbacks.mjs` | `05b64099a27c0aae0e86be27ee493407661e3361` | Carry host completion ownership while retaining `onStreamItemStart` |
 | `runtime/agent/orchestrator/session/manager/ask-session.mjs` | `40a774b8654fbb7ac7a658fc9020fc16cf9c75af` | Suppress unawaited follow-up asks for host-managed turns |
 
 All files are validated before any write. Partial or drifted patches are rejected.
@@ -71,6 +71,18 @@ and denied/canceled shell calls. This does not substitute for subscription-model
 Paseo app acceptance.
 
 ## Upgrade procedure
+
+### Selected Paseo backports
+
+The CLI/SDK stay on stable `0.11.4`; the app does not adopt the beta navigation overhaul.
+`tools` postinstall runs two independent, version- and full-source-hash-gated patches:
+
+- `scripts/patch-paseo-cli.mjs`: PR [#6607](https://github.com/getpaseo/paseo/pull/6607), wait for permission-response acknowledgement before reporting success.
+- `scripts/patch-paseo-terminal.mjs`: PR [#6452](https://github.com/getpaseo/paseo/pull/6452), serialize wide-character continuation cells as `""` in both grid and scrollback. No new protocol fields or input changes.
+
+The custom Android source also contains the client half of #6452, reconnect-stream reconciliation [#7256](https://github.com/getpaseo/paseo/pull/7256), and terminal-copy fixes [#7254](https://github.com/getpaseo/paseo/pull/7254) / [#7260](https://github.com/getpaseo/paseo/pull/7260). Rebuild its protocol package before the APK. These fixes do not replace the Android input-order patch or establish physical Samsung IME acceptance.
+
+Dependency audit remains unresolved: the installed stable tools reported 5 high-severity entries and plugin development dependencies reported 15, including inherited entries. No automatic audit fix or major dependency substitution is applied. This release is not a security or production-acceptance certification.
 
 Run `npm run upstream:check` to compare the pinned Mixdog, Paseo CLI and Paseo SDK
 with npm's latest releases. This is read-only: it validates lockfile/pin agreement

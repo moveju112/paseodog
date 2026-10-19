@@ -1,0 +1,26 @@
+{
+    "provenance": "getpaseo/paseo#6452@3b726e5d43a0c44f940296fe79db28c1045991cd",
+    "cases": [
+        {
+            "text": "통합 구현은 전체 테스트를 통과했습니다",
+            "cols": 80,
+            "firstCells": ["통", "", "합", "", " ", "구", "", "현", "", "은", "", " "],
+            "legacyText": "통 합  구 현 은  전 체  테 스 트 를  통 과 했 습 니 다",
+            "oldClientText": "통 합  구 현 은  전 체  테 스 트 를  통 과 했 습 니 다 "
+        },
+        {
+            "text": "한 中 😀!",
+            "cols": 30,
+            "firstCells": ["한", "", " ", "中", "", " ", "😀", "!"],
+            "legacyText": "한  中  😀!",
+            "oldClientText": "한  中  😀!"
+        },
+        {
+            "text": "abc  def!",
+            "cols": 30,
+            "firstCells": ["a", "b", "c", " ", " ", "d", "e", "f", "!"],
+            "legacyText": "abc  def!",
+            "oldClientText": "abc  def!"
+        }
+    ]
+}

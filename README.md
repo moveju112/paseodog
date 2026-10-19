@@ -95,15 +95,19 @@ paseodog/
 
 ## 버전·파일 구성
 
-Paseo `0.11.2`, Mixdog `1.2.5`를 직접 의존성으로 고정합니다. Mixdog의 특정 원본 파일 해시가 일치할 때에만 정책 콜백 패치를 적용합니다. 엔진 자체 자동 업데이트는 차단하며, 무조건 최신 버전으로 갱신하지 마세요.
+Paseo CLI·SDK `0.11.4`, Mixdog `1.2.6`을 직접 의존성으로 고정합니다. Mixdog의 특정 원본 파일 해시가 일치할 때에만 정책 콜백 패치를 적용합니다. Paseo의 SSH 승인 ACK 대기와 한글 터미널 스냅샷 수정도 검토한 원본 해시를 확인한 뒤 설치 훅에서 적용합니다. 엔진 자체 자동 업데이트는 차단하며, 무조건 최신 버전으로 갱신하지 마세요.
 
 모델 호출·토큰/출력 관리·자동 압축·지원 모델의 자동 추론 조절은 Mixdog의 전용 프로필과 네이티브 구현을 사용합니다. Paseo는 표시·접속·세션 목록·승인 UI를 담당하며 모델 컨텍스트를 재구성하거나 이중 압축하지 않습니다. 자동 추론 조절의 실제 작동은 모델·프로필·런타임 준비 상태에 따릅니다.
 
 오케스트레이터의 병렬 생성·동일 tag 후속 지시·결과 회수는 Mixdog 네이티브 에이전트를 사용합니다. 하위 도구 승인에는 에이전트 이름과 세션 ID가 표시됩니다. 부모 턴은 하위 완료를 회수한 뒤 종료하고, 중단·종료 시 하위 작업도 취소합니다. 별도 하위 세션 UI나 사용자 턴 밖의 무인 추론은 제공하지 않습니다. `review` 제한은 하위 에이전트에도 적용됩니다.
 
-Mixdog `1.2.5`는 기본 역할들이 꺼져 있습니다. Paseo 연결 환경에 `PASEODOG_ENABLE_WORKER=true`를 명시하면 Worker만 현재 부모 모델로 활성화합니다. Worker의 Fast·자동 추론 상향·다른 모델 폴백은 끄며, 원본 Mixdog 프로필과 다른 역할은 변경하지 않습니다. 이 옵션 없이 사용할 때는 전용 Mixdog 프로필의 역할 설정을 따릅니다.
+Mixdog의 기본 역할들은 꺼져 있습니다. Paseo 연결 환경에 `PASEODOG_ENABLE_WORKER=true`를 명시하면 Worker만 현재 부모 모델로 활성화합니다. Worker의 Fast·자동 추론 상향·다른 모델 폴백은 끄며, 원본 Mixdog 프로필과 다른 역할은 변경하지 않습니다. 이 옵션 없이 사용할 때는 전용 Mixdog 프로필의 역할 설정을 따릅니다.
 
 `npm run test:native`는 임시 프로필과 로컬 HTTP 모델 응답으로 실제 엔진의 병렬 작업·승인/거절·후속 지시·복원·취소를 검사합니다. 실제 LLM 품질·구독 계정·Paseo 앱 연결 검증과는 별개이며 유료 API를 호출하지 않습니다.
+
+설치된 Mixdog 원본 워크플로우·에이전트 본문 보존 검사는 `node --test tests/native-templates-smoke.mjs`로 별도 실행합니다.
+
+설치된 의존성이 필요한 추가 검사는 `node --test tests/paseo-cli-native-smoke.mjs tests/paseo-terminal-native-smoke.mjs tests/embedded-upgrade-native-smoke.mjs`로 실행합니다. 기본 단위 검사와 분리되어 있으며, 실제 SSH·구독 계정·휴대폰 검증을 대신하지 않습니다.
 
 이미 로그인된 Mixdog OAuth를 명시적으로 공유하려면 Paseo의 `agents.providers.paseodog.env`에 `OPENAI_OAUTH_CREDENTIALS_PATH`를 설정합니다. 토큰을 복사하지 않고 원본 파일과 갱신 잠금을 공유하며, 대화·설정·저널은 전용 프로필에 남습니다. 다른 사용자의 인증 파일을 지정하지 마세요. 연결 기본값은 `PASEODOG_PROVIDER`, `PASEODOG_MODEL`, `PASEODOG_EFFORT`로 지정하고, `PASEODOG_AUTO_EFFORT=false`, `PASEODOG_FAST=false`로 자동 추론 상향·Fast 사용을 끌 수 있습니다. 저장된 연결값은 CLI와 검증 스크립트에도 적용됩니다.
 

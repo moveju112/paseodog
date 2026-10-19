@@ -1,6 +1,7 @@
 import { isAbsolute, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { loadNativeModules } from './native-engine.mjs';
+import { nativeDefaultWorkflowBody } from './native-templates.mjs';
 import { createJsonLineDecoder, encodeFrame } from '../../plugin/server/json-lines.mjs';
 import { errorText } from '../../plugin/server/util.mjs';
 
@@ -34,6 +35,7 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         ? options.cachedModels
         : null;
     let workflowPack = null;
+    let agentDefinition = null;
 
     if (action === 'main' || action === 'agent') {
         const input = request.route || {};
@@ -62,6 +64,11 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             if (!agents.some((row) => row.id === request.agent)) throw new Error('Unknown agent');
             await runtime.setAgentRoute(request.agent, input);
         }
+    } else if (action === 'agentDefinition') {
+        if (!(await runtime.listAgents()).some((row) => row.id === request.agent)) throw new Error('Unknown agent');
+        if (typeof runtime.getAgentDefinition !== 'function') throw new Error('Agent definition inspection not supported');
+        const { id, name, description, body, custom, userOverride } = await runtime.getAgentDefinition(request.agent);
+        agentDefinition = { id, name, description, body, custom, userOverride };
     } else if (action === 'compaction') {
         const patch = {};
         if (request.enabled !== undefined) {
@@ -103,6 +110,10 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         if (!Object.keys(patch).length) throw new Error('autoClear setting required');
         if (typeof runtime.setAutoClear !== 'function') throw new Error('Auto-clear not supported');
         await runtime.setAutoClear(patch);
+    } else if (action === 'instructionFiles') {
+        if (typeof request.enabled !== 'boolean') throw new Error('enabled must be boolean');
+        if (typeof runtime.setInstructionFiles !== 'function') throw new Error('Instruction files not supported');
+        await runtime.setInstructionFiles(request.enabled ? 'all' : 'off');
     } else if (action === 'workflow') {
         if (!(await runtime.listWorkflows()).some((row) => row.id === request.workflow)) throw new Error('Unknown workflow');
         await runtime.setWorkflow(request.workflow);
@@ -130,10 +141,10 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         const id = typeof request.workflow === 'string' ? request.workflow.trim().slice(0, 100) : '';
         if (!name && !id) throw new Error('Workflow name is required');
         const description = typeof request.description === 'string' ? request.description.trim().slice(0, 500) : '';
-        const defaultBody = `# ${name || id}\n\n${description ? `${description}\n\n` : ''}## Workflow\n1. 요구사항과 관련 코드를 먼저 파악한다.\n2. 필요한 최소 범위만 정확하게 수정한다.\n3. 변경 사항을 검증하고 결과를 요약한다.\n`;
-        const body = typeof request.body === 'string' && request.body.trim() ? request.body : defaultBody;
-        if (body.length > 200000) throw new Error('Workflow body is too large');
         if (typeof runtime.createWorkflow !== 'function') throw new Error('Workflow create not supported');
+        const body = typeof request.body === 'string' && request.body.trim()
+            ? request.body : await nativeDefaultWorkflowBody();
+        if (body.length > 200000) throw new Error('Workflow body is too large');
         const created = await runtime.createWorkflow({
             id: id || undefined,
             name: name || id,
@@ -173,6 +184,7 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         route: { provider: runtime.provider, model: runtime.model, effort: runtime.effort,
             fast: runtime.fast, autoEffort: runtime.autoEffort },
         models,
+        instructionFiles: runtime.getToolModuleSettings?.().instructionFiles || 'off',
         compaction,
         ...(autoClear ? { autoClear } : {}),
         workflows: (await runtime.listWorkflows()).map(({ id, name, active, description, source, userOverride }) => ({
@@ -182,6 +194,7 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             ...(typeof userOverride === 'boolean' ? { userOverride } : {}),
         })),
         ...(workflowPack ? { workflowPack } : {}),
+        ...(agentDefinition ? { agentDefinition } : {}),
         orchestration: runtime.getOrchestrationMode(),
         agents: (await runtime.listAgents()).map((row) => ({
             id: row.id, label: row.label || row.id,

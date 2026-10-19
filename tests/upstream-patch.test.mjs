@@ -27,3 +27,4 @@ test('actual patched upstream runner invokes host guard before inference and set
     assert.equal(await runUpstream(deps,async(s)=>{assert.equal(s,session);order.push('policy');}),'done');assert.deepEqual(order,['policy','inference','settled']);
     order.length=0;await assert.rejects(runUpstream(deps,async()=>{throw new Error('Guard failed');}),/Guard failed/);assert.deepEqual(order,['settled']);
 });
+

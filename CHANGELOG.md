@@ -1,5 +1,13 @@
 # Changelog
 
+## Android 11013 / integration refresh
+
+- Pin Paseo CLI/SDK to 0.11.4 and Mixdog to 1.2.6, preserving reviewed source-hash gates and explicit per-call approvals.
+- Backport SSH permission acknowledgement and both sides of Korean terminal snapshot restoration; retain the existing Android input-order patch.
+- Split custom Android host settings into accounts, workflows, token controls, instruction loading and agents; use a login modal and unchanged native workflow/agent bodies.
+- Selectively backport streaming reconnect reconciliation and Korean terminal copying without adopting the beta navigation redesign.
+- Keep real-device, subscription-account and production acceptance explicitly unverified; dependency audit warnings remain disclosed.
+
 ## 1.0.0-rc.4 - 2026-10-12
 
 - Avoid unhandled rejections and silent containment failure when journal flush

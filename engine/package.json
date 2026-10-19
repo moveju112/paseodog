@@ -10,7 +10,7 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "dependencies": {
-    "mixdog": "1.2.5"
+    "mixdog": "1.2.6"
   },
   "scripts": {
     "patch": "node ../scripts/patch-mixdog.mjs",

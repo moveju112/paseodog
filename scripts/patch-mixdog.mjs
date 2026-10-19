@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-export const PIN = '1.2.5';
+export const PIN = '1.2.6';
 export const ORIGINAL_BLOB = '6de5147ccdce6c9b3aa5f48dc740af439834b7b1';
 export const ANCHOR = '      const turnContext = await dispatchPromptSubmit(turn, session0, prompt, options);';
 export const ADDITION = '\n      // PaseoDog host-policy boundary v1 (local Apache-2.0 modification).\n      if (typeof options.beforeSessionAsk === \'function\') {\n        await options.beforeSessionAsk(session0);\n      }';
@@ -18,7 +18,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/turn/turn-run/ask-callbacks.mjs',
-        blob: 'e465d24ca613787b1369c2642709286bb6acd49b',
+        blob: '05b64099a27c0aae0e86be27ee493407661e3361',
         edits: [[
             '      beforeToolExecution: () => turn.snapshot.promise || Promise.resolve(),',
             '      hostManagedCompletions: options.hostManagedCompletions === true,\n      beforeToolExecution: () => turn.snapshot.promise || Promise.resolve(),',

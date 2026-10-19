@@ -88,9 +88,78 @@ test('invalid models, agents, keys and modes fail before saving', async () => {
     assert.deepEqual(calls, []);
 });
 
+test('workflow creation preserves explicit custom bytes without route changes', async () => {
+    const { value, calls } = runtime();
+    const body = ' \r\n# Custom 한글\r\nKeep spacing.  \r\n';
+    const result = await controlRuntime(value, {
+        action: 'workflowCreate', name: 'Different title', description: 'Not template content',
+        body, activate: false,
+    });
+    assert.deepEqual(Buffer.from(calls[0][1].body), Buffer.from(body));
+    assert.equal(result.workflowPack.body, body);
+    assert.deepEqual(calls.map(([action]) => action), ['workflowCreate']);
+});
+
+test('agent definition inspection preserves native body bytes and only returns editor fields without mutation', async () => {
+    const { value, calls } = runtime();
+    const before = structuredClone(value.listAgents());
+    const expected = {
+        id: 'worker', name: ' Native Worker ', description: ' Original description\n',
+        body: ' \r\n# Original 한글\r\nKeep spacing.  \r\n', custom: true, userOverride: false,
+    };
+    const inspections = [];
+    value.getAgentDefinition = async (id) => {
+        inspections.push(id);
+        return { ...expected, route: { provider: 'private-route' }, disabled: true,
+            filePath: '/private/profile/AGENT.md', secret: 'never-export' };
+    };
+    const result = await controlRuntime(value, { action: 'agentDefinition', agent: 'worker' });
+    assert.deepEqual(result.agentDefinition, expected);
+    assert.deepEqual(Buffer.from(result.agentDefinition.body), Buffer.from(expected.body));
+    assert.deepEqual(inspections, ['worker']);
+    assert.deepEqual(calls, []);
+    assert.deepEqual(value.listAgents(), before);
+    assert.doesNotMatch(JSON.stringify(result.agentDefinition), /private-route|private\/profile|never-export|disabled/);
+});
+
+test('unknown agent definition is rejected before native inspection without mutation', async () => {
+    const { value, calls } = runtime();
+    let inspections = 0;
+    value.getAgentDefinition = () => { inspections += 1; throw new Error('Must not inspect'); };
+    for (const agent of ['unknown', undefined, 'title-agent']) {
+        await assert.rejects(controlRuntime(value, { action: 'agentDefinition', agent }), /Unknown agent/);
+    }
+    assert.equal(inspections, 0);
+    assert.deepEqual(calls, []);
+});
+
+test('agent definition inspection reports unsupported runtime clearly without mutation', async () => {
+    const { value, calls } = runtime();
+    await assert.rejects(controlRuntime(value, { action: 'agentDefinition', agent: 'worker' }),
+        { message: 'Agent definition inspection not supported' });
+    assert.deepEqual(calls, []);
+});
+
 test('model effort choices preserve catalog options', () => {
     assert.deepEqual(modelProjection({ id: 'm', provider: 'p', effortOptions: ['low', { value: 'high', label: 'High' }] }).effortOptions,
         [{ id: 'low', label: 'low' }, { id: 'high', label: 'High' }]);
+});
+
+test('instruction loading toggles native mode only and preserves selective read settings', async () => {
+    const { value, calls } = runtime();
+    let mode = 'agents';
+    value.getToolModuleSettings = () => ({ instructionFiles: mode, private: 'hidden' });
+    value.setInstructionFiles = async (next) => { calls.push(['instructionFiles', next]); mode = next; };
+    assert.equal((await controlRuntime(value)).instructionFiles, 'agents');
+    assert.deepEqual(calls, []);
+    assert.equal((await controlRuntime(value, { action: 'instructionFiles', enabled: true })).instructionFiles, 'all');
+    assert.equal((await controlRuntime(value, { action: 'instructionFiles', enabled: false })).instructionFiles, 'off');
+    assert.deepEqual(calls, [['instructionFiles', 'all'], ['instructionFiles', 'off']]);
+    for (const enabled of [undefined, 'true', 1]) {
+        await assert.rejects(controlRuntime(value, { action: 'instructionFiles', enabled }), /enabled must be boolean/);
+    }
+    delete value.setInstructionFiles;
+    await assert.rejects(controlRuntime(value, { action: 'instructionFiles', enabled: true }), /Instruction files not supported/);
 });
 
 test('control process reads are cached and writes are serialized and refresh the cache', async () => {
