@@ -38,8 +38,9 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
     let agentDefinition = null;
 
     if (action === 'main' || action === 'agent') {
-        const input = request.route || {};
-        if (Object.keys(input).some((key) => !['provider', 'model', 'effort', 'fast', 'autoEffort', 'disabled'].includes(key)))
+        const input = { ...(request.route || {}) };
+        const allowedKeys = ['provider', 'model', 'effort', 'fast', 'autoEffort', 'disabled', 'contextPercent', 'contextTokens', 'fallbacks'];
+        if (Object.keys(input).some((key) => !allowedKeys.includes(key)))
             throw new Error('Unsupported route field');
         for (const key of ['provider', 'model', 'effort']) {
             if (input[key] !== undefined && (typeof input[key] !== 'string' || input[key].length > 256))
@@ -47,6 +48,37 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         }
         for (const key of ['fast', 'autoEffort', 'disabled']) {
             if (input[key] !== undefined && typeof input[key] !== 'boolean') throw new Error(`Invalid route ${key}`);
+        }
+        if (input.contextPercent !== undefined) {
+            if (input.contextPercent === null || input.contextPercent === 0) {
+                input.contextPercent = undefined;
+            } else if (typeof input.contextPercent !== 'number' || !Number.isFinite(input.contextPercent)
+                || input.contextPercent < 10 || input.contextPercent > 100) {
+                throw new Error('Invalid route contextPercent');
+            }
+        }
+        if (input.contextTokens !== undefined) {
+            if (input.contextTokens === null || input.contextTokens === 0) {
+                input.contextTokens = undefined;
+            } else if (typeof input.contextTokens !== 'number' || !Number.isFinite(input.contextTokens)
+                || input.contextTokens < 1000 || input.contextTokens > 2000000) {
+                throw new Error('Invalid route contextTokens');
+            } else {
+                input.contextTokens = Math.round(input.contextTokens);
+            }
+        }
+        if (input.fallbacks !== undefined) {
+            if (!Array.isArray(input.fallbacks)) throw new Error('Invalid route fallbacks');
+            input.fallbacks = input.fallbacks.map((fb) => {
+                if (!fb || typeof fb !== 'object' || typeof fb.provider !== 'string' || typeof fb.model !== 'string')
+                    throw new Error('Invalid fallback route item');
+                return {
+                    provider: fb.provider.slice(0, 256),
+                    model: fb.model.slice(0, 256),
+                    ...(typeof fb.effort === 'string' && fb.effort ? { effort: fb.effort.slice(0, 256) } : {}),
+                    ...(typeof fb.fast === 'boolean' ? { fast: fb.fast } : {}),
+                };
+            });
         }
         if (input.provider && input.model) {
             const matchedCached = cachedModels?.some((row) => row.provider === input.provider && row.id === input.model);
@@ -69,6 +101,33 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         if (typeof runtime.getAgentDefinition !== 'function') throw new Error('Agent definition inspection not supported');
         const { id, name, description, body, custom, userOverride } = await runtime.getAgentDefinition(request.agent);
         agentDefinition = { id, name, description, body, custom, userOverride };
+    } else if (action === 'agentSave' || action === 'agentCreate') {
+        if (typeof runtime.saveAgentDefinition !== 'function') throw new Error('Agent save not supported');
+        const name = typeof request.name === 'string' ? request.name.trim().slice(0, 120) : '';
+        const id = typeof request.agent === 'string' ? request.agent.trim().slice(0, 100) : '';
+        if (!name && !id) throw new Error('Agent name or id is required');
+        if (typeof request.body !== 'string' || !request.body.trim() || request.body.length > 200000)
+            throw new Error('Agent body is required');
+        const saved = await runtime.saveAgentDefinition({
+            id: id || undefined,
+            name: name || id,
+            description: typeof request.description === 'string' ? request.description.trim().slice(0, 500) : undefined,
+            body: request.body,
+            ...(request.route ? { route: request.route } : {}),
+        });
+        agentDefinition = {
+            id: saved.id,
+            name: saved.name,
+            description: saved.description,
+            body: saved.body,
+            custom: saved.custom,
+            userOverride: saved.userOverride,
+        };
+    } else if (action === 'agentDelete') {
+        if (typeof request.agent !== 'string' || !request.agent || request.agent.length > 100)
+            throw new Error('Unknown agent');
+        if (typeof runtime.deleteAgentDefinition !== 'function') throw new Error('Agent delete not supported');
+        await runtime.deleteAgentDefinition(request.agent);
     } else if (action === 'compaction') {
         const patch = {};
         if (request.enabled !== undefined) {
@@ -85,6 +144,23 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
                 throw new Error('Invalid mainBufferPercent');
             patch.mainBufferPercent = request.mainBufferPercent;
         }
+        if (request.mainBufferTokens !== undefined) {
+            if (typeof request.mainBufferTokens !== 'number' || !Number.isFinite(request.mainBufferTokens)
+                || request.mainBufferTokens < 1000 || request.mainBufferTokens > 500000)
+                throw new Error('Invalid mainBufferTokens');
+            patch.mainBufferTokens = Math.round(request.mainBufferTokens);
+        }
+        if (request.summaryModel !== undefined) {
+            if (typeof request.summaryModel !== 'string' || request.summaryModel.length > 256)
+                throw new Error('Invalid summaryModel');
+            patch.summaryModel = request.summaryModel.trim();
+        }
+        if (request.memoryTimeoutMs !== undefined) {
+            if (typeof request.memoryTimeoutMs !== 'number' || !Number.isFinite(request.memoryTimeoutMs)
+                || (request.memoryTimeoutMs !== 0 && (request.memoryTimeoutMs < 1000 || request.memoryTimeoutMs > 600000)))
+                throw new Error('Invalid memoryTimeoutMs');
+            patch.memoryTimeoutMs = Math.round(request.memoryTimeoutMs);
+        }
         if (!Object.keys(patch).length) throw new Error('enabled must be boolean');
         await runtime.setCompactionSettings(patch);
     } else if (action === 'autoClear') {
@@ -94,11 +170,18 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             patch.enabled = request.enabled;
         }
         if (request.idleMs !== undefined) {
-            if (typeof request.idleMs !== 'number' || !Number.isFinite(request.idleMs)
-                || request.idleMs < 60000 || request.idleMs > 604800000)
-                throw new Error('Invalid idleMs');
-            patch.idleMs = Math.round(request.idleMs);
+            if (request.idleMs === null || request.idleMs === 0) {
+                patch.idleMs = null;
+            } else {
+                if (typeof request.idleMs !== 'number' || !Number.isFinite(request.idleMs)
+                    || request.idleMs < 60000 || request.idleMs > 604800000)
+                    throw new Error('Invalid idleMs');
+                patch.idleMs = Math.round(request.idleMs);
+            }
         }
+        if (request.reset === true) patch.reset = true;
+        if (typeof request.provider === 'string' && request.provider.trim()) patch.provider = request.provider.trim();
+        if (request.resetProvider === true) patch.resetProvider = true;
         if (request.minContextPercent !== undefined) {
             if (typeof request.minContextPercent !== 'number' || !Number.isFinite(request.minContextPercent)
                 || request.minContextPercent < 0 || request.minContextPercent > 100)
@@ -111,9 +194,78 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         if (typeof runtime.setAutoClear !== 'function') throw new Error('Auto-clear not supported');
         await runtime.setAutoClear(patch);
     } else if (action === 'instructionFiles') {
-        if (typeof request.enabled !== 'boolean') throw new Error('enabled must be boolean');
         if (typeof runtime.setInstructionFiles !== 'function') throw new Error('Instruction files not supported');
-        await runtime.setInstructionFiles(request.enabled ? 'all' : 'off');
+        if (typeof request.instructionMode === 'string') {
+            if (!['all', 'agents', 'claude', 'off'].includes(request.instructionMode))
+                throw new Error('Invalid instructionMode');
+            await runtime.setInstructionFiles(request.instructionMode);
+        } else if (typeof request.enabled === 'boolean') {
+            await runtime.setInstructionFiles(request.enabled ? 'all' : 'off');
+        } else {
+            throw new Error('enabled must be boolean');
+        }
+    } else if (action === 'features') {
+        if (request.recap !== undefined) {
+            if (typeof request.recap !== 'boolean') throw new Error('recap must be boolean');
+            await runtime.setRecapEnabled?.(request.recap);
+        }
+        if (request.memoryTools !== undefined) {
+            if (typeof request.memoryTools !== 'boolean') throw new Error('memoryTools must be boolean');
+            await runtime.setMemoryToolsEnabled?.(request.memoryTools);
+        }
+        if (request.webSearch !== undefined) {
+            if (typeof request.webSearch !== 'boolean') throw new Error('webSearch must be boolean');
+            await runtime.setWebSearchEnabled?.(request.webSearch);
+        }
+        if (request.builtinTool !== undefined) {
+            if (typeof request.builtinTool !== 'string' || typeof request.enabled !== 'boolean')
+                throw new Error('builtinTool and enabled required');
+            await runtime.setBuiltinToolEnabled?.(request.builtinTool, request.enabled);
+        }
+        if (request.installFeature !== undefined) {
+            if (typeof request.installFeature !== 'string') throw new Error('installFeature must be string');
+            await runtime.installBuiltinFeature?.(request.installFeature);
+        }
+        if (request.webSearchRoute !== undefined) {
+            if (!request.webSearchRoute || typeof request.webSearchRoute !== 'object')
+                throw new Error('Invalid webSearchRoute');
+            await runtime.setWebSearchRoute?.(request.webSearchRoute);
+        }
+    } else if (action === 'preferences') {
+        if (request.outputStyle !== undefined) {
+            if (typeof request.outputStyle !== 'string') throw new Error('Invalid outputStyle');
+            await runtime.setOutputStyle?.(request.outputStyle);
+        }
+        if (request.profile !== undefined) {
+            if (!request.profile || typeof request.profile !== 'object') throw new Error('Invalid profile');
+            await runtime.setProfile?.(request.profile);
+        }
+        if (request.aiSessionTitles !== undefined) {
+            if (typeof request.aiSessionTitles !== 'boolean') throw new Error('aiSessionTitles must be boolean');
+            await runtime.setAiSessionTitles?.(request.aiSessionTitles);
+        }
+        if (request.shellCommand !== undefined) {
+            if (typeof request.shellCommand !== 'string') throw new Error('Invalid shellCommand');
+            await runtime.setSystemShell?.({ command: request.shellCommand });
+        }
+        if (request.worktree !== undefined) {
+            if (!request.worktree || typeof request.worktree !== 'object') throw new Error('Invalid worktree');
+            await runtime.setWorktreeSettings?.(request.worktree);
+        }
+        if (request.disabledSkills !== undefined) {
+            if (!Array.isArray(request.disabledSkills)) throw new Error('Invalid disabledSkills');
+            await runtime.setDisabledSkills?.(request.disabledSkills.map(String));
+        }
+        if (request.hookAction === 'add' && request.hookRule) {
+            await runtime.addHookRule?.(request.hookRule);
+            await runtime.flushHookRules?.();
+        } else if (request.hookAction === 'toggle' && typeof request.hookIndex === 'number') {
+            await runtime.setHookRuleEnabled?.(request.hookIndex, Boolean(request.enabled));
+            await runtime.flushHookRules?.();
+        } else if (request.hookAction === 'delete' && typeof request.hookIndex === 'number') {
+            await runtime.deleteHookRule?.(request.hookIndex);
+            await runtime.flushHookRules?.();
+        }
     } else if (action === 'workflow') {
         if (!(await runtime.listWorkflows()).some((row) => row.id === request.workflow)) throw new Error('Unknown workflow');
         await runtime.setWorkflow(request.workflow);
@@ -169,24 +321,90 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         ...(typeof rawCompaction.onModelChange === 'boolean' ? { onModelChange: rawCompaction.onModelChange } : {}),
         ...(typeof rawCompaction.mainBufferPercent === 'number' ? { mainBufferPercent: rawCompaction.mainBufferPercent } : {}),
         ...(typeof rawCompaction.mainBufferTokens === 'number' ? { mainBufferTokens: rawCompaction.mainBufferTokens } : {}),
+        ...(typeof rawCompaction.summaryModel === 'string' ? { summaryModel: rawCompaction.summaryModel } : {}),
+        ...(typeof rawCompaction.memoryTimeoutMs === 'number' ? { memoryTimeoutMs: rawCompaction.memoryTimeoutMs } : {}),
     };
     const rawAutoClear = typeof runtime.getAutoClear === 'function' ? runtime.getAutoClear() : null;
     const autoClear = rawAutoClear && typeof rawAutoClear === 'object' ? {
         enabled: rawAutoClear.enabled === true,
         idleMs: Number(rawAutoClear.idleMs) || 3600000,
+        custom: rawAutoClear.custom === true,
+        providerCustom: rawAutoClear.providerCustom === true,
+        providerDefault: Number(rawAutoClear.providerDefault) || 3600000,
+        provider: rawAutoClear.provider || null,
+        providerDefaults: Array.isArray(rawAutoClear.providerDefaults) ? rawAutoClear.providerDefaults : [],
         minContextPercent: Number(rawAutoClear.minContextPercent) || 0,
     } : undefined;
     const models = cachedModels
         ? cachedModels.map(modelProjection)
         : (await runtime.listProviderModels({ force: request.refresh === true })).map(modelProjection);
+    const tm = runtime.getToolModuleSettings?.() || {};
+    const toolModules = {
+        webSearch: Boolean(tm.webSearch?.enabled),
+        memory: { enabled: Boolean(tm.memory?.enabled), installed: Boolean(tm.memory?.installed) },
+        git: { enabled: Boolean(tm.git?.enabled), installed: Boolean(tm.git?.installed) },
+        office: { enabled: Boolean(tm.office?.enabled), installed: Boolean(tm.office?.installed) },
+        tidy: { enabled: Boolean(tm.tidy?.enabled), installed: Boolean(tm.tidy?.installed) },
+        visualize: { enabled: Boolean(tm.visualize?.enabled), installed: true },
+        media: { enabled: Boolean(tm.media?.enabled), installed: true },
+        localProvider: { enabled: Boolean(tm.localProvider?.enabled), installed: Boolean(tm.localProvider?.installed) },
+        autoEffort: {
+            enabled: Boolean(tm.autoEffort?.enabled),
+            installed: Boolean(tm.autoEffort?.installed),
+            supported: tm.autoEffort?.supported !== false,
+        },
+    };
+    const rawProfile = runtime.getProfile?.() || {};
+    const rawSkills = typeof runtime.skillsStatus === 'function' ? await Promise.resolve(runtime.skillsStatus()).catch(() => null) : null;
+    const rawHooks = typeof runtime.hooksStatus === 'function' ? await Promise.resolve(runtime.hooksStatus()).catch(() => null) : null;
 
     return {
-        route: { provider: runtime.provider, model: runtime.model, effort: runtime.effort,
-            fast: runtime.fast, autoEffort: runtime.autoEffort },
+        route: {
+            provider: runtime.provider, model: runtime.model, effort: runtime.effort,
+            fast: runtime.fast, autoEffort: runtime.autoEffort,
+            ...(typeof runtime.contextPercent === 'number' ? { contextPercent: runtime.contextPercent } : {}),
+            ...(typeof runtime.contextTokens === 'number' ? { contextTokens: runtime.contextTokens } : {}),
+        },
         models,
-        instructionFiles: runtime.getToolModuleSettings?.().instructionFiles || 'off',
+        instructionFiles: tm.instructionFiles || 'off',
         compaction,
         ...(autoClear ? { autoClear } : {}),
+        recap: runtime.getRecapSettings?.()?.enabled !== false,
+        aiSessionTitles: runtime.getSessionTitleSettings?.()?.aiSessionTitles !== false,
+        toolModules,
+        webSearchRoute: runtime.getWebSearchRoute?.() || null,
+        outputStyle: runtime.getOutputStyle?.()?.id || 'default',
+        outputStyles: (runtime.listOutputStyles?.()?.styles || []).map((s) => ({
+            id: String(s.id || ''),
+            label: String(s.label || s.name || s.id || ''),
+            description: typeof s.description === 'string' ? s.description : '',
+        })),
+        profile: {
+            title: typeof rawProfile.title === 'string' ? rawProfile.title : '',
+            language: typeof rawProfile.language === 'string' ? rawProfile.language : 'system',
+            experienceLevel: typeof rawProfile.experienceLevel === 'string' ? rawProfile.experienceLevel : '',
+        },
+        shell: runtime.getSystemShell?.() || { command: '', effective: '', source: 'auto' },
+        worktree: runtime.getWorktreeSettings?.() || {
+            newTaskDefault: 'branch', branchPrefix: 'mixdog/', sizeWarnBytes: 2147483648, autoCleanup: true,
+        },
+        skills: {
+            disabled: runtime.getDisabledSkills?.()?.disabled || [],
+            items: (rawSkills?.skills || []).map((s) => ({
+                name: String(s.name || s.id || ''),
+                description: typeof s.description === 'string' ? s.description : '',
+                disabled: s.disabled === true,
+            })),
+        },
+        hooks: {
+            rules: (rawHooks?.rules || []).map((r, index) => ({
+                index,
+                event: String(r.event || ''),
+                matcher: String(r.matcher || ''),
+                command: String(r.command || ''),
+                enabled: r.enabled !== false,
+            })),
+        },
         workflows: (await runtime.listWorkflows()).map(({ id, name, active, description, source, userOverride }) => ({
             id, name, active,
             ...(typeof description === 'string' && description ? { description } : {}),
@@ -200,10 +418,15 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             id: row.id, label: row.label || row.id,
             ...(typeof row.description === 'string' && row.description ? { description: row.description } : {}),
             ...(typeof row.custom === 'boolean' ? { custom: row.custom } : {}),
+            ...(typeof row.userOverride === 'boolean' ? { userOverride: row.userOverride } : {}),
+            ...(typeof row.locked === 'boolean' ? { locked: row.locked } : {}),
             disabled: row.disabled === true, route: {
                 provider: row.route?.provider || '', model: row.route?.model || '',
                 effort: row.route?.effort || '', fast: row.route?.fast === true,
                 autoEffort: row.route?.autoEffort !== false, inherited: row.route?.inherited === true,
+                ...(typeof row.route?.contextPercent === 'number' ? { contextPercent: row.route.contextPercent } : {}),
+                ...(typeof row.route?.contextTokens === 'number' ? { contextTokens: row.route.contextTokens } : {}),
+                ...(Array.isArray(row.route?.fallbacks) ? { fallbacks: row.route.fallbacks } : {}),
             },
         })),
         appliesTo: 'new-sessions',

@@ -95,6 +95,15 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
                     if (latest.autoClear && typeof latest.autoClear === 'object' && typeof runtime.setAutoClear === 'function') {
                         await runtime.setAutoClear(latest.autoClear);
                     }
+                    if (typeof latest.outputStyle === 'string' && typeof runtime.setOutputStyle === 'function') {
+                        await runtime.setOutputStyle(latest.outputStyle);
+                    }
+                    if (latest.profile && typeof latest.profile === 'object' && typeof runtime.setProfile === 'function') {
+                        await runtime.setProfile(latest.profile);
+                    }
+                    if (typeof latest.recap === 'boolean' && typeof runtime.setRecapEnabled === 'function') {
+                        await runtime.setRecapEnabled(latest.recap);
+                    }
                 }
             } catch {}
             orchestration.begin(callbacks);

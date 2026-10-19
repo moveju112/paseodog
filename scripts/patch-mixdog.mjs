@@ -52,6 +52,14 @@ export const AGENT_PATCHES = [
             '  const agentTool = createStandaloneAgent({\n    cfgMod: params.agentSessionSurface ? { ...cfgMod, loadConfig: () => rt.config } : cfgMod,',
         ]],
     },
+    {
+        file: 'src/session-runtime/settings-compaction-api.mjs',
+        blob: 'cdfdfb44509491a693110c0bbcf8c1a9eac1f70e',
+        edits: [[
+            '      if (hasOwn(input, \'onModelChange\')) next.onModelChange = input.onModelChange !== false;',
+            '      if (hasOwn(input, \'onModelChange\')) next.onModelChange = input.onModelChange !== false;\n      if (hasOwn(input, \'summaryModel\')) {\n        if (input.summaryModel) next.summaryModel = String(input.summaryModel).trim();\n        else delete next.summaryModel;\n      }\n      if (hasOwn(input, \'memoryTimeoutMs\')) {\n        const ms = Number(input.memoryTimeoutMs);\n        if (Number.isFinite(ms) && ms > 0) next.memoryTimeoutMs = Math.round(ms);\n        else delete next.memoryTimeoutMs;\n      }',
+        ]],
+    },
 ];
 // 정확한 원본 또는 정확한 패치 결과만 허용한다.
 export function patchedAgentSource(text, spec) {

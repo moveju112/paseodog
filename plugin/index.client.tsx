@@ -5,7 +5,7 @@ import { useRpc, type PluginClientContext, type PluginSurfaceProps } from '@getp
 import { engineAuth, engineControls } from './shared/controls.js';
 import { LiveStatus } from './client/live-status.js';
 
-type Route = { provider: string; model: string; effort?: string; autoEffort: boolean; fast: boolean };
+type Route = { provider: string; model: string; effort?: string; autoEffort: boolean; fast: boolean; contextPercent?: number | null };
 type AuthProvider = 'anthropic-oauth' | 'openai-oauth';
 type AuthFlow = { id: string; url: string; userCode: string | null; acceptsCode: boolean };
 type AgentDefinition = { id: string; name: string; description?: string; body: string; custom?: boolean; userOverride?: boolean };
@@ -15,17 +15,34 @@ type Snapshot = {
     route: Route;
     models: { id: string; provider: string; label: string;
         effortOptions: { id: string; label: string }[]; fastCapable: boolean }[];
-    compaction: { auto: boolean; onModelChange?: boolean; mainBufferPercent?: number };
+    compaction: {
+        auto: boolean;
+        onModelChange?: boolean;
+        mainBufferPercent?: number;
+        mainBufferTokens?: number | null;
+        summaryModel?: string | null;
+        memoryTimeoutMs?: number;
+    };
     autoClear?: { enabled: boolean; idleMs?: number; minContextPercent?: number };
     workflows: WorkflowItem[];
     workflowPack?: WorkflowPack | null;
     orchestration: string;
-    agents: { id: string; label: string; description?: string; disabled: boolean; route: Route }[];
+    agents: { id: string; label: string; description?: string; disabled: boolean; custom?: boolean; userOverride?: boolean; route: Route }[];
     sessions: { id: string; running?: boolean; state?: string; model?: string;
         compaction?: { auto: boolean }; context?: Record<string, number>;
         jobs?: { id: string; agent: string; status: string }[] }[];
     agentDefinition?: AgentDefinition | null;
     instructionFiles?: string;
+    recap?: boolean;
+    toolModules?: {
+        webSearch?: boolean;
+        memory?: { enabled: boolean; installed?: boolean };
+    };
+    outputStyle?: string;
+    outputStyles?: { id: string; label: string }[];
+    profile?: { title?: string | null; language?: string | null; experienceLevel?: string | null };
+    aiSessionTitles?: boolean;
+    worktree?: { newTaskDefault?: 'branch' | 'direct' | 'ask'; branchPrefix?: string; autoCleanup?: boolean };
 };
 type Section = 'account' | 'workflow' | 'tokens' | 'instructions' | 'agents';
 
@@ -79,6 +96,7 @@ function applyOptimistic(prev: Snapshot | null, input: Record<string, any>): Sna
                 ...(typeof input.enabled === 'boolean' ? { auto: input.enabled } : {}),
                 ...(typeof input.onModelChange === 'boolean' ? { onModelChange: input.onModelChange } : {}),
                 ...(typeof input.mainBufferPercent === 'number' ? { mainBufferPercent: input.mainBufferPercent } : {}),
+                ...(input.mainBufferTokens !== undefined ? { mainBufferTokens: input.mainBufferTokens } : {}),
             },
         };
     }
@@ -94,8 +112,36 @@ function applyOptimistic(prev: Snapshot | null, input: Record<string, any>): Sna
             },
         };
     }
-    if (input.action === 'instructionFiles' && typeof input.enabled === 'boolean') {
-        return { ...prev, instructionFiles: input.enabled ? 'all' : 'off' };
+    if (input.action === 'instructionFiles') {
+        if (typeof input.instructionMode === 'string') {
+            return { ...prev, instructionFiles: input.instructionMode };
+        }
+        if (typeof input.enabled === 'boolean') {
+            return { ...prev, instructionFiles: input.enabled ? 'all' : 'off' };
+        }
+    }
+    if (input.action === 'features') {
+        const prevModules = prev.toolModules || {};
+        return {
+            ...prev,
+            ...(typeof input.recap === 'boolean' ? { recap: input.recap } : {}),
+            toolModules: {
+                ...prevModules,
+                ...(typeof input.webSearch === 'boolean' ? { webSearch: input.webSearch } : {}),
+                ...(typeof input.memoryTools === 'boolean'
+                    ? { memory: { ...(prevModules.memory || { enabled: true }), enabled: input.memoryTools } }
+                    : {}),
+            },
+        };
+    }
+    if (input.action === 'preferences') {
+        return {
+            ...prev,
+            ...(typeof input.outputStyle === 'string' ? { outputStyle: input.outputStyle } : {}),
+            ...(typeof input.aiSessionTitles === 'boolean' ? { aiSessionTitles: input.aiSessionTitles } : {}),
+            ...(input.profile ? { profile: { ...(prev.profile || {}), ...input.profile } } : {}),
+            ...(input.worktree ? { worktree: { ...(prev.worktree || {}), ...input.worktree } } : {}),
+        };
     }
     if (input.action === 'main' && input.route) {
         return { ...prev, route: { ...prev.route, ...input.route } };
@@ -130,6 +176,8 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
     const [newWorkflowName, setNewWorkflowName] = useState('');
     const [newWorkflowDesc, setNewWorkflowDesc] = useState('');
     const [agentDefinition, setAgentDefinition] = useState<AgentDefinition | null>(null);
+    const [editingAgent, setEditingAgent] = useState(false);
+    const [agentEditBody, setAgentEditBody] = useState('');
     const invokeAuth = useRpc(engineAuth);
     const [authOpen, setAuthOpen] = useState(false);
     const [authProvider, setAuthProvider] = useState<AuthProvider>('anthropic-oauth');
@@ -157,7 +205,10 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
                 setEditingWorkflowId(next.workflowPack.id);
                 setWorkflowBody(next.workflowPack.body || '');
             }
-            if (input.action === 'agentDefinition') setAgentDefinition(next.agentDefinition ?? null);
+            if (input.action === 'agentDefinition') {
+                setAgentDefinition(next.agentDefinition ?? null);
+                if (next.agentDefinition?.body) setAgentEditBody(next.agentDefinition.body);
+            }
             setMessage(readOnly ? '엔진에서 조회했습니다.'
                 : input.action === 'instructionFiles' ? '저장했습니다. 새 세션부터 적용됩니다.' : '즉시 반영되었습니다.');
         } catch (error) {
@@ -364,12 +415,28 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
                     void request({ action: 'workflowCreate', name, description, activate: true });
                 })}
             </>}
+            <Text style={{ ...text, fontSize: 18 }}>출력 스타일 & 작업 환경</Text>
+            {(['default', 'concise', 'explanatory'] as const).map((styleId) => button(
+                `출력 스타일: ${styleId}`,
+                () => void request({ action: 'preferences', outputStyle: styleId }),
+                (snapshot.outputStyle || 'default') === styleId,
+            ))}
+            {button(`AI 세션 제목 자동 생성: ${(snapshot.aiSessionTitles ?? true) ? '켜짐' : '꺼짐'}`,
+                () => void request({ action: 'preferences', aiSessionTitles: !(snapshot.aiSessionTitles ?? true) }))}
+            {button(`새 작업 Worktree 격리: ${(snapshot.worktree?.newTaskDefault || 'branch') === 'branch' ? '켜짐' : '꺼짐'}`,
+                () => void request({
+                    action: 'preferences',
+                    worktree: { newTaskDefault: (snapshot.worktree?.newTaskDefault || 'branch') === 'branch' ? 'direct' : 'branch' },
+                }))}
         </>}
         {snapshot && section === 'tokens' && <>
             {button(`자동 추론 조절: ${snapshot.route.autoEffort ? '켜짐' : '꺼짐'}`,
                 () => void request({ action: 'main', route: { autoEffort: !snapshot.route.autoEffort } }))}
             {mainModel?.fastCapable && button(`Fast 응답: ${snapshot.route.fast ? '켜짐' : '꺼짐'}`,
                 () => void request({ action: 'main', route: { fast: !snapshot.route.fast } }))}
+            {([100, 85, 70, 50] as const).map((pct) => button(`컨텍스트 한도 ${pct}%`,
+                () => void request({ action: 'main', route: { contextPercent: pct } }),
+                (snapshot.route.contextPercent ?? 100) === pct))}
             {button(`자동 압축: ${snapshot.compaction.auto ? '켜짐' : '꺼짐'}`,
                 () => void request({ action: 'compaction', enabled: !snapshot.compaction.auto }))}
             {button(`모델 변경 시 자동 압축: ${snapshot.compaction.onModelChange ? '켜짐' : '꺼짐'}`,
@@ -377,21 +444,35 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
             {([0.15, 0.2, 0.3] as const).map((pct) => button(`컨텍스트 버퍼 ${Math.round(pct * 100)}%`,
                 () => void request({ action: 'compaction', mainBufferPercent: pct }),
                 Math.abs((snapshot.compaction.mainBufferPercent ?? 0.2) - pct) < 0.02))}
+            {button(`세션 복귀 요약 (Recap): ${(snapshot.recap ?? true) ? '켜짐' : '꺼짐'}`,
+                () => void request({ action: 'features', recap: !(snapshot.recap ?? true) }))}
             {button(`유휴 컨텍스트 자동 정리: ${snapshot.autoClear?.enabled ? '켜짐' : '꺼짐'}`,
                 () => void request({ action: 'autoClear', enabled: !snapshot.autoClear?.enabled }))}
+            {button('유휴 정리 기본값 복원',
+                () => void request({ action: 'autoClear', reset: true }))}
             <Text style={text}>기존 대화의 수동 압축은 채팅에서 /compact를 사용하세요.</Text>
         </>}
         {snapshot && section === 'instructions' && <>
             {button(`지침 파일 로딩: ${instructionFilesOn ? '켜짐' : '꺼짐'}`,
                 () => void request({ action: 'instructionFiles', enabled: !instructionFilesOn }), instructionFilesOn)}
+            {(['all', 'agents', 'claude', 'off'] as const).map((m) => button(
+                `지침 범위: ${m}`,
+                () => void request({ action: 'instructionFiles', instructionMode: m }),
+                snapshot.instructionFiles === m,
+            ))}
             <Text style={text}>켜면 전역 ~/.codex/AGENTS.md, ~/.claude/CLAUDE.md와 프로젝트 AGENTS.md·CLAUDE.md를 불러옵니다.</Text>
             <Text style={text}>변경 사항은 새 세션부터 적용됩니다.</Text>
             {instructionFilesOn && snapshot.instructionFiles !== 'all' && <Text style={{ ...text, color: colors.foregroundMuted }}>
                 현재 일부 파일만 불러오는 설정({snapshot.instructionFiles})입니다. 끄거나 다시 켜면 전체 로딩으로 바뀝니다.</Text>}
+            <Text style={{ ...text, fontSize: 18 }}>내장 도구 모듈</Text>
+            {button(`웹 검색 도구: ${(snapshot.toolModules?.webSearch ?? true) ? '켜짐' : '꺼짐'}`,
+                () => void request({ action: 'features', webSearch: !(snapshot.toolModules?.webSearch ?? true) }))}
+            {button(`장기 메모리 도구: ${(snapshot.toolModules?.memory?.enabled ?? true) ? '켜짐' : '꺼짐'}`,
+                () => void request({ action: 'features', memoryTools: !(snapshot.toolModules?.memory?.enabled ?? true) }))}
         </>}
         {snapshot && section === 'agents' && <>
             {snapshot.agents.map((agent) => button(`${agent.label} · ${agent.disabled ? '꺼짐' : '켜짐'}`,
-                () => setTarget(agent.id), target === agent.id))}
+                () => { setTarget(agent.id); setEditingAgent(false); }, target === agent.id))}
             {!snapshot.agents.length && <Text style={text}>설정할 서브에이전트가 없습니다.</Text>}
             {selectedAgent && <>
                 <Text style={text}>{route?.provider || 'Main 상속'} / {route?.model || 'Main 상속'}</Text>
@@ -402,7 +483,7 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
                     ? button('원본 에이전트 정의 닫기', () => setAgentDefinition(null))
                     : button('원본 에이전트 정의 보기 (읽기 전용)',
                         () => void request({ action: 'agentDefinition', agent: selectedAgent.id }))}
-                {agentDefinition?.id === selectedAgent.id && <View style={{ gap: 6, padding: 10, borderWidth: 1,
+                {agentDefinition?.id === selectedAgent.id && !editingAgent && <View style={{ gap: 6, padding: 10, borderWidth: 1,
                     borderRadius: 8, borderColor: colors.foregroundMuted }}>
                     <Text style={{ ...text, fontWeight: '600' }}>{agentDefinition.name || agentDefinition.id}
                         {agentDefinition.custom ? ' · 커스텀' : ' · 기본 제공'}{agentDefinition.userOverride ? ' · 사용자 재정의' : ''}</Text>
@@ -410,6 +491,18 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
                     <Text accessibilityLabel="원본 에이전트 정의" selectable
                         style={{ ...text, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>{agentDefinition.body}</Text>
                 </View>}
+                {button(editingAgent ? '에이전트 정의 편집 닫기' : '에이전트 정의 편집', () => {
+                    if (!editingAgent) void request({ action: 'agentDefinition', agent: selectedAgent.id });
+                    setEditingAgent(!editingAgent);
+                })}
+                {editingAgent && <>
+                    <TextInput accessibilityLabel="에이전트 정의 본문" multiline value={agentEditBody} onChangeText={setAgentEditBody}
+                        style={{ ...text, minHeight: 140, padding: 10, borderWidth: 1, borderColor: colors.foreground }} />
+                    {button('에이전트 정의 저장', () => {
+                        setEditingAgent(false);
+                        void request({ action: 'agentSave', agent: selectedAgent.id, name: selectedAgent.label, body: agentEditBody });
+                    })}
+                </>}
                 {button(`에이전트 자동 추론 조절: ${route?.autoEffort ? '켜짐' : '꺼짐'}`,
                     () => routeChange({ autoEffort: !route?.autoEffort }))}
                 {button('에이전트 모델 선택', () => setShowModels(!showModels))}

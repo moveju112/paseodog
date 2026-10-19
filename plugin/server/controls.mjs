@@ -125,7 +125,7 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
                 authTimer.unref?.();
                 try {
                     const result = await authentication.auth(input);
-                    if (result.state === 'completed') {
+                    if (result.state === 'completed' || ['selectAccount', 'logout', 'saveApiKey'].includes(input.action)) {
                         cached = undefined;
                         controlDaemon?.close();
                         controlDaemon = null;

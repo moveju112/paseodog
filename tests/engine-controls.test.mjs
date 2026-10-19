@@ -219,3 +219,102 @@ test('live status distinguishes child approval waiting from running and clears a
     assert.equal((await f.connection.engineStatus())[0].jobs[0].waitingApproval, false);
     assert.ok(approval.request.id);
 });
+
+test('newly ported Mixdog settings (features, preferences, compaction extras, agent CRUD, fallbacks) invoke native APIs', async () => {
+    const { value, calls } = runtime();
+    value.setRecapEnabled = (v) => calls.push(['recap', v]);
+    value.setMemoryToolsEnabled = (v) => calls.push(['memoryTools', v]);
+    value.setWebSearchEnabled = (v) => calls.push(['webSearch', v]);
+    value.setBuiltinToolEnabled = (id, v) => calls.push(['builtinTool', id, v]);
+    value.installBuiltinFeature = (id) => calls.push(['installFeature', id]);
+    value.setWebSearchRoute = (r) => calls.push(['webSearchRoute', r]);
+    value.setOutputStyle = (s) => calls.push(['outputStyle', s]);
+    value.setProfile = (p) => calls.push(['profile', p]);
+    value.setAiSessionTitles = (v) => calls.push(['aiSessionTitles', v]);
+    value.setSystemShell = (s) => calls.push(['shell', s]);
+    value.setWorktreeSettings = (w) => calls.push(['worktree', w]);
+    value.setDisabledSkills = (d) => calls.push(['disabledSkills', d]);
+    value.addHookRule = (r) => calls.push(['addHook', r]);
+    value.setHookRuleEnabled = (i, v) => calls.push(['toggleHook', i, v]);
+    value.deleteHookRule = (i) => calls.push(['deleteHook', i]);
+    value.flushHookRules = () => calls.push(['flushHooks']);
+    value.saveAgentDefinition = (p) => { calls.push(['agentSave', p]); return { id: p.id, name: p.name || p.id, body: p.body }; };
+    value.createAgentDefinition = (p) => { calls.push(['agentCreate', p]); return { id: 'qa-bot', name: p.name, body: p.body, custom: true }; };
+    value.deleteAgentDefinition = (id) => calls.push(['agentDelete', id]);
+
+    await controlRuntime(value, {
+        action: 'compaction',
+        mainBufferTokens: 32000,
+        summaryModel: 'subscription/small',
+        memoryTimeoutMs: 45000,
+    });
+    await controlRuntime(value, {
+        action: 'features',
+        recap: false,
+        memoryTools: true,
+        webSearch: true,
+        builtinTool: 'git',
+        enabled: true,
+        installFeature: 'office',
+        webSearchRoute: { inherited: false, provider: 'subscription', model: 'small' },
+    });
+    await controlRuntime(value, {
+        action: 'preferences',
+        outputStyle: 'concise',
+        profile: { title: 'Staff Eng', language: 'ko', experienceLevel: 'senior' },
+        aiSessionTitles: true,
+        shellCommand: '/bin/zsh',
+        worktree: { newTaskDefault: 'branch', branchPrefix: 'paseodog/', autoCleanup: true },
+        disabledSkills: ['legacy-skill'],
+        hookAction: 'add',
+        hookRule: { event: 'PreToolUse', matcher: 'Bash', command: 'echo ok' },
+    });
+    await controlRuntime(value, {
+        action: 'agentSave',
+        agent: 'worker',
+        name: 'Worker Pro',
+        description: 'Custom worker',
+        body: '# Worker Prompt',
+        route: { fallbacks: [{ provider: 'subscription', model: 'small', effort: 'low' }] },
+    });
+    await controlRuntime(value, {
+        action: 'agentCreate',
+        name: 'QA Bot',
+        description: 'Tests code',
+        body: '# QA Prompt',
+    });
+    await controlRuntime(value, { action: 'agentDelete', agent: 'worker' });
+
+    assert.deepEqual(calls, [
+        ['compaction', { mainBufferTokens: 32000, summaryModel: 'subscription/small', memoryTimeoutMs: 45000 }],
+        ['recap', false],
+        ['memoryTools', true],
+        ['webSearch', true],
+        ['builtinTool', 'git', true],
+        ['installFeature', 'office'],
+        ['webSearchRoute', { inherited: false, provider: 'subscription', model: 'small' }],
+        ['outputStyle', 'concise'],
+        ['profile', { title: 'Staff Eng', language: 'ko', experienceLevel: 'senior' }],
+        ['aiSessionTitles', true],
+        ['shell', { command: '/bin/zsh' }],
+        ['worktree', { newTaskDefault: 'branch', branchPrefix: 'paseodog/', autoCleanup: true }],
+        ['disabledSkills', ['legacy-skill']],
+        ['addHook', { event: 'PreToolUse', matcher: 'Bash', command: 'echo ok' }],
+        ['flushHooks'],
+        ['agentSave', {
+            id: 'worker',
+            name: 'Worker Pro',
+            description: 'Custom worker',
+            body: '# Worker Prompt',
+            route: { fallbacks: [{ provider: 'subscription', model: 'small', effort: 'low' }] },
+        }],
+        ['agentSave', {
+            id: undefined,
+            name: 'QA Bot',
+            description: 'Tests code',
+            body: '# QA Prompt',
+        }],
+        ['agentDelete', 'worker'],
+    ]);
+});
+
