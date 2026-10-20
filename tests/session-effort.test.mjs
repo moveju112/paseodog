@@ -103,6 +103,32 @@ test('existing native session reads actual auto effort and retains native identi
     assert.deepEqual(store.list()[0].items, originalHistory);
 });
 
+// 복원 시 낡은 effort는 저장값을 따르지만 provider·model 변경은 새 세션을 요구한다.
+test('restoring an existing native session still rejects a changed provider or model', async (t) => {
+    for (const changed of [{ model: 'other-model' }, { provider: 'other-provider' }]) {
+        const store = new MemoryJournalStore();
+        const f = fixture({
+            async ask(text, callbacks) {
+                callbacks.onIdentity({ id: 'existing-native', state: { provider: 'test', model: 'model', effort: 'low' } });
+                return { content: text };
+            },
+        }, { loadCatalog, store });
+        t.after(() => f.connection.close());
+        await f.ready();
+        await f.run();
+        const persistence = f.events.find((event) => event.type === 'session.opened').persistence;
+        await f.connection.close();
+        const resumed = fixture({}, { loadCatalog, store });
+        t.after(() => resumed.connection.close());
+        resumed.open.persistence = persistence;
+        resumed.open.config.providerOptions = { provider: 'test', model: 'model', effort: 'low', ...changed };
+        await resumed.connection.send(resumed.open);
+        const failed = await until(resumed.events, (event) => event.requestId === 'open1' && event.type === 'request.failed');
+        assert.match(failed.error.message, /^Cannot change native (provider|model) while restoring/);
+        assert.equal(resumed.creates.length, 0);
+    }
+});
+
 // 다른 모델의 기본 카탈로그 노력도를 현재 모델의 지원 목록처럼 노출하지 않는다.
 test('unknown current native model cannot borrow the default model effort options', async (t) => {
     let calls = 0;

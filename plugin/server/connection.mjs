@@ -268,7 +268,9 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                 .some((option) => (typeof option === 'string' ? option : option.id) === requestedRoute.effort))
                 throw new Error('Unsupported effort for current model');
             if (record.nativeSessionId && record.nativeRoute) {
-                for (const key of ['provider', 'model', 'effort']) {
+                // provider·model은 네이티브 세션 정체성이다. effort는 세션 중 바뀌는 설정이라
+                // 생성 시 providerOptions 값이 낡을 수 있으므로 저장된 nativeRoute 값을 그대로 쓴다.
+                for (const key of ['provider', 'model']) {
                     if (config.providerOptions?.[key] !== undefined && config.providerOptions[key] !== record.nativeRoute[key])
                         throw new Error(`Cannot change native ${key} while restoring; create a new session`);
                 }
