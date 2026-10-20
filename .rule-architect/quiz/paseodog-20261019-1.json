@@ -1,0 +1,50 @@
+{
+  "runId": "paseodog-20261019-1",
+  "lang": "en",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "recall",
+      "question": "Where is the record of which Paseo and Mixdog base versions PaseoDog has accepted, and which command compares the pinned versions with npm's latest releases?",
+      "expected": "package.json paseodogUpstream (mirrored in plugin/shared/release.json, shown by paseodog --version; backports in docs/UPSTREAM.md); npm run upstream:check",
+      "answer": "package.json paseodogUpstream (+release.json, --version, docs/UPSTREAM.md ledger); npm run upstream:check, reviewRequired=true means newer upstream",
+      "correct": true
+    },
+    {
+      "id": "q2",
+      "type": "recall",
+      "question": "Right after the product version was bumped, the app shows \"Provider 'paseodog' is not available. Available providers: none.\" What causes this and what should be done?",
+      "expected": "Loaded plugin VERSION differs from engine --check version on disk; reload paseodog-provider on every daemon that registered it and confirm provider ls shows available",
+      "answer": "Plugin holds old VERSION vs engine --check; reload on every daemon (dedicated + ~/.paseo if registered), provider ls, ask before reloading during active turns",
+      "correct": true
+    },
+    {
+      "id": "q3",
+      "type": "recall",
+      "question": "Which daemon (PASEO_HOME) should PaseoDog run on, how should it be started, and what port rule applies when stock Paseo is also installed on the host?",
+      "expected": "Dedicated home ${PASEODOG_HOME:-~/.local/share/paseodog}/paseo via paseodog start or paseodog serve (systemd), never both; use a port other than 6767 (e.g. 6768)",
+      "answer": "Dedicated home via paseodog wrapper start/serve, never both; port other than 6767 e.g. 6768",
+      "correct": true
+    },
+    {
+      "id": "q4",
+      "type": "judgment",
+      "question": "A new Paseo release changed a file that one of our patch scripts targets, and install fails with a source-drift hash error. Is it acceptable to just update ORIGINAL_HASH to the new file's hash so the patch applies?",
+      "expected": "No; re-review the new source, re-port and regenerate fixture/hash from the inspected file, or delete the patch if fixed upstream; no hash bypass",
+      "answer": "No; re-review, re-port + regenerate hash, or delete patch if upstream fixed; no bypass, no heuristic anchors",
+      "correct": true
+    },
+    {
+      "id": "q5",
+      "type": "negative",
+      "question": "What is the procedure and file location for signing the Android APK release key?",
+      "expected": "not in the rules, check the source",
+      "answer": "not in the rules, check the source",
+      "correct": true
+    }
+  ],
+  "correct": 5,
+  "total": 5,
+  "negativePassed": true,
+  "passed": true
+}

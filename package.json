@@ -1,6 +1,10 @@
 {
   "name": "paseodog",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0-rc.7",
+  "paseodogUpstream": {
+    "paseo": "0.11.4",
+    "mixdog": "1.2.6"
+  },
   "private": true,
   "type": "module",
   "description": "Linux-first Mixdog integration for Paseo desktop, mobile and SSH clients",

@@ -2,7 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { resolve,join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { root } from './paths.mjs';
-function walk(path){return readdirSync(path,{withFileTypes:true}).flatMap(x=>['node_modules','.git','reports'].includes(x.name)?[]:x.isDirectory()?walk(join(path,x.name)):[join(path,x.name)]);}
+// Android 모노레포는 자체 TypeScript·lint 검사로 검증하며 JSONC를 일반 JSON 검사에 넣지 않는다.
+function walk(path){return readdirSync(path,{withFileTypes:true}).flatMap(x=>['node_modules','.git','reports'].includes(x.name)||(path===root&&x.name==='android')?[]:x.isDirectory()?walk(join(path,x.name)):[join(path,x.name)]);}
 let count=0,failures=0;
 for(const file of walk(root)){
     if(file.endsWith('.mjs')){const check=spawnSync(process.execPath,['--check',file],{encoding:'utf8'});if(check.status!==0){console.error(check.stderr);failures++;}count++;}

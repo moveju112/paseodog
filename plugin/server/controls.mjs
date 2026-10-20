@@ -79,20 +79,24 @@ function createControlDaemon({ launch, spawnProcess, terminateProcess }) {
 
 // 엔진 설정 호출을 직렬화하고 모델 카탈로그 캐시는 저장 후 갱신한다.
 export function createEngineControls({ execCommand, spawnProcess, terminateProcess }) {
-    let launch, cached, queue = Promise.resolve();
+    let launch, queue = Promise.resolve();
     let authentication, authTimer, authQueue = Promise.resolve();
     let controlDaemon = null;
     let statusRequest, lastSessions = [];
     const connections = new Set();
+    const statusRows = new Map();
 
     async function invokeControls(request) {
         if (typeof spawnProcess === 'function') {
             if (!controlDaemon) controlDaemon = createControlDaemon({ launch, spawnProcess, terminateProcess });
             try {
                 return await controlDaemon.request(request);
-            } catch {
+            } catch (error) {
                 controlDaemon?.close();
                 controlDaemon = null;
+                if (request.action && request.action !== 'read') {
+                    throw new Error('설정 저장 결과를 확인할 수 없어요. 새로고침으로 확인하세요.', { cause: error });
+                }
             }
         }
         let result;
@@ -101,7 +105,6 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
                 [...launch.args, '--controls', JSON.stringify(request)],
                 { env: launch.env, timeout: 60000, maxBuffer: 4 * 1024 * 1024 });
         } catch {
-            cached = undefined;
             throw new Error('엔진 설정 호출 실패. 시간 초과 시 저장 여부를 새로고침으로 확인하세요.');
         }
         const value = JSON.parse(result.stdout);
@@ -126,7 +129,6 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
                 try {
                     const result = await authentication.auth(input);
                     if (result.state === 'completed' || ['selectAccount', 'logout', 'saveApiKey'].includes(input.action)) {
-                        cached = undefined;
                         controlDaemon?.close();
                         controlDaemon = null;
                     }
@@ -147,7 +149,6 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
         bind(value) {
             if (!value?.command) return;
             if (launch && JSON.stringify(launch) !== JSON.stringify(value)) {
-                cached = undefined;
                 controlDaemon?.close();
                 controlDaemon = null;
             }
@@ -155,16 +156,36 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
         },
         register(connection) {
             connections.add(connection);
-            return () => connections.delete(connection);
+            return () => { connections.delete(connection); statusRows.delete(connection); };
+        },
+        // 세션 ID가 유일한 연결에만 전달하고 실패·시간 초과 요청은 재시도하지 않는다.
+        sessionAction(request) {
+            const owners = [...connections].filter((connection) => connection.hasSession(request.sessionId));
+            if (owners.length !== 1) throw new Error('세션 소유 연결을 확인할 수 없어요. 세션을 다시 열어 주세요.');
+            return owners[0].sessionAction(request);
         },
         read(request = {}) {
             const run = queue.then(async () => {
                 if (!launch) throw new Error('PaseoDog 공급자를 새로고침한 뒤 다시 열어주세요.');
-                const mutation = request.action && request.action !== 'read';
-                if (!mutation && !request.refresh && cached) return cached;
-                const value = await invokeControls(request);
-                cached = value;
-                return value;
+                return await invokeControls(request);
+            });
+            queue = run.catch(() => {});
+            return run;
+        },
+        // 설정 스냅샷 캐시를 건드리지 않고 Mixdog의 사용량 캐시·갱신 경로를 호출한다.
+        usage() {
+            const run = queue.then(async () => {
+                if (!launch) throw new Error('PaseoDog 공급자를 새로고침한 뒤 다시 열어주세요.');
+                return await invokeControls({ action: 'usage' });
+            });
+            queue = run.catch(() => {});
+            return run;
+        },
+        // 통계는 설정 캐시와 분리해 명시한 기간마다 네이티브 원장에서 조회한다.
+        metrics(request = {}) {
+            const run = queue.then(async () => {
+                if (!launch) throw new Error('PaseoDog 공급자를 새로고침한 뒤 다시 열어주세요.');
+                return await invokeControls({ ...request, action: 'metrics' });
             });
             queue = run.catch(() => {});
             return run;
@@ -176,14 +197,26 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
         async sessions() {
             if (!statusRequest) {
                 statusRequest = deadline(
-                    Promise.all([...connections].map((connection) => connection.engineStatus()))
+                    Promise.all([...connections].map(async (connection) => {
+                        try {
+                            const rows = await deadline(connection.engineStatus(), 1500, 'Session status timeout');
+                            statusRows.set(connection, rows);
+                            return rows;
+                        } catch {
+                            const previous = statusRows.get(connection) || [];
+                            return previous.length
+                                ? previous.map(({ id, bridgeId }) => ({ id, bridgeId, state: 'unavailable', jobs: [] }))
+                                : [{ state: 'unavailable', jobs: [] }];
+                        }
+                    }))
                         .then((rows) => {
                             lastSessions = rows.flat();
                             return lastSessions;
                         }),
-                    1500,
+                    2000,
                     'Session status timeout',
-                ).catch(() => lastSessions).finally(() => { statusRequest = undefined; });
+                ).catch(() => lastSessions.map(({ id, bridgeId }) =>
+                    ({ id, bridgeId, state: 'unavailable', jobs: [] }))).finally(() => { statusRequest = undefined; });
             }
             return statusRequest;
         },

@@ -16,7 +16,14 @@ export function validateEvent(event){
         case 'session.prompt_result':assert.equal(typeof event.clientMessageId,'string');assert.ok(['turn','steer','completed','failed'].includes(event.result.type));break;
         case 'session.turn':assert.equal(typeof event.turnId,'string');assert.ok(['started','completed','failed','canceled'].includes(event.state));break;
         case 'session.usage':for(const value of Object.values(event.usage))assert.ok(Number.isFinite(value)&&value>=0);break;
-        case 'session.permission':assert.equal(typeof event.request.id,'string');assert.equal(event.request.kind,'tool');break;
+        case 'session.permission':{
+            assert.equal(typeof event.request.id,'string');
+            assert.ok(['tool','question'].includes(event.request.kind));
+            if(event.request.kind==='question'){
+                assert.equal(event.request.name,'ask_user');
+                assert.ok(Array.isArray(event.request.input.questions));
+            }break;
+        }
         case 'session.permission_resolved':assert.equal(typeof event.permissionId,'string');break;
         case 'timeline.item':{
             const item=event.item;assert.equal(typeof item.id,'string');

@@ -32,6 +32,16 @@ for package in tools engine plugin; do
 done
 node scripts/patch-mixdog.mjs
 node scripts/patch-mixdog.mjs --check
+node scripts/patch-paseo-usage.mjs
+node scripts/patch-paseo-usage.mjs --check
+node scripts/patch-paseo-steer.mjs
+node scripts/patch-paseo-steer.mjs --check
+node scripts/patch-paseo-agent-messages.mjs
+node scripts/patch-paseo-agent-messages.mjs --check
+node scripts/patch-paseo-workspace-name.mjs
+node scripts/patch-paseo-workspace-name.mjs --check
+node scripts/patch-paseo-composer.mjs
+node scripts/patch-paseo-composer.mjs --check
 npm run check
 npm test
 npm run typecheck

@@ -1,0 +1,50 @@
+{
+  "runId": "paseodog-20261019-5",
+  "lang": "en",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "recall",
+      "question": "Which patch scripts are upstream Paseo PR backports (with PR numbers), and which are local?",
+      "expected": "cli #6607, terminal #6452 backports; mixdog, usage, steer, composer+theme, android local",
+      "answer": "cli #6607, terminal #6452; rest local",
+      "correct": true
+    },
+    {
+      "id": "q2",
+      "type": "recall",
+      "question": "Where should a new Paseo server web UI patch be wired so install applies and verifies it?",
+      "expected": "scripts/install.sh apply + --check pair; desktop-release.mjs if desktop bundle needs it",
+      "answer": "install.sh apply+--check pair; desktop-release if needed",
+      "correct": true
+    },
+    {
+      "id": "q3",
+      "type": "judgment",
+      "question": "Can I fix a UI bug by editing the installed desktop app bundle directly? How does a change reach it?",
+      "expected": "No; desktop update restores originals; ship via composer patch applied by paseodog desktop-update",
+      "answer": "No; via patch applied by desktop-update/desktop-release",
+      "correct": true
+    },
+    {
+      "id": "q4",
+      "type": "recall",
+      "question": "For a local patch to Mixdog code, what header comment and records are required?",
+      "expected": "header states origin local; docs/UPSTREAM.md ledger line, inventory row, CHANGELOG entry",
+      "answer": "local header; UPSTREAM.md ledger, inventory row, CHANGELOG",
+      "correct": true
+    },
+    {
+      "id": "q5",
+      "type": "negative",
+      "question": "How long are journal receipts kept before automatic deletion on disk?",
+      "expected": "not in the rules, check the source",
+      "answer": "not in the rules, check the source",
+      "correct": true
+    }
+  ],
+  "correct": 5,
+  "total": 5,
+  "negativePassed": true,
+  "passed": true
+}

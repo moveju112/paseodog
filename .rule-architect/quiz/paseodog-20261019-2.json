@@ -1,0 +1,50 @@
+{
+  "runId": "paseodog-20261019-2",
+  "lang": "en",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "judgment",
+      "question": "The user says \"fix this bug in Mixdog\". There is a checkout at ~/project/mixdog. Should the fix be made there? Where should the change go instead?",
+      "expected": "No; sibling fork is not a PaseoDog input; use a hash-gated scripts/patch-mixdog.mjs patch or an npm pin bump in this repo",
+      "answer": "No; fork not referenced; patch-mixdog.mjs patch (step 8) or pin bump (steps 4-7)",
+      "correct": true
+    },
+    {
+      "id": "q2",
+      "type": "recall",
+      "question": "Is it allowed to directly edit a file under tools/node_modules/@getpaseo/server to fix a daemon bug? Why?",
+      "expected": "No; npm ci restores it, next patch apply reports drift, bypasses hash review; ship as gated patch wired into tools postinstall",
+      "answer": "No; npm ci restores, drift, no hash review; gated patch via tools postinstall or pin bump",
+      "correct": true
+    },
+    {
+      "id": "q3",
+      "type": "recall",
+      "question": "Which directories hold PaseoDog's own runtime state, and which personal profile directories must not be edited?",
+      "expected": "~/.local/share/paseodog/{paseo,mixdog,sessions}; never edit ~/.paseo or ~/.mixdog",
+      "answer": "~/.local/share/paseodog/{paseo,mixdog,sessions}; ~/.paseo and ~/.mixdog never edited",
+      "correct": true
+    },
+    {
+      "id": "q4",
+      "type": "recall",
+      "question": "A teammate wants to backport one Paseo PR. What file to create/extend, how it is wired into install, and what must be recorded?",
+      "expected": "scripts/patch-*.mjs with PR header, version, original hash, --apply|--check; tools postinstall; docs/UPSTREAM.md backport line + CHANGELOG",
+      "answer": "patch-*.mjs with PR/version/hash/--apply|--check; tools postinstall; docs/UPSTREAM.md + CHANGELOG; check/test, reload",
+      "correct": true
+    },
+    {
+      "id": "q5",
+      "type": "negative",
+      "question": "What is the retention period for daemon.log files before rotation?",
+      "expected": "not in the rules, check the source",
+      "answer": "not in the rules, check the source",
+      "correct": true
+    }
+  ],
+  "correct": 5,
+  "total": 5,
+  "negativePassed": true,
+  "passed": true
+}

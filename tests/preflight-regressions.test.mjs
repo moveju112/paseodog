@@ -170,7 +170,7 @@ test('PaseoDog profiles ignore ambient Mixdog state directory', async () => {
 test('CLI detects run after global host option, keeps explicit provider choices', () => {
     const root = mkdtempSync(join(tmpdir(), 'paseodog-cli-'));
     try {
-        for (const rel of ['bin/paseodog.mjs', 'scripts/paths.mjs']) {
+        for (const rel of ['bin/paseodog.mjs', 'scripts/paths.mjs', 'plugin/server/util.mjs', 'plugin/shared/release.json', 'package.json']) {
             mkdirSync(join(root, rel, '..'), { recursive: true }); copyFileSync(join(repoRoot, rel), join(root, rel));
         }
         const fake = join(root, 'tools/node_modules/.bin/paseo'); mkdirSync(join(fake, '..'), { recursive: true });

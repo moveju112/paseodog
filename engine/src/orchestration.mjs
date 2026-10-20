@@ -106,14 +106,16 @@ export function createOrchestrationBridge({ config, pendingMessages = () => [] }
             onAssistantToolCallObserved: (call) => {
                 hooks.onAssistantToolCallObserved?.(call);
                 if (turn === active && !signal.aborted)
-                    callbacks.onAssistantToolCallObserved?.({ ...call, id: scopedId(session, call.id) });
+                    callbacks.onAssistantToolCallObserved?.({ ...call,
+                        id: scopedId(session, call.id), childSessionId: session.id });
             },
         };
         // 자식 세션의 네이티브 ask 경로를 그대로 사용한다.
         const ask = (text) => manager.askSession(session.id, text, context || null,
             (iteration, calls) => {
                 if (turn === active && !signal.aborted) callbacks.onToolCall?.(iteration,
-                    calls.map((call) => ({ ...call, id: scopedId(session, call.id) })));
+                    calls.map((call) => ({ ...call,
+                        id: scopedId(session, call.id), childSessionId: session.id })));
             }, cwd, null, childHooks);
         return drain(session.id, turn, () => ask(''), await ask(prompt));
     }

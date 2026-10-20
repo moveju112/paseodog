@@ -41,7 +41,7 @@ async function scenario(mode) {
         assert.equal(kills, 1);
         assert.equal(f.events.filter((event) => event.type === 'session.runtime_failed').length, 1);
         assert.equal(f.events.filter((event) => event.type === 'session.turn' && event.state === 'failed').length, 1);
-        if (mode !== 'success') assert.match(notice.notice.title, /Unable to confirm Mixdog process termination/);
+        if (mode !== 'success') assert.match(notice.notice.title, /Unable to confirm PaseoDog process termination/);
         // No accepted request should be silently replayed while containment is
         // unresolved. The same connection should remain responsive.
         await f.connection.send({ ...f.prompt, prompt: { ...f.prompt.prompt, clientMessageId: 'next' } });

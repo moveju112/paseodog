@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { createProviderConnection, CAPABILITIES } from './connection.mjs';
 import { processEngineFactory } from './process-engine.mjs';
 import { JournalStore } from './journal.mjs';
+import { VERSION } from './util.mjs';
 
 export function createMixdogProvider(controls?: {
     bind(launch: unknown): void;
@@ -25,7 +26,7 @@ export function createMixdogProvider(controls?: {
             if (!launch) return { available: false, diagnostic: 'Install PaseoDog engine and configure its absolute executable path' };
             try {
                 const result = await execCommand(launch.command, [...launch.args, '--check'], { env: launch.env, timeout: 5000 });
-                if (!result.stdout.includes('1.0.0-rc.4')) return { available: false, diagnostic: 'PaseoDog engine version mismatch' };
+                if (JSON.parse(result.stdout).version !== VERSION) return { available: false, diagnostic: 'PaseoDog engine version mismatch' };
                 return { available: true };
             } catch { return { available: false, diagnostic: 'Engine unavailable; run paseodog doctor' }; }
         },

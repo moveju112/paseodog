@@ -53,7 +53,7 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
             });
             let sequence = 0, dead = false, closing = false, ready = false;
             let nativeId = args.nativeSessionId || '', activeCallbacks = null, activeToken = null;
-            let crashReason = null, stopPromise = null;
+            let crashReason = null, stopPromise = null, configuration;
             const listeners = new Set(), pending = new Map(), exited = deferred();
             // One termination promise is shared by crash, timeout, explicit
             // close and provider interrupt, so no double-signaling races.
@@ -110,7 +110,8 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
                         const callbacks = activeCallbacks, token = activeToken;
                         Promise.resolve().then(() => callbacks.onToolApproval?.(frame.payload.info))
                             .then((answer) => send('permission', { id: frame.payload.id, token,
-                                approved: answer?.approved === true, reason: answer?.reason || '' }))
+                                approved: answer?.approved === true, reason: answer?.reason || '',
+                                ...(answer?.approved === true && Array.isArray(answer.answers) ? { answers: answer.answers } : {}) }))
                             .catch(() => { /* closed/obsolete permissions are never granted */ });
                         return;
                     }
@@ -124,7 +125,11 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
                 if (frame.ok === true) {
                     if (frame.value?.nativeSessionId) nativeId = frame.value.nativeSessionId;
                     p.resolve(frame.value);
-                } else p.reject(new Error(String(frame.error || 'Worker request failed')));
+                } else {
+                    const error = new Error(String(frame.error || 'Worker request failed'));
+                    if (frame.quota) error.quota = frame.quota;
+                    p.reject(error);
+                }
             }, (error) => failAndStop(error));
             const onAbort = () => failAndStop(new Error('Engine startup canceled'));
             signal?.addEventListener('abort', onAbort, { once: true });
@@ -155,22 +160,36 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
             // Native stdout is the authenticated JSONL channel. Avoid relaying stderr
             // into client-visible errors: diagnostics can include credentials.
             child.stderr.on('data', () => {});
-            try { await send('open', args); ready = true; }
+            try { configuration = (await send('open', args)).configuration; ready = true; }
             catch (error) { await terminateScope().catch((cleanup) => {
                 error.message += `; containment cleanup failed: ${errorText(cleanup)}`;
             }); await deadline(exited.promise, stopMs).catch(() => {}); throw error; }
             finally { signal?.removeEventListener('abort', onAbort); }
             return {
                 get id() { return nativeId; },
+                // 워커가 확인한 다음 턴 설정만 읽고 호스트 기본값은 조회하지 않는다.
+                configuration() { return configuration; },
                 onCrash(listener) {
                     listeners.add(listener);
                     if (crashReason) queueMicrotask(() => { if (listeners.has(listener)) listener(crashReason); });
                     return () => listeners.delete(listener);
                 },
-                ask(text, callbacks) { return send('ask', { text }, { waitMs: 0, callbacks }); },
+                ask(text, callbacks, source, quotaRetry = false) {
+                    return send('ask', { text, quotaRetry, ...(source ? { source } : {}) }, { waitMs: 0, callbacks });
+                },
+                steer(text, source) { return send('steer', { text, token: activeToken, ...(source ? { source } : {}) }, { fatalOnTimeout: false }); },
                 compact(callbacks = {}) { return send('compact', {}, { waitMs: 0, callbacks }); },
                 status() { return send('status', {}, { waitMs: 5000, fatalOnTimeout: false }); },
+                async configure(changes) {
+                    const result = await send('configure', changes);
+                    if (result && Object.hasOwn(result, 'autoEffort')) configuration = result;
+                    return result;
+                },
                 auth(request) { return send('auth', request); },
+                // 계승 결과의 ID가 현재 워커의 네이티브 ID를 덮어쓰지 않도록 응답을 분리한다.
+                async action(request) {
+                    return (await send('action', request, { waitMs: 0 })).actionResult;
+                },
                 async abort() { if (!dead) await send('abort', {}, { waitMs: stopMs }); },
                 async close() {
                     if (closing) return;

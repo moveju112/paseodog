@@ -36,16 +36,27 @@ fails closed. It does not search heuristically for a different insertion point.
 
 The host callback places stable Paseo system instructions in native context and wraps
 `session.beforeToolHook`. Native deny decisions remain deny; rewritten calls are checked
-again. Every accepted tool needs an allow-once response. Native delegation uses the
+again. In ask mode, every accepted tool needs an allow-once response. Native delegation uses the
 existing agent `sessionSurface` hook, exposed by hash-locked boot patches. The host
 wraps child turns, not the scheduler, agent definitions or native model context.
-Automation and desktop/configuration mutations remain excluded.
+All tool categories, including automation, configuration, desktop and delegation tools,
+follow the normal session policy without a host category denylist:
+allow-once approval in ask mode, no approval prompt in explicit bypass mode, and denial
+under the review-mode read-tool allowlist. Native deny/block decisions remain authoritative.
+Managed agent/task cross-session scope requests remain denied to preserve session ownership.
+This shared engine policy applies to Android, Linux, Windows and web without client-specific changes.
 This is not an operating-system sandbox; see SECURITY.md.
 
 `engine/src/orchestration.mjs` validates parent ownership, inherits the host policy,
 maps child approvals to the owning Paseo turn with the child's identity in the reason,
 and namespaces child tool IDs. Native usage is forwarded without mixing child text into
-the Lead's answer. Existing native hooks and turn-review callbacks remain intact.
+the Lead's answer. Child tool observations and confirmed batches retain `childSessionId`
+through JSONL. Only the Lead's confirmed tool batch closes its assistant text segment;
+eager observations, early results and child tools do not split an in-flight word.
+Tool rows and lifecycle updates arriving during text are held until that boundary or
+turn termination, then published with their latest status, including on cancellation.
+This shared provider mapping applies equally to Android, Linux, Windows and web clients.
+Existing native hooks and turn-review callbacks remain intact.
 Only enabled roles are exposed. The explicit `PASEODOG_ENABLE_WORKER=true` host option
 enables Worker on the parent's exact model with Fast, Auto effort and fallbacks off.
 It changes only the in-memory host config, not the native profile or other roles.
@@ -119,7 +130,16 @@ Implemented: `prompt.message`, `prompt.command` (`/compact`), `session.persisten
 and each new started turn has a terminal completed/failed/canceled event. Native outputs
 use stable timeline IDs for incremental replacement, not duplicated message rows.
 
-Not advertised: images/uploads, output schemas, steering, live settings/model changes,
-rollback, archive APIs, subsessions, or Hub's exact MCP tool preapproval. Unsupported
+Also implemented: image input, steering, and idle-session model/effort configuration.
+Shared plugin session tools expose native cold inheritance, turn/file Undo/Redo,
+bounded model-message inspection, session-only Fast/context tuning, and explicit quota
+continuation/reservations. Extension management uses only the dedicated profile;
+stored MCP entries are not implicitly inherited. A user selects each stored server
+and confirms its connection in the session tools; host-provided entries remain explicit.
+Undo/Redo requires user confirmation and the native checkpoint revision. Quota
+reservations do not survive connection close/reload and never replay the original prompt.
+
+Not advertised: arbitrary uploads, output schemas, generic rollback, archive APIs,
+subsessions, or Hub's exact MCP tool preapproval. Unsupported
 operations are rejected; a completed response is not manufactured. Durable native
 sessions require `persist:true`. Starter version-1 persistence is not auto-migrated.

@@ -1,15 +1,23 @@
 import { createNativeEngine } from './native-engine.mjs';
 import { createJsonLineDecoder, encodeFrame } from '../../plugin/server/json-lines.mjs';
-import { deferred, deadline, errorText, plainObject, display } from '../../plugin/server/util.mjs';
+import { deferred, deadline, errorText, plainObject, display, textOf } from '../../plugin/server/util.mjs';
+import { projectCompaction } from '../../plugin/server/compaction.mjs';
 
 // Only UI-safe projections cross the wire. The original result stays inside
 // Mixdog's agent loop and is never modified by this presentation boundary.
 const PREVIEW_CHARS = 16 * 1024;
 const CHUNK_CHARS = 32 * 1024;
-const ANSWER_PREVIEW_CHARS = 256 * 1024;
+const ANSWER_TEXT_CHARS = 1024 * 1024;
+// 네이티브 텍스트 파트 정규화 -> 브리지 한도 초과 거부, 원문과 다른 미리보기는 만들지 않는다.
+function assistantText(value) {
+    const text = textOf(value);
+    if (text.length > ANSWER_TEXT_CHARS) throw new Error('Assistant output exceeds bridge safety limit');
+    return text;
+}
 function projectedCall(call) {
     return { id: String(call?.id || '').slice(0, 200),
         name: String(call?.name || call?.toolName || 'tool').slice(0, 200),
+        ...(typeof call?.childSessionId === 'string' ? { childSessionId: call.childSessionId.slice(0, 200) } : {}),
         // The Paseo timeline needs a preview, not megabytes of tool arguments.
         args: display(call?.args ?? call?.arguments, PREVIEW_CHARS) };
 }
@@ -20,6 +28,18 @@ export function projectToolResult(result) {
         isError: result?.isError === true,
         __earlyNotify: result?.__earlyNotify === true,
         content: display(result?.content, PREVIEW_CHARS) };
+}
+// 부모 승인 응답 -> 네이티브 결정. 질문만 답(answers)을 받고, 답이 없거나 형식이 틀리면 거부한다.
+function permissionAnswer(permission, args) {
+    if (args.approved !== true) return { approved: false, reason: args.reason || 'Denied' };
+    if (!permission.question) return args.answers === undefined ? { approved: true } : { approved: false, reason: 'Unexpected question answers' };
+    const answers = args.answers;
+    const valid = Array.isArray(answers) && answers.length >= 1 && answers.length <= 4
+        && Buffer.byteLength(JSON.stringify(answers)) <= 64 * 1024
+        && answers.every((answer) => plainObject(answer) && Array.isArray(answer.selected)
+            && answer.selected.every((label) => typeof label === 'string')
+            && (answer.text === undefined || (typeof answer.text === 'string' && answer.text.length <= 4000)));
+    return valid ? { approved: true, answers } : { approved: false, reason: 'Invalid question answers' };
 }
 export function compactSummary(value) {
     const summary = {};
@@ -53,7 +73,8 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
         void done.catch(() => stop('IPC write failure'));
     }
     const reply = (id, value) => write({ v: 1, id, ok: true, value });
-    const failed = (id, error) => write({ v: 1, id, ok: false, error: errorText(error) });
+    const failed = (id, error) => write({ v: 1, id, ok: false, error: errorText(error),
+        ...(error?.quota ? { quota: error.quota } : {}) });
     const live = (turn) => !closing && active === turn && !turn.finished && !turn.canceled;
     // Never derive an event's owner from a mutable global token on callback.
     const turnEvent = (turn, kind, payload) => {
@@ -89,13 +110,29 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
                     // engine callbacks may never authorize a tool or a model turn.
                     engine = await engineFactory(args, { emit: () => {} });
                     if (closing) { await engine.close('closed-during-open'); return; }
-                    opened = true; reply(id, { nativeSessionId: engine.id || null });
+                    opened = true; reply(id, { nativeSessionId: engine.id || null,
+                        configuration: engine.configuration?.() });
                 } finally { opening = false; }
                 return;
             }
             if (op === 'close') { reply(id, null); await stop('paseodog-worker-close'); return; }
             if (!engine || !opened) throw new Error('Worker is not open');
             if (op === 'status') { reply(id, await engine.status()); return; }
+            if (op === 'steer') {
+                if (!active || !live(active) || active.token !== args.token) throw new Error('Stale steering turn');
+                reply(id, await engine.steer(args.text, args.source)); return;
+            }
+            if (op === 'configure') {
+                if (active) throw new Error('Worker busy');
+                reply(id, await engine.configure(args)); return;
+            }
+            if (op === 'action') {
+                if (active) throw new Error('Worker busy');
+                const value = await engine.action(args);
+                if (Buffer.byteLength(JSON.stringify(value)) > 1024 * 1024)
+                    throw new Error('결과가 너무 커요. 파일 또는 메시지 범위를 줄여 주세요.');
+                reply(id, { actionResult: value }); return;
+            }
             if (op === 'auth') {
                 try { reply(id, await engine.auth(args)); }
                 catch { failed(id, 'Account connection failed; retry from the account screen'); }
@@ -105,7 +142,7 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
                 const permission = permissions.get(args.id);
                 if (!permission || permission.token !== args.token || !live(permission.turn)) throw new Error('Stale permission response');
                 permissions.delete(args.id);
-                permission.resolve(args.approved === true ? { approved: true } : { approved: false, reason: args.reason || 'Denied' });
+                permission.resolve(permissionAnswer(permission, args));
                 reply(id, null); return;
             }
             if (op === 'abort') {
@@ -134,8 +171,9 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
                         stream('onTextDelta', chunk);
                     };
                     callbacks.onReasoningDelta = (chunk) => stream('onReasoningDelta', chunk);
-                    callbacks.onAssistantText = (text) => turnEvent(turn, 'onAssistantText',
-                        [display(text, ANSWER_PREVIEW_CHARS)]);
+                    callbacks.onAssistantText = (text) => {
+                        if (live(turn)) turnEvent(turn, 'onAssistantText', [assistantText(text)]);
+                    };
                     callbacks.onIdentity = (info) => turnEvent(turn, 'identity', info);
                     callbacks.onToolCall = (iter, calls) => {
                         if (!live(turn)) return;
@@ -149,7 +187,10 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
                     };
                     callbacks.onToolResult = (result) => turnEvent(turn, 'onToolResult', [projectToolResult(result)]);
                     callbacks.onUsageDelta = (delta) => turnEvent(turn, 'onUsageDelta', [delta]);
-                    callbacks.onCompactEvent = (event) => turnEvent(turn, 'onCompactEvent', [display(event, 4000)]);
+                    callbacks.onCompactEvent = (event) => turnEvent(turn, 'onCompactEvent', [projectCompaction(event)]);
+                    callbacks.onStageChange = (stage) => {
+                        if (stage === 'compacting') turnEvent(turn, 'onCompactEvent', [{ status: 'compacting' }]);
+                    };
                     // Paseo's pinned provider translates assistant snapshots into append-only
                     // deltas. It cannot retract bytes already delivered to a client. Mixdog
                     // explicitly requires an affirmative acknowledgement before replaying
@@ -167,15 +208,16 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
                         }
                         const permissionId = `permission_${++nextPermission}`;
                         const pending = deferred();
-                        permissions.set(permissionId, { ...pending, token: turn.token, turn });
+                        permissions.set(permissionId, { ...pending, token: turn.token, turn,
+                            question: info?.kind === 'question' && info?.name === 'ask_user' });
                         turnEvent(turn, 'permission', { id: permissionId, info });
                         return pending.promise;
                     };
-                    value = await engine.ask(args.text, callbacks);
+                    value = await engine.ask(args.text, callbacks, args.source, args.quotaRetry === true);
                 }
                 const result = value?.result || value;
                 reply(id, { result: op === 'compact' ? compactSummary(value) :
-                    { content: display(result?.content || '', ANSWER_PREVIEW_CHARS),
+                    { content: assistantText(result?.content),
                         stopReason: result?.stopReason, terminationReason: result?.terminationReason },
                     nativeSessionId: engine.id || null });
             } finally {

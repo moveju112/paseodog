@@ -42,7 +42,7 @@ test('managed agent/task still require approval and never permit cross-session s
             assert.equal((await session.beforeToolHook({ name, args: { type: 'spawn' } })).action, 'ask');
             assert.equal((await session.beforeToolHook({ name, args: { allTerminals: true } })).action, 'deny');
         }
-        assert.equal((await session.beforeToolHook({ name: 'automation', args: {} })).action, 'deny');
+        assert.equal((await session.beforeToolHook({ name: 'automation', args: {} })).action, mode === 'ask' ? 'ask' : 'deny');
     }
 });
 
@@ -87,6 +87,61 @@ test('child approvals retain full arguments, identity and denials; usage and too
     assert.equal(results[0].toolCallId, 'child:same');
     assert.equal(upstream[0].toolCallId, 'same');
     assert.deepEqual(usage, [{ deltaInput: 3 }]);
+    f.bridge.finish();
+});
+
+// 하위 도구의 관측·계획에는 출처를 붙이고 네이티브 원본과 부모 텍스트는 보존한다.
+test('child observed and planned calls carry scoped identity without forwarding child prose', async () => {
+    const observed = [], planned = [], nativeObserved = [], parentText = [], nativeText = [];
+    const call = { id: 'same', name: 'read', args: { path: 'child.txt' } };
+    const secondCall = { id: 'second', name: 'shell', args: { command: 'pwd' } };
+    const nativeCalls = [call, secondCall];
+    const f = fixture({
+        callbacks: {
+            onAssistantToolCallObserved: (value) => observed.push(value),
+            onToolCall: (iteration, calls) => planned.push({ iteration, calls }),
+            onTextDelta: (text) => parentText.push(text),
+            onAssistantText: (text) => parentText.push(text),
+        },
+        ask: async (id, text, context, onToolCall, cwd, prefetch, hooks) => {
+            hooks.onTextDelta('child delta');
+            hooks.onAssistantToolCallObserved(call);
+            onToolCall(3, nativeCalls);
+            hooks.onAssistantText('child answer');
+            return { content: 'child result' };
+        },
+    });
+    await f.surface.runTurn({ session: f.child, prompt: 'work',
+        onAssistantToolCallObserved: (value) => nativeObserved.push(value),
+        onTextDelta: (text) => nativeText.push(text),
+        onAssistantText: (text) => nativeText.push(text) });
+    assert.equal(nativeObserved.length, 1);
+    assert.strictEqual(nativeObserved[0], call);
+    assert.deepEqual(call, { id: 'same', name: 'read', args: { path: 'child.txt' } });
+    assert.deepEqual(secondCall, { id: 'second', name: 'shell', args: { command: 'pwd' } });
+    assert.deepEqual(observed, [{ ...call, id: 'child:same', childSessionId: 'child' }]);
+    assert.notStrictEqual(observed[0], call);
+    assert.strictEqual(observed[0].args, call.args);
+    assert.deepEqual(planned, [{ iteration: 3, calls: [
+        { ...call, id: 'child:same', childSessionId: 'child' },
+        { ...secondCall, id: 'child:second', childSessionId: 'child' },
+    ] }]);
+    assert.notStrictEqual(planned[0].calls, nativeCalls);
+    for (const [index, forwarded] of planned[0].calls.entries()) {
+        assert.notStrictEqual(forwarded, nativeCalls[index]);
+        assert.strictEqual(forwarded.args, nativeCalls[index].args);
+    }
+    assert.deepEqual(nativeText, ['child delta', 'child answer']);
+    assert.deepEqual(parentText, []);
+    f.bridge.finish();
+});
+
+// 하위 에이전트도 부모가 선택한 Bypass를 상속한다.
+test('bypass policy is inherited by child agents', async () => {
+    const f = fixture({ mode: 'bypass' });
+    await f.surface.runTurn({ session: f.child, prompt: 'work' });
+    assert.equal((await f.child.beforeToolHook({ name: 'shell', args: { command: 'printf child' } })).action, 'rewrite');
+    assert.equal((await f.child.beforeToolHook({ name: 'task', args: { global: true } })).action, 'deny');
     f.bridge.finish();
 });
 
@@ -182,10 +237,13 @@ test('agent patch rejects drift and partial patches, accepts only exact idempote
         assert.equal(patchedAgentSource(patched, fixtureSpec), patched);
         assert.throws(() => patchedAgentSource(source + 'drift', fixtureSpec), /hash mismatch/);
         if (spec.edits.length > 1) {
-            const unsupportedEdit = spec.previousEditCount ? spec.edits[1] : spec.edits[0];
+            const previousCounts = (spec.previousEditCounts || [spec.previousEditCount]).filter(Boolean);
+            const unsupportedEdit = previousCounts.includes(1) ? spec.edits[1] : spec.edits[0];
             assert.throws(() => patchedAgentSource(source.replace(...unsupportedEdit), fixtureSpec), /Partial/);
-            if (spec.previousEditCount)
-                assert.equal(patchedAgentSource(source.replace(...spec.edits[0]), fixtureSpec), patched);
+            for (const count of previousCounts) {
+                const previous = spec.edits.slice(0, count).reduce((text, edit) => text.replace(...edit), source);
+                assert.equal(patchedAgentSource(previous, fixtureSpec), patched);
+            }
         }
     }
 });

@@ -1,6 +1,59 @@
 import { defineRpc } from '@getpaseo/plugin';
 import { z } from 'zod';
 
+// 열린 세션의 네이티브 기능은 제한된 입력과 명시적인 변경 확인으로만 호출한다.
+export const engineSession = defineRpc({
+    name: 'engine-session',
+    input: z.object({
+        sessionId: z.string().min(1).max(200),
+        operation: z.enum(['configure', 'fork', 'history', 'changes', 'review', 'undo', 'redo',
+            'context', 'quotaRetry', 'quotaSchedule', 'quotaCancel', 'mcpConnect']),
+        name: z.string().min(1).max(256).optional(),
+        confirmed: z.boolean().optional(),
+        checkpointId: z.string().min(1).max(200).optional(),
+        file: z.string().min(1).max(4096).optional(),
+        revision: z.number().int().nonnegative().optional(),
+        messageStart: z.number().int().min(0).optional(),
+        changes: z.object({
+            model: z.string().min(1).max(512).optional(),
+            route: z.object({
+                fast: z.boolean().optional(),
+                contextPercent: z.number().min(10).max(100).optional(),
+                contextTokens: z.number().min(1000).max(2000000).optional(),
+            }).strict().optional(),
+        }).strict().optional(),
+    }).strict(),
+    output: z.unknown(),
+});
+
+// 확장 관리 입력은 전용 프로필에만 전달하며 임의 메서드 호출은 허용하지 않는다.
+export const engineResources = defineRpc({
+    name: 'engine-resources',
+    input: z.object({
+        operation: z.enum(['read', 'mcpAdd', 'mcpSave', 'mcpRemove', 'mcpEnable', 'mcpReconnect',
+            'mcpLogin', 'mcpLoginStatus', 'mcpLoginCancel', 'mcpLoginComplete',
+            'skillRead', 'skillAdd', 'skillSave', 'skillsReload',
+            'pluginAdd', 'pluginUpdate', 'pluginRemove', 'pluginEnable', 'pluginsReload']),
+        name: z.string().min(1).max(256).optional(),
+        enabled: z.boolean().optional(),
+        confirmed: z.boolean().optional(),
+        flowId: z.string().min(1).max(200).optional(),
+        callbackUrl: z.string().max(8192).optional(),
+        data: z.object({
+            name: z.string().min(1).max(256).optional(),
+            originalName: z.string().min(1).max(256).optional(),
+            description: z.string().max(2000).optional(),
+            body: z.string().min(1).max(200000).optional(),
+            type: z.enum(['stdio', 'http', 'sse']).optional(),
+            command: z.string().min(1).max(4096).optional(),
+            args: z.array(z.string().max(4096)).max(100).optional(),
+            url: z.string().url().max(8192).optional(),
+            source: z.string().min(1).max(4096).optional(),
+        }).strict().optional(),
+    }).strict(),
+    output: z.unknown(),
+});
+
 export const engineAuth = defineRpc({
     name: 'engine-auth',
     input: z.object({
@@ -20,6 +73,24 @@ export const engineAuth = defineRpc({
 export const engineStatus = defineRpc({
     name: 'engine-status',
     input: z.object({}).strict(),
+    output: z.unknown(),
+});
+
+export const engineMetrics = defineRpc({
+    name: 'engine-metrics',
+    input: z.object({
+        view: z.enum(['1h', '8h', 'hour', '7d', 'day', 'week', 'month', 'all', 'custom']).default('hour'),
+        startDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        endDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        refresh: z.boolean().optional(),
+    }).strict(),
+    output: z.unknown(),
+});
+
+// 원본 Claude/Codex 스킬·훅 읽기 전용 조회 (편집·실행·동기화 입력 없음)
+export const nativeConfigView = defineRpc({
+    name: 'native-config-view',
+    input: z.object({ source: z.enum(['claude', 'codex']) }).strict(),
     output: z.unknown(),
 });
 
@@ -67,6 +138,7 @@ export const engineControls = defineRpc({
             inherited: z.boolean().optional(),
             provider: z.string().max(256).optional(),
             model: z.string().max(256).optional(),
+            effort: z.string().max(256).optional(),
         }).optional(),
         outputStyle: z.string().max(100).optional(),
         profile: z.object({
@@ -77,7 +149,7 @@ export const engineControls = defineRpc({
         aiSessionTitles: z.boolean().optional(),
         shellCommand: z.string().max(512).optional(),
         worktree: z.object({
-            newTaskDefault: z.enum(['branch', 'direct', 'ask']).optional(),
+            newTaskDefault: z.enum(['branch', 'direct', 'ask', 'worktree']).optional(),
             branchPrefix: z.string().max(64).optional(),
             sizeWarnBytes: z.number().min(0).optional(),
             autoCleanup: z.boolean().optional(),
@@ -95,7 +167,7 @@ export const engineControls = defineRpc({
         description: z.string().max(500).optional(),
         body: z.string().max(200000).optional(),
         activate: z.boolean().optional(),
-        mode: z.enum(['none', 'focused', 'balanced', 'swarm']).optional(),
+        mode: z.enum(['none', 'swarm']).optional(),
     }).strict(),
     output: z.unknown(),
 });

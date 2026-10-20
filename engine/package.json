@@ -1,7 +1,7 @@
 {
   "name": "paseodog-engine",
   "private": true,
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0-rc.7",
   "type": "module",
   "bin": {
     "paseodog-engine": "bin/paseodog-engine.mjs"

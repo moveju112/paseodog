@@ -4,10 +4,42 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { root, stateRoot, paseoHome, mixdogHome, journalRoot, worker } from './paths.mjs';
 const DISABLED_BUILTIN_PROVIDERS = ['claude', 'codex', 'copilot', 'opencode', 'pi', 'omp', 'muse', 'antigravity'];
+
+// Mixdog 데이터 디렉터리에 기본 설정값(에이전트 전부 비활성, 지침 ON, 워크트리 OFF, 스킬 OFF)을 시드한다.
+function seedMixdogData(nativeHome) {
+    const dataDir = join(nativeHome, 'data');
+    mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+    const cfgFile = join(dataDir, 'mixdog-config.json');
+    let raw = {};
+    if (existsSync(cfgFile)) {
+        raw = JSON.parse(readFileSync(cfgFile, 'utf8'));
+    }
+    const agentSection = { ...(raw.agent || {}) };
+    if (!agentSection.agents || typeof agentSection.agents !== 'object') agentSection.agents = {};
+    if (!Array.isArray(agentSection.enabledAgents)) agentSection.enabledAgents = [];
+    if (!agentSection.instructionFiles) agentSection.instructionFiles = 'all';
+    if (!Object.hasOwn(agentSection, 'workflow')) agentSection.workflow = { active: 'none' };
+    agentSection.worktree = {
+        newTaskDefault: 'branch',
+        branchPrefix: 'paseodog/',
+        ...(agentSection.worktree || {}),
+    };
+    if (!agentSection.skills) agentSection.skills = { disabled: ['*'] };
+    const nextRaw = {
+        ...raw,
+        defaultsVersion: raw.defaultsVersion || 2,
+        agent: agentSection,
+    };
+    const tmp = cfgFile + '.' + randomUUID() + '.tmp';
+    writeFileSync(tmp, JSON.stringify(nextRaw, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+    renameSync(tmp, cfgFile);
+}
+
 // PaseoDog 전용 공급자만 활성화하고 기본 내장·ACP 외부 공급자 및 타 공급자 프로필을 정리한다.
 export function configure({home=paseoHome, enginePath=worker, nativeHome=mixdogHome, stateDir=journalRoot, trustPlugins=false}={}) {
     if(!trustPlugins) throw new Error('Explicit --trust-plugins required. Plugin and agent code run with this user\'s filesystem/network access.');
     for(const path of [home,nativeHome,stateDir]) {mkdirSync(path,{recursive:true,mode:0o700});if(lstatSync(path).isSymbolicLink()) throw new Error('Refusing symlink config directory');}
+    seedMixdogData(nativeHome);
     const file=join(home,'config.json');
     if(existsSync(file)&&lstatSync(file).isSymbolicLink())throw new Error('Refusing symlink config');
     const previous=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):{version:1};

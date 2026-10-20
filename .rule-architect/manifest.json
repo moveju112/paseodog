@@ -1,0 +1,53 @@
+{
+  "schema": "rule-architect/manifest@3",
+  "files": {
+    ".rule-architect/decisions.json": {
+      "type": "file",
+      "sha256": "fe457ada10343fee0b7b66f16313f4593aac338707c527f7c044d1930806c7ea",
+      "lines": 98
+    },
+    "AGENTS.md": {
+      "type": "symlink",
+      "target": "AI_RULES.md"
+    },
+    "AI_RULES.md": {
+      "type": "file",
+      "sha256": "479ccf3e71fc9ee33dfbea7adbb05c932bd502996d5a9e85b512b2900b21789f",
+      "lines": 51
+    },
+    "CLAUDE.md": {
+      "type": "symlink",
+      "target": "AI_RULES.md"
+    },
+    "docs/ai-rules/ARCHITECTURE.md": {
+      "type": "file",
+      "sha256": "236f735222d271672ef3f969f0557915d25c88f42bb65c4521c84eeb2c81a1df",
+      "lines": 93
+    },
+    "docs/ai-rules/CODING_RULES.md": {
+      "type": "file",
+      "sha256": "bbdea0e6d8465c0341ceea515b02cb48fa815d006e6040bdf946a9e1210edc8a",
+      "lines": 71
+    },
+    "docs/ai-rules/PITFALLS.md": {
+      "type": "file",
+      "sha256": "e606a343dd7e3ef563a5fc769efa3106c42379fac96d367c8898992ecae73aae",
+      "lines": 50
+    },
+    "docs/ai-rules/RUNTIME_DAEMON.md": {
+      "type": "file",
+      "sha256": "f1844b2a5d2d0be2bc7247daaa9de095359db635d353be695b8a68d69e20092c",
+      "lines": 64
+    },
+    "docs/ai-rules/UPSTREAM_INTAKE.md": {
+      "type": "file",
+      "sha256": "639ad62cc0607ae18ead55212ff203d4e53f89c9508494d2d87244aa684dde65",
+      "lines": 87
+    },
+    "docs/ai-rules/tasks/MERGE_UPSTREAM.md": {
+      "type": "file",
+      "sha256": "a40945cb8c40f85b2f0c080d1f729fda9971c47498b451d1ebc510c9eb413017",
+      "lines": 47
+    }
+  }
+}

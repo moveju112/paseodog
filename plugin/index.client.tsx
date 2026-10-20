@@ -1,9 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Linking, Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
-import { ScrollView } from '@getpaseo/plugin/client/react-native';
+import { Linking, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Modal, ScrollView } from '@getpaseo/plugin/client/react-native';
 import { useRpc, type PluginClientContext, type PluginSurfaceProps } from '@getpaseo/plugin/client';
 import { engineAuth, engineControls } from './shared/controls.js';
 import { LiveStatus } from './client/live-status.js';
+import { AnalysisFooter } from './client/analysis-footer.js';
+import { NativeConfigView } from './client/native-config.js';
+import { SessionTools } from './client/session-tools.js';
+import { ResourceSettings } from './client/resource-settings.js';
 
 type Route = { provider: string; model: string; effort?: string; autoEffort: boolean; fast: boolean; contextPercent?: number | null };
 type AuthProvider = 'anthropic-oauth' | 'openai-oauth';
@@ -42,7 +46,7 @@ type Snapshot = {
     outputStyles?: { id: string; label: string }[];
     profile?: { title?: string | null; language?: string | null; experienceLevel?: string | null };
     aiSessionTitles?: boolean;
-    worktree?: { newTaskDefault?: 'branch' | 'direct' | 'ask'; branchPrefix?: string; autoCleanup?: boolean };
+    worktree?: { newTaskDefault?: 'branch' | 'direct' | 'ask' | 'worktree'; branchPrefix?: string; autoCleanup?: boolean };
 };
 type Section = 'account' | 'workflow' | 'tokens' | 'instructions' | 'agents';
 
@@ -53,7 +57,7 @@ const SETTINGS_SECTIONS: { id: string; title: string; section: Section; intro: s
     { id: 'mixdog-workflow', title: '워크플로', section: 'workflow',
         intro: '자동 오케스트레이션과 WORKFLOW.md 워크플로를 고릅니다. 열린 세션과 새 세션에 즉시 반영됩니다.' },
     { id: 'mixdog-tokens', title: '토큰 절감', section: 'tokens',
-        intro: '자동 추론 조절·압축·컨텍스트 정리로 토큰 사용량을 줄입니다.' },
+        intro: '압축·컨텍스트 정리로 토큰 사용량을 줄입니다. 자동 추론은 입력창의 추론 수준 목록에서 고릅니다.' },
     { id: 'mixdog-instructions', title: '지침 파일 로딩', section: 'instructions',
         intro: '전역·프로젝트 지침 파일을 모델 컨텍스트에 불러올지 정합니다.' },
     { id: 'mixdog-agents', title: '에이전트', section: 'agents',
@@ -71,9 +75,7 @@ const AUTH_STATES: Record<string, string> = {
 
 const ORCHESTRATION_DESC: Record<string, string> = {
     none: '단독 실행 — 서브에이전트 위임 없이 메인 모델이 직접 처리 (토큰 최소)',
-    focused: '집중 위임 — 꼭 필요한 단일 서브에이전트만 선별 호출',
-    balanced: '균형 오케스트레이션 — 복잡도에 맞춰 탐색·구현·검증 분담 (권장)',
-    swarm: '스웜 병렬 — 다중 서브에이전트 동시 병렬 투입 (속도·품질 극대화)',
+    swarm: '에이전트 협업 — 사용자가 켠 에이전트만 병렬 위임에 사용',
 };
 
 // 클릭 즉시 로컬 스냅샷에 낙관적 반영하여 체감 지연을 제거한다 (요청 -> 로컬 반영)
@@ -189,14 +191,12 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
     const colors = theme.colors;
 
     // 실패 시 이전 표시를 보존하고 저장 완료로 오인하지 않도록 오류를 표시한다.
+    // 저장 중에도 컨트롤을 잠가 연속 클릭의 실패 메시지가 뒤 요청의 성공 메시지에 가려지지 않게 한다.
     async function request(input: Parameters<typeof invoke>[0]) {
         const previous = snapshot;
         const readOnly = input.action === 'read' || input.action === 'agentDefinition';
-        if (!readOnly) {
-            setSnapshot((cur) => applyOptimistic(cur, input as Record<string, any>));
-        } else {
-            setBusy(true);
-        }
+        if (!readOnly) setSnapshot((cur) => applyOptimistic(cur, input as Record<string, any>));
+        setBusy(true);
         setMessage('');
         try {
             const next = await invoke(input) as Snapshot;
@@ -316,7 +316,7 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
     const intro = SETTINGS_SECTIONS.find((item) => item.section === section)?.intro || '';
     const matches = snapshot?.models.filter((item) =>
         `${item.label} ${item.provider} ${item.id}`.toLowerCase().includes(query.toLowerCase())) || [];
-    const activeWorkflow = snapshot?.workflows.find((w) => w.active) || snapshot?.workflows[0];
+    const activeWorkflow = snapshot?.workflows.find((w) => w.active);
     const text = { color: colors.foreground, fontSize: 15 };
 
     // 충분한 터치 영역과 선택 상태를 갖춘 공통 설정 버튼
@@ -335,13 +335,13 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
             ? button('구독 계정 로그인', () => setAuthOpen(true), false, false)
             : button(busy ? '처리 중…' : '새로고침', () => void request({ action: 'read', refresh: true }))}
         <Text accessibilityLiveRegion="polite" style={text}>{message}</Text>
-        {section === 'account' && <Modal visible={authOpen} animationType="slide" onRequestClose={closeAuth}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={{ flex: 1, backgroundColor: colors.surface0 }}>
-                <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 12 }}>
+        {section === 'account' && <Modal title="구독 계정 로그인" open={authOpen}
+            onOpenChange={(open) => { if (!open) closeAuth(); }}>
+            <Modal.Content>
+                {authOpen && <View style={{ gap: 12 }}>
                     <Text accessibilityRole="header" style={{ ...text, fontSize: 20 }}>구독 계정 로그인</Text>
                     <Text style={text}>계정 정보는 이 호스트의 전용 엔진 프로필에만 저장됩니다.</Text>
-                    {AUTH_PROVIDERS.map((item) => button(item.label, () => setAuthProvider(item.id),
+                    {AUTH_PROVIDERS.map((item) => button(item.label, () => { setAuthProvider(item.id); setAuthMessage(''); },
                         authProvider === item.id, authBusy || !!authFlow))}
                     {button('연결 상태 확인', checkAuthStatus, false, authBusy)}
                     {!authFlow && button('로그인 시작', startAuth, false, authBusy)}
@@ -362,19 +362,21 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
                     {authBusy && <Text style={text}>처리 중…</Text>}
                     <Text accessibilityLiveRegion="polite" style={text}>{authMessage}</Text>
                     {button(authFlow ? '로그인 취소 후 닫기' : '닫기', closeAuth, false, false)}
-                </ScrollView>
-            </KeyboardAvoidingView>
+                </View>}
+            </Modal.Content>
         </Modal>}
         {snapshot && section === 'workflow' && <>
             <Text style={{ ...text, fontSize: 18 }}>자동 오케스트레이터</Text>
-            {(['none', 'focused', 'balanced', 'swarm'] as const).map((mode) => button(mode,
+            <Text style={text}>이 호스트 전체에 적용돼요. 열린 세션은 다음 요청부터 반영하며 도구 승인 설정은 바꾸지 않아요.</Text>
+            {(['none', 'swarm'] as const).map((mode) => button(mode === 'none' ? '단독 실행' : '에이전트 협업',
                 () => void request({ action: 'orchestration', mode }), snapshot.orchestration === mode))}
             <Text style={text}>{ORCHESTRATION_DESC[snapshot.orchestration] || ''}</Text>
 
             <Text style={{ ...text, fontSize: 18 }}>워크플로 (WORKFLOW.md)</Text>
+            <Text style={text}>사용 안 함을 선택하면 WORKFLOW.md를 읽거나 지침에 추가하지 않아요. 기본 지침 파일 설정은 유지돼요.</Text>
             {snapshot.workflows.map((workflow) => button(workflow.name,
                 () => void request({ action: 'workflow', workflow: workflow.id }), workflow.active))}
-            {activeWorkflow && button(
+            {activeWorkflow && activeWorkflow.id !== 'none' && button(
                 editingWorkflowId === activeWorkflow.id ? '워크플로 편집기 닫기' : `현재 워크플로(${activeWorkflow.name}) 내용 보기·편집`,
                 () => {
                     if (editingWorkflowId === activeWorkflow.id) {
@@ -385,6 +387,7 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
                 },
             )}
             {editingWorkflowId && <>
+                <Text style={text}>본문을 비워 저장하면 이 워크플로의 지침을 추가하지 않아요.</Text>
                 <TextInput accessibilityLabel="워크플로 본문" multiline value={workflowBody} onChangeText={setWorkflowBody}
                     style={{ ...text, minHeight: 160, padding: 10, borderWidth: 1, borderColor: colors.foreground }} />
                 {button('워크플로 저장 및 즉시 적용', () => void request({
@@ -416,6 +419,12 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
                 })}
             </>}
             <Text style={{ ...text, fontSize: 18 }}>출력 스타일 & 작업 환경</Text>
+            <Text style={{ ...text, fontSize: 18 }}>개발 숙련도 프로필</Text>
+            <Text style={text}>설명 수준을 사용자 숙련도에 맞춰요. 자동은 숙련도 지침을 추가하지 않아요.</Text>
+            {([['', '자동'], ['beginner', '입문자'], ['vibe-coder', '바이브 코더'], ['junior', '주니어'],
+                ['senior', '시니어'], ['expert', '전문가']] as const).map(([experienceLevel, label]) =>
+                button(label, () => void request({ action: 'preferences', profile: { experienceLevel } }),
+                    (snapshot.profile?.experienceLevel || '') === experienceLevel))}
             {(['default', 'concise', 'explanatory'] as const).map((styleId) => button(
                 `출력 스타일: ${styleId}`,
                 () => void request({ action: 'preferences', outputStyle: styleId }),
@@ -423,15 +432,13 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
             ))}
             {button(`AI 세션 제목 자동 생성: ${(snapshot.aiSessionTitles ?? true) ? '켜짐' : '꺼짐'}`,
                 () => void request({ action: 'preferences', aiSessionTitles: !(snapshot.aiSessionTitles ?? true) }))}
-            {button(`새 작업 Worktree 격리: ${(snapshot.worktree?.newTaskDefault || 'branch') === 'branch' ? '켜짐' : '꺼짐'}`,
+            {button(`새 작업 Worktree 격리: ${(snapshot.worktree?.newTaskDefault || 'branch') === 'worktree' ? '켜짐' : '꺼짐'}`,
                 () => void request({
                     action: 'preferences',
-                    worktree: { newTaskDefault: (snapshot.worktree?.newTaskDefault || 'branch') === 'branch' ? 'direct' : 'branch' },
+                    worktree: { newTaskDefault: (snapshot.worktree?.newTaskDefault || 'branch') === 'worktree' ? 'branch' : 'worktree' },
                 }))}
         </>}
         {snapshot && section === 'tokens' && <>
-            {button(`자동 추론 조절: ${snapshot.route.autoEffort ? '켜짐' : '꺼짐'}`,
-                () => void request({ action: 'main', route: { autoEffort: !snapshot.route.autoEffort } }))}
             {mainModel?.fastCapable && button(`Fast 응답: ${snapshot.route.fast ? '켜짐' : '꺼짐'}`,
                 () => void request({ action: 'main', route: { fast: !snapshot.route.fast } }))}
             {([100, 85, 70, 50] as const).map((pct) => button(`컨텍스트 한도 ${pct}%`,
@@ -501,7 +508,7 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
                     {button('에이전트 정의 저장', () => {
                         setEditingAgent(false);
                         void request({ action: 'agentSave', agent: selectedAgent.id, name: selectedAgent.label, body: agentEditBody });
-                    })}
+                    }, false, busy || !route?.provider || !route?.model)}
                 </>}
                 {button(`에이전트 자동 추론 조절: ${route?.autoEffort ? '켜짐' : '꺼짐'}`,
                     () => routeChange({ autoEffort: !route?.autoEffort }))}
@@ -534,19 +541,20 @@ function sectionScreen(section: Section) {
 // Paseo 기본 플러그인 설정 화면을 사용해 원본 앱 수정 없이 엔진 UI를 제공한다.
 export default function contribute(client: PluginClientContext) {
     const cleanups = [
+        client.addSettingsScreen({ id: 'mixdog-session-tools', title: '세션 계승·복구·모델', icon: 'Bot', Component: SessionTools }),
+        client.addSettingsScreen({ id: 'mixdog-resources', title: 'MCP·스킬·플러그인', icon: 'Bot', Component: ResourceSettings }),
+        client.addWorkspacePanel({ id: 'mixdog-session-tools', title: '세션 도구', icon: 'Bot',
+            context: 'agent', Component: SessionTools }),
         ...SETTINGS_SECTIONS.map((item) => client.addSettingsScreen({
             id: item.id, title: item.title, icon: 'Bot', Component: sectionScreen(item.section) })),
+        client.addSettingsScreen({ id: 'paseodog-native-config', title: '원본 스킬·훅 보기', icon: 'Bot',
+            Component: NativeConfigView }),
         client.addSettingsScreen({ id: 'mixdog-status', title: '실행 현황', icon: 'Activity', Component: LiveStatus }),
-        client.addScreen({ id: 'mixdog-live', title: 'Mixdog 실행 현황', Component: LiveStatus }),
-        client.addWorkspacePanel({ id: 'mixdog-live', title: 'Mixdog 실행 현황', icon: 'Activity',
+        client.addScreen({ id: 'mixdog-live', title: 'PaseoDog 실행 현황', Component: LiveStatus }),
+        client.addWorkspacePanel({ id: 'mixdog-live', title: 'PaseoDog 실행 현황', icon: 'Activity',
             context: 'agent', Component: LiveStatus }),
         client.addSidebarFooterItem({
-            id: 'mixdog-live', title: 'Mixdog 실행 현황',
-            Component: ({ theme, openScreen }) => <Pressable accessibilityRole="button"
-                onPress={() => openScreen({ screenId: 'mixdog-live' })}
-                style={{ padding: 12, minHeight: 48 }}>
-                <Text style={{ color: theme.colors.foreground }}>Mixdog 실행 현황</Text>
-            </Pressable>,
+            id: 'paseodog-analysis', title: 'AI 사용량·에이전트 분석', Component: AnalysisFooter,
         }),
     ];
     return () => { for (const cleanup of cleanups) void cleanup(); };

@@ -26,6 +26,49 @@ function fixture(t) {
     const askCount=()=>existsSync(log)?readFileSync(log,'utf8').trim().split('\n').filter(Boolean).length:0;
     return {root,client,open,prompt,askCount};
 }
+// 이미지 파트가 JSONL·실제 자식 프로세스를 지나도 순서와 바이트를 유지한다.
+test('image content crosses the real worker transport without loss', async (t) => {
+    const f = fixture(t), a = f.client();
+    await a.connection.send(f.open());
+    await until(a.events, (e) => e.type === 'session.ready');
+    const message = f.prompt();
+    const parts = [{ type: 'text', text: 'describe' },
+        { type: 'image', mimeType: 'image/png', data: 'iVBORw0KGgo=' }];
+    message.prompt.input.content = parts;
+    await a.connection.send(message);
+    await until(a.events, (e) => e.type === 'session.turn' && e.state === 'completed');
+    const received = JSON.parse(readFileSync(join(f.root, 'asks.log'), 'utf8').trim());
+    assert.deepEqual(received.text, parts);
+});
+
+test('context measurements cross the real child transport into chat usage', async (t) => {
+    const f = fixture(t), a = f.client();
+    await a.connection.send(f.open());
+    await until(a.events, (event) => event.type === 'session.ready');
+    const initial = a.events.find((event) => event.type === 'session.usage');
+    assert.deepEqual(initial.usage, { contextWindowMaxTokens: 1000, contextWindowUsedTokens: 40 });
+    await a.connection.send(f.prompt());
+    await until(a.events, (event) => event.type === 'session.turn' && event.state === 'completed');
+    const latest = a.events.filter((event) => event.type === 'session.usage').at(-1);
+    assert.equal(latest.usage.contextWindowMaxTokens, 1000);
+    assert.equal(latest.usage.contextWindowUsedTokens, 40);
+    assert.equal(f.askCount(), 1);
+});
+
+test('steering crosses real worker IPC without replacing A', async (t) => {
+    const f = fixture(t), a = f.client();
+    await a.connection.send(f.open()); await until(a.events, (event) => event.type === 'session.ready');
+    await a.connection.send(f.prompt('wait', 'A'));
+    const started = await until(a.events, (event) => event.type === 'session.turn' && event.state === 'started');
+    const message = f.prompt('B', 'B'); message.prompt.delivery = 'steer';
+    await a.connection.send(message);
+    const answer = await until(a.events, (event) => event.type === 'session.prompt_result' && event.clientMessageId === 'B');
+    assert.deepEqual(answer.result, { type: 'steer', turnId: started.turnId });
+    await until(a.events, (event) => event.type === 'session.turn' && event.state === 'completed');
+    assert.equal(f.askCount(), 1);
+    assert.equal(a.events.findLast((event) => event.item?.type === 'assistant_message').item.text, 'wait+B');
+});
+
 test('integrated disk restore replays stable timeline without executing a duplicate prompt',async t=>{
     const f=fixture(t),a=f.client();await a.connection.send(f.open());const opened=await until(a.events,e=>e.type==='session.opened');await until(a.events,e=>e.type==='session.ready');
     await a.connection.send(f.prompt());await until(a.events,e=>e.type==='session.turn'&&e.state==='completed');const original=a.events.find(e=>e.type==='timeline.item'&&e.item.type==='assistant_message').item.id;

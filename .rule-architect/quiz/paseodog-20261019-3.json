@@ -1,0 +1,50 @@
+{
+  "runId": "paseodog-20261019-3",
+  "lang": "en",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "recall",
+      "question": "What four kinds of upstream intake do the rules define?",
+      "expected": "Base version, Backport, Local patch, Dependency override",
+      "answer": "Base version, Backport, Local patch, Dependency override",
+      "correct": true
+    },
+    {
+      "id": "q2",
+      "type": "judgment",
+      "question": "We fixed a bug inside Mixdog's code with our own patch. Should we open a PR to Mixdog so we can drop the patch later? What happens to the patch?",
+      "expected": "No PR; intake is one-way; it stays a permanent hash-gated local patch re-ported on every base upgrade",
+      "answer": "No; one-way; permanent local patch re-ported each upgrade",
+      "correct": true
+    },
+    {
+      "id": "q3",
+      "type": "recall",
+      "question": "A security advisory affects a transitive dependency of the Paseo server without a new base. Where is that fix recorded?",
+      "expected": "tools/package.json overrides and docs/UPSTREAM.md",
+      "answer": "tools/package.json overrides + docs/UPSTREAM.md",
+      "correct": true
+    },
+    {
+      "id": "q4",
+      "type": "recall",
+      "question": "For a PaseoDog-origin patch, what goes in the header comment and the docs/UPSTREAM.md ledger line?",
+      "expected": "\"local\" instead of PR/commit; ledger: \"local\", patch script, what it changes (+CHANGELOG)",
+      "answer": "\"local\" in header; ledger \"local\", script, change; CHANGELOG",
+      "correct": true
+    },
+    {
+      "id": "q5",
+      "type": "negative",
+      "question": "Which Node.js test reporter format should CI publish to the dashboard?",
+      "expected": "not in the rules, check the source",
+      "answer": "not in the rules, check the source",
+      "correct": true
+    }
+  ],
+  "correct": 5,
+  "total": 5,
+  "negativePassed": true,
+  "passed": true
+}

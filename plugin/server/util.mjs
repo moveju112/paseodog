@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
+import release from '../shared/release.json' with { type: 'json' };
 
-export const VERSION = '1.0.0-rc.4';
+export const VERSION = release.version;
+export const UPSTREAM_VERSIONS = release.paseodogUpstream;
 export const DEFAULT_MODEL = 'mixdog-default';
-export const MAX_FRAME = 2 * 1024 * 1024;
+export const MAX_FRAME = 16 * 1024 * 1024;
 export const plainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 export function errorText(error) {
     return String(error?.message || error || 'Unknown error').slice(0, 4000);
@@ -51,6 +53,16 @@ export function publicUsage(value) {
     const { inputTokens, cachedInputTokens, outputTokens } = value;
     return { inputTokens, cachedInputTokens, outputTokens };
 }
+// 누적 토큰과 분리된 Mixdog의 현재 컨텍스트 수치만 Paseo 필드로 매핑한다.
+export function contextUsage(context = {}) {
+    const result = {};
+    const maximum = context.effectiveContextWindow ?? context.contextWindow;
+    if (typeof maximum === 'number' && Number.isFinite(maximum) && maximum > 0)
+        result.contextWindowMaxTokens = maximum;
+    if (typeof context.usedTokens === 'number' && Number.isFinite(context.usedTokens) && context.usedTokens >= 0)
+        result.contextWindowUsedTokens = context.usedTokens;
+    return result;
+}
 export function safeKey(value, name = 'identifier') {
     if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{1,160}$/.test(value)) throw new Error(`Invalid ${name}`);
     return value;
@@ -66,9 +78,11 @@ export function validateConfig(config) {
     if (config.systemPrompt !== undefined && (typeof config.systemPrompt !== 'string' || config.systemPrompt.length > 131072)) {
         throw new Error('Invalid or oversized system prompt');
     }
-    if (config.mode && !['ask', 'review'].includes(config.mode)) throw new Error(`Unsupported mode: ${config.mode}`);
+    if (config.mode && !['ask', 'review', 'bypass'].includes(config.mode)) throw new Error(`Unsupported mode: ${config.mode}`);
     if (typeof config.persist !== 'boolean') throw new Error('persist must be boolean');
-    if (Object.keys(config.settings).length) throw new Error(`Unsupported session settings: ${Object.keys(config.settings).join(', ')}`);
+    if (Object.keys(config.settings).some((key) => key !== 'autoEffort')
+        || (Object.hasOwn(config.settings, 'autoEffort') && typeof config.settings.autoEffort !== 'boolean'))
+        throw new Error('Unsupported session settings; autoEffort must be boolean');
     for (const [key, value] of Object.entries(config.env)) {
         if (typeof value !== 'string' || key.includes('\0') || key.includes('=') || value.includes('\0')) {
             throw new Error('Invalid environment variable');
@@ -90,8 +104,7 @@ export function validateConfig(config) {
 }
 export function promptText(prompt) {
     if (prompt.outputSchema !== undefined) throw new Error('Structured output is not supported by this bridge');
-    if (prompt.delivery === 'steer') throw new Error('Steering is not supported; interrupt then send a new message');
-    if (!['auto', undefined].includes(prompt.delivery)) throw new Error('Invalid prompt delivery');
+    if (!['auto', 'steer', undefined].includes(prompt.delivery)) throw new Error('Invalid prompt delivery');
     if (typeof prompt.clientMessageId !== 'string' || !prompt.clientMessageId || prompt.clientMessageId.length > 200) {
         throw new Error('Invalid clientMessageId');
     }
@@ -101,10 +114,19 @@ export function promptText(prompt) {
     }
     const content = prompt.input?.content;
     if (prompt.input?.type !== 'message' || !Array.isArray(content) || !content.length) throw new Error('Text message required');
-    if (content.some((part) => part?.type !== 'text' || typeof part.text !== 'string')) {
-        throw new Error('Only text is supported. Images and file attachments are not silently discarded.');
-    }
-    const text = content.map((part) => part.text).join('\n');
-    if (!text.trim() || Buffer.byteLength(text) > 512 * 1024) throw new Error('Empty or oversized prompt');
-    return { text };
+    const parts = content.map((part) => {
+        if (part?.type === 'text' && typeof part.text === 'string') return { type: 'text', text: part.text };
+        if (part?.type !== 'image') throw new Error('Only text and images are supported; unsupported attachments are not discarded.');
+        if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(part.mimeType)
+            || typeof part.data !== 'string' || !part.data.length
+            || part.data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(part.data))
+            throw new Error('Invalid image MIME type or base64 data');
+        return { type: 'image', data: part.data, mimeType: part.mimeType };
+    });
+    const text = parts.filter((part) => part.type === 'text').map((part) => part.text).join('\n');
+    const hasImages = parts.some((part) => part.type === 'image');
+    if ((!text.trim() && !hasImages) || Buffer.byteLength(text) > 512 * 1024) throw new Error('Empty or oversized prompt');
+    if (Buffer.byteLength(JSON.stringify(parts)) > MAX_FRAME - 64 * 1024)
+        throw new Error('Image prompt exceeds the 16 MiB IPC limit');
+    return hasImages ? { text, content: parts } : { text };
 }

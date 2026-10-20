@@ -1,11 +1,23 @@
 {
   "name": "paseodog-host-tools",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0-rc.7",
   "private": true,
   "scripts": {
     "postinstall": "node ../scripts/patch-paseo-cli.mjs --apply && node ../scripts/patch-paseo-terminal.mjs --apply"
   },
   "dependencies": {
     "@getpaseo/cli": "0.11.4"
+  },
+  "devDependencies": {
+    "@electron/asar": "3.4.1"
+  },
+  "overrides": {
+    "@getpaseo/server": {
+      "@modelcontextprotocol/sdk": "1.31.0",
+      "ai": "5.0.207",
+      "markdown-it": "14.3.1",
+      "linkify-it": "5.0.2",
+      "uuid": "11.1.1"
+    }
   }
 }

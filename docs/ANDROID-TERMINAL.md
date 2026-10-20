@@ -1,8 +1,9 @@
 # Paseo Android terminal typing/UTF-8 and cursor alignment
 
-**Scope:** This page concerns the **official Paseo mobile application**, not
-PaseoDog's Linux Provider. Updating PaseoDog's server/CLI cannot update an
-Android APK installed from the app store.
+**Scope:** PaseoDog's Android app source is under `android/`, with the native
+client in `android/packages/app/`. It includes the existing PaseoDog branding
+and updater. Updating the Linux provider alone does not replace an installed
+Android APK; native UI changes require rebuilding that client.
 
 ## Findings and mitigation
 
@@ -39,7 +40,20 @@ Alternatively, keep Paseo for chat/agent approvals and use a dedicated SSH
 client for text terminals on Linux. This avoids the affected app-native terminal
 input and still accesses the same remote host.
 
-## Apply to a separate upstream source checkout
+## Existing PaseoDog Android source
+
+Use `android/` for PaseoDog client changes. Its npm workspace includes shared
+protocol/client packages needed by the app. Dependencies, build caches, SDKs
+and signing keys are not source files and were not imported with the source.
+Build prerequisites and commands are described in `android/docs/android.md`;
+PaseoDog's actual application ID and branding are defined by
+`android/packages/app/app.config.js` and the existing native Android project.
+Do not replace an installed APK with a differently signed build.
+
+The following terminal-input patch procedure is for a separately pinned
+upstream checkout; it is not the general PaseoDog app build/update procedure.
+
+## Apply the terminal fix to a separate upstream source checkout
 
 ```bash
 # Requires Git, Node, Android SDK and a separate Paseo source checkout.

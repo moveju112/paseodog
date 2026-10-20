@@ -1,0 +1,50 @@
+{
+  "runId": "paseodog-20261019-6",
+  "lang": "en",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "recall",
+      "question": "Who writes the docs/UPSTREAM.md ledger entries, and when?",
+      "expected": "the agent making the change, in the same change",
+      "answer": "agent making the change, same change",
+      "correct": true
+    },
+    {
+      "id": "q2",
+      "type": "recall",
+      "question": "Which docs/UPSTREAM.md sections hold PR backports versus local patches?",
+      "expected": "Selected Paseo backports vs Local Paseo patches",
+      "answer": "Selected Paseo backports / Local Paseo patches",
+      "correct": true
+    },
+    {
+      "id": "q3",
+      "type": "judgment",
+      "question": "Is it acceptable to leave UPSTREAM.md and CHANGELOG updates for the maintainer later?",
+      "expected": "No; agent writes ledger, inventory row and CHANGELOG in the same change",
+      "answer": "No; same change by the agent",
+      "correct": true
+    },
+    {
+      "id": "q4",
+      "type": "recall",
+      "question": "Which docs are project references and are they maintained by hand?",
+      "expected": "UPPERCASE .md under docs/; written by the agent in the same change as code",
+      "answer": "docs/ UPPERCASE; agent writes them in same change",
+      "correct": true
+    },
+    {
+      "id": "q5",
+      "type": "negative",
+      "question": "What CSS framework does the plugin client UI use?",
+      "expected": "not in the rules, check the source",
+      "answer": "not in the rules, check the source",
+      "correct": true
+    }
+  ],
+  "correct": 5,
+  "total": 5,
+  "negativePassed": true,
+  "passed": true
+}

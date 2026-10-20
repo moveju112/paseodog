@@ -12,8 +12,20 @@ installation or enabling unsandboxed plugin code. Native/MCP/extension dependenc
 their install scripts are part of the trusted software supply chain. Direct dependency versions and CI-generated registry lockfiles are pinned.
 The installer uses `npm ci` only; verify the locks again whenever dependencies change.
 
-Default agent tools, including reads, require allow-once approval. No allow-always is
-implemented. Argument edits, permission-policy changes, stale approvals, oversized
+By default, agent tools, including reads, require allow-once approval. Selecting
+`Bypass (always allow tools; no approval prompts)` explicitly opts that session into
+unattended tool execution, including file writes, shell commands and MCP tools.
+Managed children inherit the selected mode. Bypass skips hook approval requests but
+preserves upstream deny/block decisions and managed agent/task cross-session restrictions.
+The host does not deny tools by category, including configuration, desktop, delegation
+and automation tools. It is not an OS sandbox and does not bypass OS permissions.
+The default remains `ask`; selecting Bypass does not change other sessions or the
+global default. Reopened sessions use their explicitly supplied session mode.
+Image prompts use Mixdog's native text/image content parts. PNG, JPEG, GIF and WebP
+base64 inputs are supported, including image-only prompts. Serialized input is bounded
+below the 16 MiB IPC frame limit; oversized input and unsupported attachments are
+rejected before accepting a turn, never silently dropped.
+In approval modes, argument edits, permission-policy changes, stale approvals, oversized
 approval payloads, unrelated sessions and expired requests cannot grant access. Review
 mode only permits an explicit native read-tool name allowlist plus managed agent/task
 control and still asks approval. Children inherit the same review restriction.

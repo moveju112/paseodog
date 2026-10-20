@@ -4,6 +4,10 @@ import { loadNativeModules } from './native-engine.mjs';
 import { nativeDefaultWorkflowBody } from './native-templates.mjs';
 import { createJsonLineDecoder, encodeFrame } from '../../plugin/server/json-lines.mjs';
 import { errorText } from '../../plugin/server/util.mjs';
+import { readClaudeUsage, readUsageMetrics } from './usage.mjs';
+import { normalizeOrchestrationMode } from './orchestration-mode.mjs';
+import { flushPendingSessionConfigWrites } from 'mixdog/src/session-runtime/config-lifecycle/config-writers.mjs';
+import { resourceControls } from './resource-controls.mjs';
 
 // 인증정보·프롬프트·파일 경로 없이 모델 선택에 필요한 필드만 전달한다.
 export function modelProjection(row) {
@@ -31,6 +35,9 @@ function workflowPackProjection(pack) {
 // 설정 요청은 허용된 항목만 받으며 전용 프로필의 네이티브 API로 저장한다.
 export async function controlRuntime(runtime, request = {}, options = {}) {
     const action = request.action || 'read';
+    if (action === 'resources') return resourceControls(runtime, request);
+    if (action === 'usage') return await readClaudeUsage(runtime);
+    if (action === 'metrics') return await readUsageMetrics(runtime, request);
     const cachedModels = Array.isArray(options.cachedModels) && options.cachedModels.length > 0 && request.refresh !== true
         ? options.cachedModels
         : null;
@@ -95,6 +102,9 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             const agents = await runtime.listAgents();
             if (!agents.some((row) => row.id === request.agent)) throw new Error('Unknown agent');
             await runtime.setAgentRoute(request.agent, input);
+            if (input.provider === '' && input.disabled === false) {
+                await runtime.setAgentRoute(request.agent, { disabled: false });
+            }
         }
     } else if (action === 'agentDefinition') {
         if (!(await runtime.listAgents()).some((row) => row.id === request.agent)) throw new Error('Unknown agent');
@@ -103,6 +113,9 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         agentDefinition = { id, name, description, body, custom, userOverride };
     } else if (action === 'agentSave' || action === 'agentCreate') {
         if (typeof runtime.saveAgentDefinition !== 'function') throw new Error('Agent save not supported');
+        const currentAgent = request.agent ? (await runtime.listAgents()).find((row) => row.id === request.agent) : null;
+        const selectedRoute = { ...currentAgent?.route, ...request.route };
+        if (!selectedRoute?.provider || !selectedRoute?.model) throw new Error('Select an agent model before saving');
         const name = typeof request.name === 'string' ? request.name.trim().slice(0, 120) : '';
         const id = typeof request.agent === 'string' ? request.agent.trim().slice(0, 100) : '';
         if (!name && !id) throw new Error('Agent name or id is required');
@@ -115,6 +128,9 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             body: request.body,
             ...(request.route ? { route: request.route } : {}),
         });
+        if (request.route?.provider === '' && typeof request.route?.disabled === 'boolean') {
+            await runtime.setAgentRoute?.(saved.id, { disabled: request.route.disabled });
+        }
         agentDefinition = {
             id: saved.id,
             name: saved.name,
@@ -275,10 +291,12 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         if (typeof runtime.getWorkflowPack !== 'function') throw new Error('Workflow pack inspection not supported');
         workflowPack = workflowPackProjection(await runtime.getWorkflowPack(request.workflow));
     } else if (action === 'workflowSave') {
+        if (request.activate !== undefined && typeof request.activate !== 'boolean')
+            throw new Error('Invalid workflow activation');
         if (typeof request.workflow !== 'string' || !request.workflow || request.workflow.length > 100)
             throw new Error('Unknown workflow');
-        if (typeof request.body !== 'string' || !request.body.trim() || request.body.length > 200000)
-            throw new Error('Workflow body is required');
+        if (typeof request.body !== 'string' || request.body.length > 200000)
+            throw new Error('Invalid workflow body');
         if (typeof runtime.saveWorkflowPack !== 'function') throw new Error('Workflow save not supported');
         const saved = await runtime.saveWorkflowPack({
             id: request.workflow,
@@ -286,7 +304,10 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             description: typeof request.description === 'string' ? request.description.trim().slice(0, 500) : undefined,
             body: request.body,
         });
-        if (request.activate !== false) await runtime.setWorkflow(saved.id || request.workflow);
+        if (request.activate === false) {
+            if ((await runtime.listWorkflows()).some((row) => row.id === request.workflow && row.active))
+                await runtime.setWorkflow('none');
+        } else await runtime.setWorkflow(request.body.trim() ? saved.id || request.workflow : 'none');
         workflowPack = workflowPackProjection(saved);
     } else if (action === 'workflowCreate') {
         const name = typeof request.name === 'string' ? request.name.trim().slice(0, 120) : '';
@@ -294,8 +315,7 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         if (!name && !id) throw new Error('Workflow name is required');
         const description = typeof request.description === 'string' ? request.description.trim().slice(0, 500) : '';
         if (typeof runtime.createWorkflow !== 'function') throw new Error('Workflow create not supported');
-        const body = typeof request.body === 'string' && request.body.trim()
-            ? request.body : await nativeDefaultWorkflowBody();
+        const body = typeof request.body === 'string' ? request.body : await nativeDefaultWorkflowBody();
         if (body.length > 200000) throw new Error('Workflow body is too large');
         const created = await runtime.createWorkflow({
             id: id || undefined,
@@ -311,9 +331,12 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         if (typeof runtime.deleteWorkflow !== 'function') throw new Error('Workflow delete not supported');
         await runtime.deleteWorkflow(request.workflow);
     } else if (action === 'orchestration') {
-        if (!['none', 'focused', 'balanced', 'swarm'].includes(request.mode)) throw new Error('Unknown orchestration mode');
+        if (!['none', 'swarm'].includes(request.mode)) throw new Error('Unknown orchestration mode');
         await runtime.setOrchestrationMode(request.mode);
     } else if (action !== 'read') throw new Error('Unsupported control action');
+
+    // 메모리 채택만으로 성공을 알리지 않고 실패 시 네이티브의 보류 변경을 유지한다.
+    await flushPendingSessionConfigWrites();
 
     const rawCompaction = runtime.getCompactionSettings?.() || {};
     const compaction = {
@@ -366,14 +389,14 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             ...(typeof runtime.contextTokens === 'number' ? { contextTokens: runtime.contextTokens } : {}),
         },
         models,
-        instructionFiles: tm.instructionFiles || 'off',
+        instructionFiles: tm.instructionFiles || 'all',
         compaction,
         ...(autoClear ? { autoClear } : {}),
         recap: runtime.getRecapSettings?.()?.enabled !== false,
         aiSessionTitles: runtime.getSessionTitleSettings?.()?.aiSessionTitles !== false,
         toolModules,
         webSearchRoute: runtime.getWebSearchRoute?.() || null,
-        outputStyle: runtime.getOutputStyle?.()?.id || 'default',
+        outputStyle: runtime.getOutputStyle?.()?.current?.id,
         outputStyles: (runtime.listOutputStyles?.()?.styles || []).map((s) => ({
             id: String(s.id || ''),
             label: String(s.label || s.name || s.id || ''),
@@ -388,47 +411,69 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         worktree: runtime.getWorktreeSettings?.() || {
             newTaskDefault: 'branch', branchPrefix: 'mixdog/', sizeWarnBytes: 2147483648, autoCleanup: true,
         },
-        skills: {
-            disabled: runtime.getDisabledSkills?.()?.disabled || [],
-            items: (rawSkills?.skills || []).map((s) => ({
+        skills: (() => {
+            const rawDisabled = runtime.getDisabledSkills?.()?.disabled || [];
+            const wildcardDisabled = rawDisabled.includes('*');
+            const items = (rawSkills?.skills || []).map((s) => ({
                 name: String(s.name || s.id || ''),
                 description: typeof s.description === 'string' ? s.description : '',
-                disabled: s.disabled === true,
-            })),
-        },
+                disabled: wildcardDisabled || s.disabled === true || s.enabled === false,
+            }));
+            return {
+                disabled: wildcardDisabled ? items.map((s) => s.name) : rawDisabled,
+                items,
+            };
+        })(),
         hooks: {
             rules: (rawHooks?.rules || []).map((r, index) => ({
                 index,
                 event: String(r.event || ''),
                 matcher: String(r.matcher || ''),
                 command: String(r.command || ''),
-                enabled: r.enabled !== false,
+                enabled: r.enabled === true,
             })),
         },
-        workflows: (await runtime.listWorkflows()).map(({ id, name, active, description, source, userOverride }) => ({
-            id, name, active,
-            ...(typeof description === 'string' && description ? { description } : {}),
-            ...(typeof source === 'string' && source ? { source } : {}),
-            ...(typeof userOverride === 'boolean' ? { userOverride } : {}),
+        workflows: await Promise.all((await runtime.listWorkflows()).map(async ({ id, name, active, description, source, userOverride }) => {
+            const pack = typeof runtime.getWorkflowPack === 'function'
+                ? await Promise.resolve(runtime.getWorkflowPack(id)).catch(() => null)
+                : null;
+            const resolvedDesc = description ?? pack?.description;
+            const resolvedOverride = userOverride ?? pack?.userOverride;
+            const body = typeof pack?.body === 'string' ? pack.body : '';
+            return {
+                id, name, active,
+                ...(typeof resolvedDesc === 'string' && resolvedDesc ? { description: resolvedDesc } : {}),
+                ...(typeof source === 'string' && source ? { source } : {}),
+                ...(typeof resolvedOverride === 'boolean' ? { userOverride: resolvedOverride } : {}),
+                ...(body ? { body } : {}),
+            };
         })),
         ...(workflowPack ? { workflowPack } : {}),
         ...(agentDefinition ? { agentDefinition } : {}),
-        orchestration: runtime.getOrchestrationMode(),
-        agents: (await runtime.listAgents()).map((row) => ({
-            id: row.id, label: row.label || row.id,
-            ...(typeof row.description === 'string' && row.description ? { description: row.description } : {}),
-            ...(typeof row.custom === 'boolean' ? { custom: row.custom } : {}),
-            ...(typeof row.userOverride === 'boolean' ? { userOverride: row.userOverride } : {}),
-            ...(typeof row.locked === 'boolean' ? { locked: row.locked } : {}),
-            disabled: row.disabled === true, route: {
-                provider: row.route?.provider || '', model: row.route?.model || '',
-                effort: row.route?.effort || '', fast: row.route?.fast === true,
-                autoEffort: row.route?.autoEffort !== false, inherited: row.route?.inherited === true,
-                ...(typeof row.route?.contextPercent === 'number' ? { contextPercent: row.route.contextPercent } : {}),
-                ...(typeof row.route?.contextTokens === 'number' ? { contextTokens: row.route.contextTokens } : {}),
-                ...(Array.isArray(row.route?.fallbacks) ? { fallbacks: row.route.fallbacks } : {}),
-            },
-        })),
+        orchestration: normalizeOrchestrationMode(runtime.getOrchestrationMode()),
+        orchestrationScope: 'host',
+        orchestrationAppliesTo: 'next-turn',
+        agents: (await runtime.listAgents()).map((row) => {
+            const body = typeof row.body === 'string'
+                ? row.body
+                : (typeof row.definition?.body === 'string' ? row.definition.body : '');
+            return {
+                id: row.id, label: row.label || row.id,
+                ...(typeof row.description === 'string' && row.description ? { description: row.description } : {}),
+                ...(typeof row.custom === 'boolean' ? { custom: row.custom } : {}),
+                ...(typeof row.userOverride === 'boolean' ? { userOverride: row.userOverride } : {}),
+                ...(typeof row.locked === 'boolean' ? { locked: row.locked } : {}),
+                ...(body ? { body } : {}),
+                disabled: row.disabled === true, route: {
+                    provider: row.route?.provider || '', model: row.route?.model || '',
+                    effort: row.route?.effort || '', fast: row.route?.fast === true,
+                    autoEffort: row.route?.autoEffort !== false, inherited: row.route?.inherited === true,
+                    ...(typeof row.route?.contextPercent === 'number' ? { contextPercent: row.route.contextPercent } : {}),
+                    ...(typeof row.route?.contextTokens === 'number' ? { contextTokens: row.route.contextTokens } : {}),
+                    ...(Array.isArray(row.route?.fallbacks) ? { fallbacks: row.route.fallbacks } : {}),
+                },
+            };
+        }),
         appliesTo: 'new-sessions',
     };
 }
@@ -442,7 +487,7 @@ async function openControlRuntime() {
         throw new Error('Dedicated absolute MIXDOG_HOME and MIXDOG_DATA_DIR required');
     const native = await loadNativeModules();
     const runtime = await native.createMixdogSessionRuntime({
-        cwd: home, initialConfig: await native.loadConfig(),
+        cwd: home,
         toolMode: 'readonly', disallowDelegation: true, autoWakeCompletions: false,
     });
     return { native, runtime };
@@ -456,20 +501,22 @@ export async function runControls(request) {
 }
 
 // 상주형 제어 파이프를 통해 매 설정 변경 시 콜드 부팅과 모델 재조회를 생략한다.
-export function serveControlsStdio({ input, output, onExit = () => {} }) {
+export function serveControlsStdio({ input, output, onExit = () => {}, openRuntime = openControlRuntime }) {
     let runtimePromise = null;
     let cachedModels = null;
     let queue = Promise.resolve();
     let closing = false;
     const write = (frame) => output.write(encodeFrame(frame));
     async function ensureRuntime() {
-        if (!runtimePromise) runtimePromise = openControlRuntime();
+        if (!runtimePromise) runtimePromise = openRuntime();
         return runtimePromise;
     }
     async function stop() {
         if (closing) return;
         closing = true;
         try {
+            // 입력 종료와 겹친 승인된 요청도 저장·응답까지 마친 뒤 런타임을 닫는다.
+            await queue;
             const opened = await runtimePromise;
             await opened?.runtime?.close('paseodog-controls-stdio');
         } catch {}

@@ -9,6 +9,16 @@ const script=fileURLToPath(new URL('./fixtures/worker-fixture.mjs',import.meta.u
 const processes=[];
 function factory(options={}){return processEngineFactory({launch:{command:process.execPath,args:[script],env:{...process.env}},spawnProcess:(...args)=>{const child=spawn(...args);processes.push(child);return child;},terminateProcess:child=>child.kill('SIGKILL'),timeoutMs:5000,stopMs:100,scopeMode:'test-only-process-group',...options});}
 const args={config:{cwd:tmpdir(),env:{},mcpServers:{},settings:{},persist:true}};
+// 계승된 자식 ID는 작업 결과로만 전달하고 현재 네이티브 세션 주소는 유지한다.
+test('fork result crosses real worker IPC without replacing the source session identity', async () => {
+    const engine = await factory().create(args);
+    try {
+        assert.equal(engine.id, 'sess_child');
+        assert.deepEqual(await engine.action({ operation: 'fork', confirmed: true }), { nativeSessionId: 'sess_heir' });
+        assert.equal(engine.id, 'sess_child');
+        assert.equal((await engine.ask('normal', {})).result.content, 'child result');
+    } finally { await engine.close(); }
+});
 test('real child process JSONL open/stream/identity/result/close works without leaking native replay',async()=>{
     const engine=await factory().create(args);const chunks=[],ids=[];try{const result=await engine.ask('normal',{onTextDelta:x=>chunks.push(x),onTextReset:()=>true,onIdentity:x=>ids.push(x.id)});assert.deepEqual(chunks,['child ','result']);assert.deepEqual(ids,['sess_child']);assert.equal(result.result.content,'child result');assert.doesNotMatch(JSON.stringify(result),/MUST_NOT_CROSS_WIRE/);}finally{await engine.close();}
 });
@@ -30,4 +40,20 @@ test('closing hanging inference terminates child within bounded deadline',async(
 });
 test('abort signal cancels worker startup and leaves no active child',async()=>{
     const controller=new AbortController();controller.abort();const before=processes.length;await assert.rejects(factory().create(args,{signal:controller.signal}),/canceled/);assert.equal(processes.length,before);
+});
+// 실제 자식 프로세스의 설정 읽기·쓰기와 활성 턴 거절을 확인한다.
+test('session effort preferences cross worker IPC and reject configuration during an active ask', async () => {
+    const engine = await factory().create(args);
+    try {
+        assert.deepEqual(engine.configuration(), { autoEffort: true, effort: 'low' });
+        assert.deepEqual(await engine.configure({ autoEffort: false, effort: 'high' }),
+            { autoEffort: false, effort: 'high' });
+        assert.equal(engine.configuration().autoEffort, false);
+        const ask = engine.ask('wait', {});
+        const rejection = assert.rejects(ask, /aborted/);
+        await assert.rejects(engine.configure({ autoEffort: true }), /Worker busy/);
+        assert.equal(engine.configuration().autoEffort, false);
+        await engine.abort();
+        await rejection;
+    } finally { await engine.close(); }
 });

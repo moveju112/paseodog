@@ -3,7 +3,12 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { root, paseoHome, paseoBin, nativeBin, runtimeEnv } from '../scripts/paths.mjs';
 import { join } from 'node:path';
+import { VERSION, UPSTREAM_VERSIONS } from '../plugin/server/util.mjs';
 const tokens = process.argv.slice(2);
+if (tokens.length === 1 && ['--version', '-v'].includes(tokens[0])) {
+    console.log(`PaseoDog ${VERSION} (Paseo ${UPSTREAM_VERSIONS.paseo}, Mixdog ${UPSTREAM_VERSIONS.mixdog})`);
+    process.exit(0);
+}
 const globalOptionsWithValue = new Set(['--host', '--home', '--password', '--timeout']);
 function splitCommand(argv) {
     let index = 0;
@@ -15,11 +20,13 @@ function splitCommand(argv) {
 }
 const { before, command, args } = splitCommand(tokens);
 
-const help=`PaseoDog 1.0.0-rc.4 - Linux Mixdog engine, Paseo UI/CLI\n
+const help=`PaseoDog ${VERSION} - Linux Mixdog engine, Paseo UI/CLI
+Based on Paseo ${UPSTREAM_VERSIONS.paseo} / Mixdog ${UPSTREAM_VERSIONS.mixdog}\n
 paseodog start                 Start the dedicated Paseo daemon
 paseodog serve                 Foreground daemon (systemd entrypoint)
 paseodog auth                  Open Mixdog TUI in the dedicated auth profile
 paseodog doctor                Check local installation without inference
+paseodog desktop-update --output /tmp/release --apply   Prepare and apply a reviewed PaseoDog desktop update
 paseodog live-test --confirm-api-use   Real engine smoke test (billable)
 paseodog run "task"            New PaseoDog agent (requires approvals)
 paseodog ls                    List agents
@@ -34,7 +41,8 @@ Mobile uses the existing Paseo app. No new Android APK is bundled.
 `;
 if(!command||['help','--help','-h'].includes(command) || (before.length === 1 && ['--help','-h'].includes(before[0]))){console.log(help);process.exit(0);}
 let executable,argv;
-if(command==='doctor'){executable=process.execPath;argv=[join(root,'scripts/doctor.mjs'),...args];}
+if(command==='desktop-update'){executable=process.execPath;argv=[join(root,'scripts/desktop-release.mjs'),...args];}
+else if(command==='doctor'){executable=process.execPath;argv=[join(root,'scripts/doctor.mjs'),...args];}
 else if(command==='live-test'){executable=process.execPath;argv=[join(root,'scripts/live-smoke.mjs'),...args];}
 else if(command==='auth'){executable=nativeBin;argv=args;}
 else{

@@ -18,7 +18,7 @@ FORBIDDEN_PARTS = {"node_modules", ".git", "__pycache__", ".venv", "coverage", "
 FORBIDDEN_NAMES = {".env", "auth.json", "credentials.json", "secrets.json", "token.json", "id_rsa", "id_ed25519"}
 
 
-def source_files(root: Path) -> list[Path]:
+def source_files(root: Path) -> list[tuple[str, Path]]:
     manifest = root / MANIFEST
     if not manifest.is_file() or manifest.is_symlink():
         raise RuntimeError("Source allowlist MANIFEST.sha256 is missing or unsafe")
@@ -40,17 +40,22 @@ def source_files(root: Path) -> list[Path]:
         for part in parts:
             candidate /= part
             if candidate.is_symlink():
-                raise RuntimeError(f"Refusing symlink in release tree: {name}")
+                if name != "AGENTS.md" or candidate.readlink() != Path("AI_RULES.md"):
+                    raise RuntimeError(f"Refusing symlink in release tree: {name}")
+                # Read only the designated regular source, not the instruction link.
+                candidate = root / "AI_RULES.md"
+                if candidate.is_symlink():
+                    raise RuntimeError("Refusing symlink instruction source: AI_RULES.md")
         if not candidate.is_file():
             raise RuntimeError(f"Reviewed release source missing: {name}")
         seen.add(name)
-        result.append(candidate)
-    return sorted(result, key=lambda p: p.relative_to(root).as_posix())
+        result.append((relative.as_posix(), candidate))
+    return sorted(result, key=lambda entry: entry[0])
 
 
 def package(root: Path, output: Path) -> dict:
     paths = source_files(root)
-    entries = {p.relative_to(root).as_posix(): p.read_bytes() for p in paths}
+    entries = {name: source.read_bytes() for name, source in paths}
     manifest = "".join(f"{hashlib.sha256(content).hexdigest()}  {name}\n" for name, content in entries.items()).encode()
     entries["MANIFEST.sha256"] = manifest
     output.parent.mkdir(parents=True, exist_ok=True)

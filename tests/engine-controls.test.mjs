@@ -38,6 +38,9 @@ test('read projects public settings only without inference or mutation', async (
     assert.equal(result.compaction.onModelChange, true);
     assert.equal(result.compaction.mainBufferPercent, 0.2);
     assert.equal(result.autoClear.enabled, false);
+    assert.equal(result.orchestration, 'swarm');
+    assert.equal(result.orchestrationScope, 'host');
+    assert.equal(result.orchestrationAppliesTo, 'next-turn');
     assert.deepEqual(calls, []);
     assert.doesNotMatch(JSON.stringify(result), /never-export|private instructions|definition|hidden/);
 });
@@ -82,6 +85,8 @@ test('invalid models, agents, keys and modes fail before saving', async () => {
         { action: 'agent', agent: 'foreign', route: {} },
         { action: 'workflow', workflow: 'missing' },
         { action: 'orchestration', mode: 'invented' },
+        { action: 'orchestration', mode: 'focused' },
+        { action: 'orchestration', mode: 'balanced' },
         { action: 'compaction', enabled: 'yes' },
         { action: 'delete' },
     ]) await assert.rejects(controlRuntime(value, request));
@@ -98,6 +103,21 @@ test('workflow creation preserves explicit custom bytes without route changes', 
     assert.deepEqual(Buffer.from(calls[0][1].body), Buffer.from(body));
     assert.equal(result.workflowPack.body, body);
     assert.deepEqual(calls.map(([action]) => action), ['workflowCreate']);
+});
+
+test('saving an empty active workflow does not reactivate the default document', async () => {
+    const { value, calls } = runtime();
+    await controlRuntime(value, { action: 'workflowSave', workflow: 'default', body: ' \n', activate: true });
+    assert.equal(calls.find(([action]) => action === 'workflow')[1], 'none');
+});
+
+test('agent definition cannot be saved without an explicitly selected model', async () => {
+    const { value, calls } = runtime();
+    value.listAgents = () => [{ id: 'worker', route: {}, disabled: true }];
+    value.saveAgentDefinition = () => { throw new Error('must not save'); };
+    await assert.rejects(controlRuntime(value, { action: 'agentSave', agent: 'worker', body: '# Worker' }),
+        /Select an agent model/);
+    assert.deepEqual(calls, []);
 });
 
 test('agent definition inspection preserves native body bytes and only returns editor fields without mutation', async () => {
@@ -162,7 +182,7 @@ test('instruction loading toggles native mode only and preserves selective read 
     await assert.rejects(controlRuntime(value, { action: 'instructionFiles', enabled: true }), /Instruction files not supported/);
 });
 
-test('control process reads are cached and writes are serialized and refresh the cache', async () => {
+test('control reads stay fresh and writes remain serialized', async () => {
     const calls = [];
     const controls = createEngineControls({ execCommand: async (command, args) => {
         calls.push(JSON.parse(args.at(-1)));
@@ -170,17 +190,44 @@ test('control process reads are cached and writes are serialized and refresh the
     } });
     controls.bind({ command: '/engine', args: [], env: {} });
     assert.equal((await controls.read()).revision, 1);
-    assert.equal((await controls.read()).revision, 1);
-    await controls.read({ action: 'compaction', enabled: false });
     assert.equal((await controls.read()).revision, 2);
+    await controls.read({ action: 'compaction', enabled: false });
+    assert.equal((await controls.read()).revision, 4);
     await controls.read({ action: 'read', refresh: true });
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 5);
 });
 
 test('process errors never expose stderr credentials', async () => {
     const controls = createEngineControls({ execCommand: async () => { throw new Error('token=private'); } });
     controls.bind({ command: '/engine', args: [], env: {} });
     await assert.rejects(controls.read(), (error) => !error.message.includes('private'));
+});
+
+test('saving an inactive workflow does not activate it and deactivating the current one selects none', async () => {
+    for (const active of [true, false]) {
+        const { value, calls } = runtime();
+        value.listWorkflows = () => [{ id: 'default', active }];
+        await controlRuntime(value, { action: 'workflowSave', workflow: 'default', body: '# Rules', activate: false });
+        assert.deepEqual(calls.filter(([name]) => name === 'workflow'), active ? [['workflow', 'none']] : []);
+    }
+});
+
+test('status failures clear stale jobs without hiding other connections', async () => {
+    const controls = createEngineControls({});
+    let failed = false;
+    const remove = controls.register({ engineStatus: async () => {
+        if (failed) throw new Error('Disconnected');
+        return [{ bridgeId: 'first', jobs: [{ id: 'child', status: 'running' }] }];
+    } });
+    controls.register({ engineStatus: async () => [{ bridgeId: 'other', jobs: [] }] });
+    await controls.sessions();
+    failed = true;
+    const rows = await controls.sessions();
+    assert.deepEqual(rows.find((row) => row.bridgeId === 'first').jobs, []);
+    assert.equal(rows.find((row) => row.bridgeId === 'first').state, 'unavailable');
+    assert.deepEqual(rows.find((row) => row.bridgeId === 'other'), { bridgeId: 'other', jobs: [] });
+    remove();
+    await controls.close();
 });
 
 test('native catalog supplies provider model and effort choices; explicit effort wins', async (t) => {
@@ -193,8 +240,9 @@ test('native catalog supplies provider model and effort choices; explicit effort
     t.after(() => f.connection.close());
     await f.connection.send({ type: 'catalog', requestId: 'models' });
     const event = await until(f.events, (item) => item.type === 'catalog');
-    assert.equal(event.catalog.models[1].id, 'subscription/small');
-    assert.equal(event.catalog.models[1].thinkingOptions[0].id, 'high');
+    const selectedModel = event.catalog.models.find((model) => model.id === 'subscription/small');
+    assert.ok(selectedModel);
+    assert.equal(selectedModel.thinkingOptions[0].id, 'high');
     f.open.config.thinkingOption = 'high';
     await f.ready();
     assert.equal(f.creates[0].route.effort, 'high');
@@ -212,6 +260,8 @@ test('live status distinguishes child approval waiting from running and clears a
     await f.connection.send(f.prompt);
     const approval = await until(f.events, (event) => event.type === 'session.permission');
     const waiting = (await f.connection.engineStatus())[0];
+    assert.equal(waiting.id, f.open.sessionId);
+    assert.equal(waiting.bridgeId, f.store.list()[0].id);
     assert.equal(waiting.state, 'waiting-approval');
     assert.equal(waiting.approvalCount, 1);
     assert.equal(waiting.jobs[0].waitingApproval, true);
@@ -282,6 +332,7 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
         name: 'QA Bot',
         description: 'Tests code',
         body: '# QA Prompt',
+        route: { provider: 'subscription', model: 'small' },
     });
     await controlRuntime(value, { action: 'agentDelete', agent: 'worker' });
 
@@ -313,6 +364,7 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
             name: 'QA Bot',
             description: 'Tests code',
             body: '# QA Prompt',
+            route: { provider: 'subscription', model: 'small' },
         }],
         ['agentDelete', 'worker'],
     ]);

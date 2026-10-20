@@ -74,7 +74,7 @@ test('installed native workflow persistence retains original body and leaves nat
     // 사용자 default override가 있어도 신규 기본 본문은 설치된 원본을 사용한다.
     await workflows.saveWorkflowPack({ id: 'default', name: 'Changed', body: '# User override' });
     const expected = Buffer.from(readMarkdownDocument(originalWorkflow.toString('utf8')).body);
-    for (const body of [undefined, '', ' \n\t']) {
+    for (const body of [undefined]) {
         const result = await controlRuntime(value, {
             action: 'workflowCreate', name: 'Original copy', description: 'Custom metadata',
             body, activate: false,

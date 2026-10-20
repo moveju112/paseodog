@@ -4,6 +4,35 @@ import { attachHostPolicy, mapMcpServers } from '../engine/src/policy.mjs';
 import { createNativeEngine } from '../engine/src/native-engine.mjs';
 import { patchedSource, gitBlob, ANCHOR, MARKER } from '../scripts/patch-mixdog.mjs';
 const makeSession=()=>({id:'sess1',messages:[{role:'system',content:'base'}],cwd:'/work'});
+// Bypass는 읽기·쓰기·셸·MCP를 질문 없이 전달하되 원래 차단과 호스트 제한을 유지한다.
+test('bypass skips approval for tools but preserves upstream denies and host restrictions', async () => {
+    const session = makeSession();
+    session.beforeToolHook = async (input) => input.name === 'blocked'
+        ? { action: 'block', reason: 'upstream block' } : { action: 'ask' };
+    attachHostPolicy(session, { mode: 'bypass', orchestration: true });
+    for (const name of ['read', 'glob', 'write', 'shell', 'mcp_test', 'agent', 'task', 'setup', 'computer', 'goal']) {
+        const args = { command: 'printf test' };
+        const decision = await session.beforeToolHook({ name, args });
+        assert.equal(decision.action, 'rewrite');
+        assert.equal(decision.name, name);
+        assert.deepEqual(decision.args, args);
+    }
+    assert.equal((await session.beforeToolHook({ name: 'blocked', args: {} })).action, 'block');
+    assert.equal((await session.beforeToolHook({ name: 'agent', args: { global: true } })).action, 'deny');
+});
+// 재작성된 호출을 그대로 전달하고 승인 모드로 돌아오면 다시 질문한다.
+test('bypass preserves rewritten arguments and is not sticky across mode changes', async () => {
+    const session = makeSession();
+    session.beforeToolHook = async () => ({ action: 'rewrite', name: 'shell', args: { command: 'printf rewritten' } });
+    attachHostPolicy(session, { mode: 'bypass' });
+    assert.deepEqual(await session.beforeToolHook({ name: 'read', args: {} }),
+        { action: 'rewrite', name: 'shell', args: { command: 'printf rewritten' } });
+    attachHostPolicy(session, { mode: 'ask' });
+    assert.equal((await session.beforeToolHook({ name: 'read', args: {} })).action, 'ask');
+    attachHostPolicy(session, { mode: 'bypass' });
+    attachHostPolicy(session, { mode: 'review' });
+    assert.equal((await session.beforeToolHook({ name: 'read', args: {} })).action, 'deny');
+});
 test('every tool requires approval; original deny decisions remain authoritative',async()=>{
     const s=makeSession();s.beforeToolHook=async(input)=>input.name==='bad'?{action:'deny',reason:'upstream'}:null;
     attachHostPolicy(s,{mode:'ask'});assert.equal((await s.beforeToolHook({name:'read',args:{path:'a'}})).action,'ask');assert.equal((await s.beforeToolHook({name:'bad',args:{}})).reason,'upstream');
@@ -12,8 +41,54 @@ test('rewritten tools are checked after upstream hooks and cannot escape review 
     const s=makeSession();s.beforeToolHook=async()=>({action:'rewrite',name:'shell',args:{command:'danger'}});attachHostPolicy(s,{mode:'review'});
     assert.equal((await s.beforeToolHook({name:'read',args:{}})).action,'deny');
 });
-test('delegation and automation are denied even in build mode',async()=>{
-    for(const name of ['agent','task','automation','schedule','setup','computer','goal']){const s=makeSession();attachHostPolicy(s,{mode:'ask'});assert.equal((await s.beforeToolHook({name,args:{}})).action,'deny');}
+// 도구 종류별 차단 없이 일반 승인 경로와 네이티브 거부·재작성 검사를 유지한다.
+test('tool categories follow session approval modes and preserve native restrictions', async () => {
+    for (const name of ['agent', 'agents', 'task', 'task_control', 'channel', 'channels',
+        'setup', 'computer', 'goal', 'automation', 'schedule', 'scheduler']) {
+        for (const [mode, action] of [['ask', 'ask'], ['review', 'deny'], ['bypass', 'rewrite']]) {
+            const session = makeSession();
+            attachHostPolicy(session, { mode });
+            const args = { action: 'create', prompt: 'test' };
+            const decision = await session.beforeToolHook({ name, args });
+            assert.equal(decision.action, action);
+            if (action !== 'deny') {
+                assert.equal(decision.name, name);
+                assert.deepEqual(decision.args, args);
+            }
+            for (const nativeAction of ['deny', 'block']) {
+                const blocked = makeSession();
+                blocked.beforeToolHook = async () => ({ action: nativeAction, reason: 'native restriction' });
+                attachHostPolicy(blocked, { mode });
+                assert.deepEqual(await blocked.beforeToolHook({ name, args }),
+                    { action: nativeAction, reason: 'native restriction' });
+            }
+            const rewritten = makeSession();
+            rewritten.beforeToolHook = async () => ({ action: 'rewrite', name: 'setup', args: {} });
+            attachHostPolicy(rewritten, { mode });
+            const decisionAfterRewrite = await rewritten.beforeToolHook({ name, args });
+            assert.equal(decisionAfterRewrite.action, action);
+            if (action !== 'deny') {
+                assert.equal(decisionAfterRewrite.name, 'setup');
+                assert.deepEqual(decisionAfterRewrite.args, {});
+            }
+        }
+    }
+});
+// 도구 차단을 없애도 관리형 에이전트의 세션 간 제어 제한은 모든 모드에서 유지한다.
+test('managed cross-session control remains denied in every mode after rewrites', async () => {
+    for (const mode of ['ask', 'review', 'bypass']) {
+        for (const name of ['agent', 'task']) {
+            for (const scope of ['allTerminals', 'global', 'recover']) {
+                const session = makeSession();
+                attachHostPolicy(session, { mode, orchestration: true });
+                assert.equal((await session.beforeToolHook({ name, args: { [scope]: true } })).action, 'deny');
+                const rewritten = makeSession();
+                rewritten.beforeToolHook = async () => ({ action: 'rewrite', name, args: { [scope]: true } });
+                attachHostPolicy(rewritten, { mode, orchestration: true });
+                assert.equal((await rewritten.beforeToolHook({ name: 'read', args: {} })).action, 'deny');
+            }
+        }
+    }
 });
 test('unknown tools are denied in review and require approval in ask mode',async()=>{
     for(const mode of ['ask','review']){const s=makeSession();attachHostPolicy(s,{mode});assert.equal((await s.beforeToolHook({name:'unknown',args:{}})).action,mode==='ask'?'ask':'deny');}

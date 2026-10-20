@@ -1,0 +1,50 @@
+{
+  "runId": "paseodog-20261019-4",
+  "lang": "en",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "recall",
+      "question": "Where in the code does the provider decide the engine is unavailable after a version bump (file and identifier)?",
+      "expected": "plugin/server/provider.ts status() version check comparing loaded VERSION with engine --check",
+      "answer": "plugin/server/provider.ts status() version check",
+      "correct": true
+    },
+    {
+      "id": "q2",
+      "type": "recall",
+      "question": "Which docs/UPSTREAM.md section lists the Paseo fixes taken beyond the base version?",
+      "expected": "Selected Paseo backports",
+      "answer": "Selected Paseo backports",
+      "correct": true
+    },
+    {
+      "id": "q3",
+      "type": "recall",
+      "question": "After a version bump, what must be done on running daemons, and with which command for the dedicated home?",
+      "expected": "Reload paseodog-provider on every daemon that registered it; paseodog plugin reload paseodog-provider; confirm provider ls",
+      "answer": "reload on every daemon; paseodog plugin reload paseodog-provider; provider ls",
+      "correct": true
+    },
+    {
+      "id": "q4",
+      "type": "judgment",
+      "question": "Is it allowed to search for a new insertion anchor automatically when a patch's original hash no longer matches?",
+      "expected": "No; fail closed, re-review and re-port or delete",
+      "answer": "No; fail closed with source drift, re-review/re-port",
+      "correct": true
+    },
+    {
+      "id": "q5",
+      "type": "negative",
+      "question": "What is the maximum number of concurrent agents allowed per daemon?",
+      "expected": "not in the rules, check the source",
+      "answer": "not in the rules, check the source",
+      "correct": true
+    }
+  ],
+  "correct": 5,
+  "total": 5,
+  "negativePassed": true,
+  "passed": true
+}
