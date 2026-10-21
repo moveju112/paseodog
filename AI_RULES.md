@@ -11,7 +11,7 @@ PaseoDog joins Paseo (daemon, desktop/mobile/web/SSH clients) and Mixdog (infere
 - Sessions default to ask mode. Keep upstream deny/block in every mode, NEVER auto-resend uncertain mutating requests, NEVER advertise unimplemented capabilities.
 - Target only the dedicated daemon (`paseodog` wrapper, dedicated `PASEO_HOME`). The phone updates in-app from the published release. Stock Paseo/personal profiles, signing-key replacement and billable tests need separate approval.
 - Report only results of commands actually run. Source, build, published release, installed app and running daemon are distinct states; none proves another.
-- Read `config/rules.local.md` (Git-ignored) when present. Machine-specific values (default build targets, signing-key location) live only there; NEVER put them in commits, release ZIP or notes.
+- Read `config/rules.local.md` (Git-ignored) when present. Machine-specific values (default build targets, signing-key location) live only there; NEVER put them in commits or notes.
 
 ## Run commands
 
@@ -23,7 +23,6 @@ node scripts/patch-mixdog.mjs --check && npm run test:native
 paseodog doctor                    # 설치 점검, 추론 없음
 paseodog plugin reload paseodog-provider && paseodog provider ls
 (cd android && npm run build:desktop)  # Linux .deb
-npm run package                    # 소스 ZIP
 ```
 
 ## Routing

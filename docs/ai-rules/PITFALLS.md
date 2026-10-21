@@ -34,15 +34,6 @@ Each entry: verbatim symptom (grep it) → cause → fix.
 
 ## Release package
 
-- **Symptom:** `python3 scripts/package.py` fails `Reviewed release source missing: <경로>`.
-  - **Cause:** a path in `MANIFEST.sha256` is missing from the working tree (including deleted/moved docs). `evidence: scripts/package.py:59`
-  - **Fix:** restore the file, or remove its line from `MANIFEST.sha256` and keep the `tests/package.test.mjs` required list in sync.
-- **Symptom:** a new module works in dev but import fails in the release ZIP.
-  - **Cause:** not added to `MANIFEST.sha256`, so the ZIP dropped it. `evidence: scripts/package.py:35`
-  - **Fix:** add it and confirm the package test via `npm test`.
 - **Symptom:** PC app Settings update check shows no new version.
   - **Cause:** latest release lacks .deb/`latest-linux.yml` (Android-only publish) or the desktop version is not higher. The updater reads only `releases/latest`.
-  - **Fix:** publish all five assets in one release and bump `versionCode` — [tasks/RELEASE.md](tasks/RELEASE.md) C.
-- **Symptom:** during Android bundling `hermesc` runs for minutes or uses several GB of memory.
-  - **Cause:** huge generated code (e.g. a single `ws-outbound.aot`-family function) re-entered the bundle.
-  - **Fix:** NEVER raise the memory limit; stop, inspect bundle inputs and report.
+  - **Fix:** publish all four assets in one release and bump `versionCode` — [tasks/RELEASE.md](tasks/RELEASE.md) C.

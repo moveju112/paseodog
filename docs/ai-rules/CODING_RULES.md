@@ -50,15 +50,6 @@ Scope: `plugin/`, `engine/src/`, `scripts/`, `patches/`, `tests/`. Inside `andro
 - **NEVER** advertise an unimplemented provider capability in `CAPABILITIES`. Reject unsupported inputs/settings before accepting a turn.
   - why: clients trust advertised capabilities and open UI for them.
   - ✅ `evidence: plugin/server/connection.mjs:9`
-- **NEVER** seed personal custom agents or fixed agent models as defaults. Preserve the user's explicit choices across config refresh and restart.
-  - why: the release would force one user's environment on everyone.
-  - ✅ built-in agents default off; inherited routes stay blank.
-
-## Release source list
-
-- **MUST** add each new file the source ZIP needs (root tests/scripts import it) to `MANIFEST.sha256`.
-  - why: `package.py` packs only manifest paths; `android/` is an allowed root folder.
-  - ✅ `evidence: scripts/package.py:16` — `ROOT_FOLDERS` includes `"android"`.
 
 ## Checks
 
