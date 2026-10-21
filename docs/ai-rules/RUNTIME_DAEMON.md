@@ -45,7 +45,8 @@ Build, signing and GitHub publish order: [tasks/RELEASE.md](tasks/RELEASE.md). T
 - **NEVER** run `scripts/install.sh` or `scripts/service.mjs --install` as a check or upgrade trial.
   - why: install rewrites the profile, re-applies patches and starts/reloads the daemon; the systemd unit is opt-in.
   - ✅ check with `paseodog doctor`; patches with `node scripts/patch-<이름>.mjs --check`.
-- **NEVER** fold direct phone install (adb), remote server apply, new public listeners, signing-key replacement, or chat/account data deletion into PC-apply approval.
+- **MAY** `adb install -r` a verified APK onto the user's own connected phone for device testing without separate approval; the published release remains the update path.
+- **NEVER** fold remote server apply, new public listeners, signing-key replacement, or chat/account data deletion into PC-apply approval.
   - why: the immediate-apply scope is this PC's dedicated PaseoDog environment.
   - ✅ get separate approval stating target and impact.
 

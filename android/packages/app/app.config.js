@@ -8,6 +8,7 @@ const withAndroidArchitectures = require("./plugins/with-android-architectures")
 const withFdroidAutolinking = require("./plugins/with-fdroid-autolinking");
 const withPasteInput = require("./plugins/with-paste-input");
 const withAndroidActivityResultRelaunch = require("./plugins/with-android-activity-result-relaunch");
+const withAndroidVersionCode = require("./plugins/with-android-version-code");
 const withAndroidScroll = require("./modules/paseo-scroll/app.plugin");
 const { getNativeReleaseVersion } = require("./native-release-version");
 const appVariant = process.env.APP_VARIANT ?? "production";
@@ -148,6 +149,7 @@ export default {
       withAndroidApkSplits,
       withAndroidArchitectures,
       withAndroidActivityResultRelaunch,
+      withAndroidVersionCode,
       withAndroidScroll,
       [withAndroidAsyncStorageSize, 64],
       ...buildProfile.cameraPlugins,

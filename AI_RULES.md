@@ -9,7 +9,7 @@ PaseoDog joins Paseo (daemon, desktop/mobile/web/SSH clients) and Mixdog (infere
 - Modify upstream code only via version + blob-hash gated `scripts/patch-*.mjs` + `patches/*.mjs`. NEVER edit `node_modules`, `~/.paseo`, `~/.mixdog` or sibling checkouts directly; NEVER add a hash bypass.
 - Change Paseo UI in shared app source (`android/packages/app/src`) AND the web-bundle patch with the same meaning; decide Android/iOS/desktop/web applicability every time — [CODING_RULES](docs/ai-rules/CODING_RULES.md).
 - Sessions default to ask mode. Keep upstream deny/block in every mode, NEVER auto-resend uncertain mutating requests, NEVER advertise unimplemented capabilities.
-- Target only the dedicated daemon (`paseodog` wrapper, dedicated `PASEO_HOME`). Stock Paseo/personal profiles, direct phone install (adb; the phone updates in-app from the release), remote servers, signing-key replacement and billable tests need separate approval.
+- Target only the dedicated daemon (`paseodog` wrapper, dedicated `PASEO_HOME`). Direct `adb install` of a built APK to the user's own connected phone is allowed for verification. Stock Paseo/personal profiles, remote servers, signing-key replacement and billable tests need separate approval.
 - Report only results of commands actually run. Source, build, published release, installed app and running daemon are distinct states; none proves another.
 - Read `config/rules.local.md` (Git-ignored) when present. Machine-specific values (default build targets, signing-key location) live only there; NEVER put them in commits, release ZIP or notes.
 
