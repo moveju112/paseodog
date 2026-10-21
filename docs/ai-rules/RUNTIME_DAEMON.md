@@ -11,9 +11,10 @@ Build, signing and GitHub publish order: [tasks/RELEASE.md](tasks/RELEASE.md). T
 - **MUST** preserve other sessions' Git changes even while applying immediately: stage/commit only your own changes; NEVER revert or clean up others' work.
   - why: the immediacy rule removes waiting, not ownership of others' work.
   - ✅ select only your hunks with `git add -p`.
-- **MUST** treat a code-change request as including, after verification, applying to this PC's dedicated daemon and installed PC app (local build, install, reload, restart). Do not ask "apply?". Doc-only edits that change no executable code get no build/restart.
-  - why: a source edit alone does not change the running daemon or installed app.
-  - ✅ `plugin/` change → reload; shared app/desktop change → build and install the .deb.
+- **MUST** treat every code-change request as including, after verification, commit/push, the full release ([tasks/RELEASE.md](tasks/RELEASE.md)) and every needed apply on this PC (build, install, reload, restart, web-bundle patch). Do not ask "apply?", "release?" or "push?". Doc-only edits that change no executable code get commit/push only, no build/release/restart.
+  - why: explicit user instruction (2026-10-21). The phone only updates in-app from a published release, so stopping at PC apply leaves the app behind.
+  - ❌ "PC에만 적용했고, 휴대폰은 릴리즈를 따로 말해줘야 해" 하고 멈추기.
+  - ✅ `plugin/` change → reload; shared app/desktop change → release, then install the same .deb; web-bundle patch change → `node scripts/patch-<이름>.mjs` + `--check`.
 
 ## Which daemon
 
@@ -44,7 +45,7 @@ Build, signing and GitHub publish order: [tasks/RELEASE.md](tasks/RELEASE.md). T
 - **NEVER** run `scripts/install.sh` or `scripts/service.mjs --install` as a check or upgrade trial.
   - why: install rewrites the profile, re-applies patches and starts/reloads the daemon; the systemd unit is opt-in.
   - ✅ check with `paseodog doctor`; patches with `node scripts/patch-<이름>.mjs --check`.
-- **NEVER** fold phone install, remote server apply, new public listeners, signing-key replacement, or chat/account data deletion into PC-apply approval.
+- **NEVER** fold direct phone install (adb), remote server apply, new public listeners, signing-key replacement, or chat/account data deletion into PC-apply approval.
   - why: the immediate-apply scope is this PC's dedicated PaseoDog environment.
   - ✅ get separate approval stating target and impact.
 

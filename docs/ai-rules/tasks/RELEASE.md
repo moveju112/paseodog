@@ -5,9 +5,8 @@ Read Git-ignored `config/rules.local.md` for default targets (S25 arm64-v8a APK 
 
 ## Scope
 
-- Code-change request: up to local build + PC apply. No Git commit/push or GitHub publish.
-- "커밋·푸시" request: selective commit/push of your own changes + this whole release (build, sign, publish, PC apply). An explicit narrowing such as "커밋만" wins.
-- "릴리즈" request: build, sign, publish, PC apply. Do not infer a separate commit/push.
+- Every code-change request (and "커밋·푸시", "릴리즈", "적용"): selective commit/push of your own changes + this whole release (build, sign, publish) + PC apply, always, without asking. Release from the pushed commit.
+- Only an explicit narrowing such as "커밋만" or "릴리즈 제외" wins. Doc-only changes: commit/push only.
 - New branch/remote, force push, signing-key replacement need separate approval.
 
 ## A. Version

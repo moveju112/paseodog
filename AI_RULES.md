@@ -5,11 +5,11 @@ PaseoDog joins Paseo (daemon, desktop/mobile/web/SSH clients) and Mixdog (infere
 ## Core Rules
 
 - Build, deploy, release and PC apply (plugin reload, daemon restart, PC app install) proceed immediately; NEVER defer for other sessions or active turns. In Git, stage/commit only your own changes and preserve others' — [RUNTIME_DAEMON](docs/ai-rules/RUNTIME_DAEMON.md).
-- A code-change request includes, after verification, applying to this PC's dedicated daemon and installed PC app. "커밋·푸시" includes the full release; "릴리즈" does not imply commit/push — [RELEASE](docs/ai-rules/tasks/RELEASE.md).
+- Every code-change request ALWAYS includes, after verification and without asking, the full delivery: selective commit/push of your own changes, release (APK + .deb build, sign, GitHub publish), and every needed apply (plugin reload, daemon restart, web-bundle patch, PC app install). Only an explicit narrowing ("커밋만", "릴리즈 제외") wins — [RELEASE](docs/ai-rules/tasks/RELEASE.md).
 - Modify upstream code only via version + blob-hash gated `scripts/patch-*.mjs` + `patches/*.mjs`. NEVER edit `node_modules`, `~/.paseo`, `~/.mixdog` or sibling checkouts directly; NEVER add a hash bypass.
 - Change Paseo UI in shared app source (`android/packages/app/src`) AND the web-bundle patch with the same meaning; decide Android/iOS/desktop/web applicability every time — [CODING_RULES](docs/ai-rules/CODING_RULES.md).
 - Sessions default to ask mode. Keep upstream deny/block in every mode, NEVER auto-resend uncertain mutating requests, NEVER advertise unimplemented capabilities.
-- Target only the dedicated daemon (`paseodog` wrapper, dedicated `PASEO_HOME`). Stock Paseo/personal profiles, phone install, remote servers, signing-key replacement and billable tests need separate approval.
+- Target only the dedicated daemon (`paseodog` wrapper, dedicated `PASEO_HOME`). Stock Paseo/personal profiles, direct phone install (adb; the phone updates in-app from the release), remote servers, signing-key replacement and billable tests need separate approval.
 - Report only results of commands actually run. Source, build, published release, installed app and running daemon are distinct states; none proves another.
 - Read `config/rules.local.md` (Git-ignored) when present. Machine-specific values (default build targets, signing-key location) live only there; NEVER put them in commits, release ZIP or notes.
 
