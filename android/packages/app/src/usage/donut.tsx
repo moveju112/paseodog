@@ -136,6 +136,8 @@ const styles = StyleSheet.create((theme) => ({
     columnGap: theme.spacing[4],
     rowGap: 0,
     paddingVertical: 0,
+    // 사이드바 하단 행 컨테이너(footerRows)의 상하 여백을 흡수해 도넛 줄 위아래 빈 띠를 없앤다.
+    marginVertical: -theme.spacing[1.5],
     paddingHorizontal: theme.spacing[2],
     borderRadius: theme.borderRadius.lg,
   },

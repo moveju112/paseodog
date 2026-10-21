@@ -91,7 +91,7 @@ test('Android donut model matches the bundle countdown and arc math', () => {
 
 test('summary trigger draws donuts with countdowns and falls back to the bar trigger', async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-    const theme = { spacing: { 0.5: 2, 2: 8, 4: 16 }, borderRadius: { lg: 8 }, fontSize: { sm: 12, base: 14 },
+    const theme = { spacing: { 1.5: 6, 2: 8, 4: 16 }, borderRadius: { lg: 8 }, fontSize: { sm: 12, base: 14 },
         colors: { surfaceSidebarHover: 'hover', surface3: 'track', foregroundMuted: 'muted', foreground: 'text', popoverForeground: 'popover',
             statusSuccess: 'ok', statusWarning: 'warning', statusDanger: 'danger' } };
     let style = 'donut';
@@ -118,6 +118,7 @@ test('summary trigger draws donuts with countdowns and falls back to the bar tri
     assert.equal(trigger.props.style({ hovered: false }).justifyContent, 'center');
     assert.equal(trigger.props.style({ hovered: false }).columnGap, 16);
     assert.equal(trigger.props.style({ hovered: false }).paddingVertical, 0);
+    assert.equal(trigger.props.style({ hovered: false }).marginVertical, -6);
     assert.equal(tree.root.findByType('tooltip').props.delayDuration, 300);
     assert.equal(tree.root.findByType('tooltip-content').props.maxWidth, 560);
     const arcs = tree.root.findAll((node) => node.type === 'view' && Array.isArray(node.props.style) && node.props.style.length === 4);

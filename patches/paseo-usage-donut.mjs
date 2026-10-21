@@ -37,7 +37,7 @@ export function createUsageSummaryTrigger(deps) {
     const styles = StyleSheet.create((theme) => ({
         trigger: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start',
             justifyContent: 'center', columnGap: theme.spacing[4], rowGap: 0,
-            paddingVertical: 0, paddingHorizontal: theme.spacing[2],
+            paddingVertical: 0, marginVertical: -theme.spacing[1.5], paddingHorizontal: theme.spacing[2],
             borderRadius: theme.borderRadius.lg, uni__dependencies: [0] },
         triggerHovered: { backgroundColor: theme.colors.surfaceSidebarHover, uni__dependencies: [0] },
         cell: { alignItems: 'center' },
