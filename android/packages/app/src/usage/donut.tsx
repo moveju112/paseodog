@@ -13,6 +13,9 @@ import type { PinnedUsageSource, PinnedUsageWindow } from "./pinned";
 import { UsageSourceIcon } from "./source-icon";
 import type { UsageTone } from "./types";
 
+// 계정 이메일이 붙은 공급자 줄도 위젯 툴팁처럼 한 줄로 유지할 폭 (기본 280px는 줄바꿈된다)
+const TOOLTIP_MAX_WIDTH = 560;
+
 // 호 색 선택 (단계 -> 호스트 상태 색, 막대 게이지와 같은 기준)
 function arcToneStyle(tone: UsageTone) {
   switch (tone) {
@@ -116,7 +119,7 @@ export function DonutUsageTrigger({
           )),
         )}
       </TooltipTrigger>
-      <TooltipContent side="top" align="center" offset={8}>
+      <TooltipContent side="top" align="center" offset={8} maxWidth={TOOLTIP_MAX_WIDTH}>
         <Text style={styles.tooltipText}>{usageTooltipText(sources)}</Text>
       </TooltipContent>
     </Tooltip>
@@ -131,8 +134,8 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "flex-start",
     justifyContent: "center",
     columnGap: theme.spacing[4],
-    rowGap: theme.spacing[0.5],
-    paddingVertical: theme.spacing[0.5],
+    rowGap: 0,
+    paddingVertical: 0,
     paddingHorizontal: theme.spacing[2],
     borderRadius: theme.borderRadius.lg,
   },

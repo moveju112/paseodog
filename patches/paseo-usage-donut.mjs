@@ -36,8 +36,8 @@ export function createUsageSummaryTrigger(deps) {
     const arcColor = (color) => ({ borderLeftColor: color, borderBottomColor: color, uni__dependencies: [0] });
     const styles = StyleSheet.create((theme) => ({
         trigger: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start',
-            justifyContent: 'center', columnGap: theme.spacing[4], rowGap: theme.spacing[0.5],
-            paddingVertical: theme.spacing[0.5], paddingHorizontal: theme.spacing[2],
+            justifyContent: 'center', columnGap: theme.spacing[4], rowGap: 0,
+            paddingVertical: 0, paddingHorizontal: theme.spacing[2],
             borderRadius: theme.borderRadius.lg, uni__dependencies: [0] },
         triggerHovered: { backgroundColor: theme.colors.surfaceSidebarHover, uni__dependencies: [0] },
         cell: { alignItems: 'center' },
@@ -92,7 +92,7 @@ export function createUsageSummaryTrigger(deps) {
                 style: ({ hovered }) => hovered ? [styles.trigger, styles.triggerHovered] : styles.trigger,
                 children: sources.flatMap((source) => source.windows.map((window) => donut(source.icon, window, now))),
             }),
-            jsx(TooltipContent, { side: 'top', align: 'center', offset: 8,
+            jsx(TooltipContent, { side: 'top', align: 'center', offset: 8, maxWidth: 560,
                 children: jsx(Text, { style: styles.tooltipText, children: tooltipText(sources) }) }),
         ] });
     };

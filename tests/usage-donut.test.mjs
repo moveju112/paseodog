@@ -117,7 +117,9 @@ test('summary trigger draws donuts with countdowns and falls back to the bar tri
     const trigger = tree.root.findByType('tooltip-trigger');
     assert.equal(trigger.props.style({ hovered: false }).justifyContent, 'center');
     assert.equal(trigger.props.style({ hovered: false }).columnGap, 16);
+    assert.equal(trigger.props.style({ hovered: false }).paddingVertical, 0);
     assert.equal(tree.root.findByType('tooltip').props.delayDuration, 300);
+    assert.equal(tree.root.findByType('tooltip-content').props.maxWidth, 560);
     const arcs = tree.root.findAll((node) => node.type === 'view' && Array.isArray(node.props.style) && node.props.style.length === 4);
     assert.deepEqual(arcs.map((node) => [node.props.style[2].borderLeftColor, node.props.style[3].transform[0].rotate]),
         [['warning', '225deg'], ['warning', '-27deg'], ['danger', '225deg'], ['danger', '27deg']]);
