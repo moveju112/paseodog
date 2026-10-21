@@ -35,7 +35,7 @@ Scope: `plugin/`, `engine/src/`, `scripts/`, `patches/`, `tests/`. Inside `andro
 - **MUST** change Paseo UI in shared app source (`android/packages/app/src/...`) AND the web-bundle patch (`patches/paseo-<기능>.mjs`) with the same meaning, and check both sides match with a root test.
   - why: APK/.deb ship from source, the pinned web bundle ships via the patch; changing one side makes platforms diverge.
   - ✅ `evidence: tests/usage-donut.test.mjs:34` — runs `donut-model.ts` with types stripped and compares it to the patch output.
-- **MUST** for every UI/behavior change, decide Android/iOS/desktop/web applicability and apply common semantics to every applicable platform through shared source. Report platform-exception reasons.
+- **MUST** for every UI/behavior change, decide Android/desktop/web applicability and apply common semantics to every applicable platform through shared source. Report platform-exception reasons.
   - why: one shared source builds into several clients.
   - ✅ `evidence: android/packages/app/plugins/with-android-architectures.js:7` — platform-only differences are isolated in branches/plugins.
 

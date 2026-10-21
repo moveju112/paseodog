@@ -18,12 +18,9 @@ Build, signing and GitHub publish order: [tasks/RELEASE.md](tasks/RELEASE.md). T
 
 ## Which daemon
 
-- **MUST** do PaseoDog work only on the dedicated daemon, started only via the `paseodog` wrapper (`paseodog start`, or `paseodog serve` under systemd).
+- **MUST** do PaseoDog work only on the dedicated daemon, started only via the `paseodog` wrapper (`paseodog start`).
   - why: the wrapper injects the dedicated `PASEO_HOME`/`MIXDOG_HOME`; plain `paseo` falls back to `~/.paseo`.
   - ✅ `evidence: scripts/paths.mjs:28` — `runtimeEnv()` sets `PASEO_HOME: paseoHome`.
-- **NEVER** run `paseodog start` (managed) and `paseodog.service` (`serve`) on the same home at once.
-  - why: two supervisors compete for the port and session journal locks.
-  - ✅ `evidence: scripts/service.mjs:11` — tells you to `paseodog daemon stop` before switching to the service.
 - **NEVER** reload or modify stock Paseo (`~/.paseo`, 6767) or personal profiles (`~/.mixdog`) as an apply target.
   - why: PaseoDog does not own them.
   - ✅ report an unexpected registration; do not touch it.
@@ -40,12 +37,12 @@ Build, signing and GitHub publish order: [tasks/RELEASE.md](tasks/RELEASE.md). T
     ```
 - **MUST** apply shared app/desktop changes to the real install /opt/PaseoDog: install the verified locally built .deb with `sudo dpkg -i` and relaunch the app.
   - why: source, build, published release, installed app and running app are separate states.
-  - ❌ hand-editing the installed `app.asar`. `paseodog desktop-update --apply` (asar overwrite) is the legacy path for pre-11032 installs only. `evidence: bin/paseodog.mjs:44`
+  - ❌ hand-editing the installed `app.asar`.
   - ✅ after install, confirm `dpkg -s paseodog` reports the built version.
-- **NEVER** run `scripts/install.sh` or `scripts/service.mjs --install` as a check or upgrade trial.
-  - why: install rewrites the profile, re-applies patches and starts/reloads the daemon; the systemd unit is opt-in.
+- **NEVER** run `scripts/install.sh` as a check or upgrade trial.
+  - why: install rewrites the profile, re-applies patches and starts/reloads the daemon.
   - ✅ check with `paseodog doctor`; patches with `node scripts/patch-<이름>.mjs --check`.
-- **NEVER** fold remote server apply, new public listeners, signing-key replacement, or chat/account data deletion into PC-apply approval.
+- **NEVER** fold new public listeners, signing-key replacement, or chat/account data deletion into PC-apply approval.
   - why: the immediate-apply scope is this PC's dedicated PaseoDog environment.
   - ✅ get separate approval stating target and impact.
 
