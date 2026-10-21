@@ -7,6 +7,7 @@ const withAndroidApkSplits = require("./plugins/with-android-apk-splits");
 const withAndroidArchitectures = require("./plugins/with-android-architectures");
 const withFdroidAutolinking = require("./plugins/with-fdroid-autolinking");
 const withPasteInput = require("./plugins/with-paste-input");
+const withAndroidActivityResultRelaunch = require("./plugins/with-android-activity-result-relaunch");
 const withAndroidScroll = require("./modules/paseo-scroll/app.plugin");
 const { getNativeReleaseVersion } = require("./native-release-version");
 const appVariant = process.env.APP_VARIANT ?? "production";
@@ -131,7 +132,7 @@ export default {
       usesCleartextTraffic: true,
       permissions: buildProfile.androidPermissions,
       package: variant.packageId,
-      versionCode: nativeReleaseVersion.androidVersionCode + 38,
+      versionCode: nativeReleaseVersion.androidVersionCode + 39,
       ...(variant.googleServicesFile ? { googleServicesFile: variant.googleServicesFile } : {}),
     },
     web: {
@@ -146,6 +147,7 @@ export default {
       withPasteInput,
       withAndroidApkSplits,
       withAndroidArchitectures,
+      withAndroidActivityResultRelaunch,
       withAndroidScroll,
       [withAndroidAsyncStorageSize, 64],
       ...buildProfile.cameraPlugins,
