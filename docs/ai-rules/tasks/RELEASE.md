@@ -21,11 +21,11 @@ Read Git-ignored `config/rules.local.md` for default targets (S25 arm64-v8a APK 
 ## B. Build (resource limits)
 
 4. Temp workspace: `mktemp -d /data/tmp/ubuntu/paseodog-release-XXXXXX` (systemd-tmpfiles 3-day TTL). NEVER accumulate artifacts inside the project (deliverables/ etc.).
-5. Build inside `systemd-run --user --scope -p MemoryHigh=8G -p MemorySwapMax=2G`, explicitly limiting Gradle/Metro parallelism to 1. NEVER run Android and Linux builds concurrently in the same checkout (run sequentially).
-6. APK: in `android/packages/app/android/`, with the signing init script, `./gradlew assembleRelease --max-workers=1 -Porg.gradle.parallel=false`. Confirm `reactNativeArchitectures=arm64-v8a` in `gradle.properties`.
+5. Build inside `systemd-run --user --scope -p MemoryHigh=12G -p MemorySwapMax=2G` with default Gradle/Metro worker counts. NEVER run Android and Linux builds concurrently in the same checkout (run sequentially).
+6. APK: run `CI=1 APP_VARIANT=production npx expo prebuild --platform android --no-install` in `android/packages/app` ONLY when `app.config.js`, `plugins/`, `modules/*/app.plugin*` or native dependencies changed (prebuild invalidates native build caches); otherwise reuse the generated project. Then in `android/packages/app/android/`, with the signing init script, `./gradlew assembleRelease`. Confirm `reactNativeArchitectures=arm64-v8a` in `gradle.properties`.
    `evidence: android/packages/app/plugins/with-android-architectures.js:5`
 7. Confirm the signing key file matches the init script's `signingConfigs.debug.storeFile`. If the key is missing, stop and report; NEVER create a new key. Per APK: `zipalign`, `apksigner verify`, package ID, version, ABI.
-8. .deb: in `android/`, the `npm run build:desktop` order (`build:desktop-deps` → `expo export --platform web` → `build:package`), version `-c.extraMetadata.version=<제품 버전>.<versionCode>`.
+8. .deb: in `android/`, `npm run build:desktop -- --linux deb -c.extraMetadata.version=<제품 버전>.<versionCode>` (`build:desktop-deps` → `expo export --platform web` → `build:package`; `--linux deb` skips unused AppImage/tar.gz). If the change touches only Android-native files (`android/packages/app/plugins/`, `modules/*/android/`, Android-only config), skip the Linux build and re-upload the previous latest release's `.deb` + `latest-linux.yml` unchanged after verifying their SHA-256 against its `SHA256SUMS`.
    `evidence: android/package.json:96`
 9. If source changes after a build, rebuild only affected artifacts. NEVER rename an old file and call it a new build.
 

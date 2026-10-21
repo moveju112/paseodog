@@ -17,13 +17,28 @@ function setReactNativeArchitectures(properties) {
   return properties;
 }
 
-// prebuild 시 gradle.properties에 기본 ABI 적용
+// Gradle 로컬 빌드 캐시 활성화 (prebuild 뒤 재컴파일 결과 재사용)
+function setGradleBuildCache(properties) {
+  const existingProperty = properties.find(
+    (property) => property.type === "property" && property.key === "org.gradle.caching",
+  );
+  if (existingProperty) {
+    existingProperty.value = "true";
+    return properties;
+  }
+  properties.push({ type: "property", key: "org.gradle.caching", value: "true" });
+  return properties;
+}
+
+// prebuild 시 gradle.properties에 기본 ABI·빌드 캐시 적용
 function withAndroidArchitectures(config) {
   return withGradleProperties(config, (modConfig) => {
     setReactNativeArchitectures(modConfig.modResults);
+    setGradleBuildCache(modConfig.modResults);
     return modConfig;
   });
 }
 
 module.exports = withAndroidArchitectures;
 module.exports.setReactNativeArchitectures = setReactNativeArchitectures;
+module.exports.setGradleBuildCache = setGradleBuildCache;
