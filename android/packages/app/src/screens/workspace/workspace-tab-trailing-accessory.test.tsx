@@ -167,14 +167,16 @@ function renderAccessory(
   tab: WorkspaceTabDescriptor,
   onRenameTab: (tab: WorkspaceTabDescriptor) => void,
   options: {
+    index?: number;
     onCloseTab?: (tabId: string) => void;
+    onRowPress?: () => void;
   } = {},
 ): { base: string; unmount: () => void } {
   const base = `workspace-tab-menu-${tab.tabId}`;
   const menuEntries = buildWorkspaceTabMenuEntries({
     surface: "mobile",
     tab,
-    index: 0,
+    index: options.index ?? 0,
     tabCount: 2,
     menuTestIDBase: base,
     onCopyResumeCommand: vi.fn(),
@@ -192,12 +194,15 @@ function renderAccessory(
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  // 행 선택 핸들러를 부모 클릭으로 흉내 내 닫기 버튼의 전파 차단을 검증
   const element: ReactElement = (
-    <MobileTabTrailingAccessory
-      menuTestIDBase={base}
-      presentationLabel="My session"
-      menuEntries={menuEntries}
-    />
+    <div data-testid="row" onClick={options.onRowPress}>
+      <MobileTabTrailingAccessory
+        menuTestIDBase={base}
+        presentationLabel="My session"
+        menuEntries={menuEntries}
+      />
+    </div>
   );
   act(() => {
     root.render(element);
@@ -292,21 +297,46 @@ describe("MobileTabTrailingAccessory", () => {
     expect(onRenameTab).toHaveBeenCalledWith(terminalTab());
   });
 
-  // 탭 전환 행에는 직접 닫기(X) 버튼이 없고, 닫기는 "…" 메뉴 항목으로만 한다.
   it.each([
-    { name: "agent", tab: agentTab(), tabId: "agent_123" },
-    { name: "terminal", tab: terminalTab(), tabId: "terminal_abc" },
-  ])("closes a $name row only through the actions menu", ({ tab, tabId }) => {
+    { name: "first row", index: 0 },
+    { name: "second row", index: 1 },
+  ])(
+    "closes the $name directly with the menu's close action without selecting the row",
+    ({ index }) => {
+      const onCloseTab = vi.fn();
+      const onRowPress = vi.fn();
+      const rendered = renderAccessory(agentTab(), vi.fn(), { index, onCloseTab, onRowPress });
+      current = rendered;
+
+      const closeButton = document.querySelector(
+        `[data-testid="${rendered.base}-close-button"]`,
+      ) as HTMLElement | null;
+      expect(closeButton).not.toBeNull();
+      expect(closeButton?.getAttribute("aria-label")).toBe("Close My session");
+      // 기타 동작용 "…" 트리거와 메뉴 안 닫기 항목은 그대로 유지
+      expect(document.querySelector(`[data-testid="${rendered.base}-trigger"]`)).not.toBeNull();
+      expect(document.querySelector(`[data-testid="${rendered.base}-close"]`)).not.toBeNull();
+
+      fireEvent.click(closeButton as HTMLElement);
+
+      expect(onCloseTab).toHaveBeenCalledTimes(1);
+      expect(onCloseTab).toHaveBeenCalledWith("agent_123");
+      expect(onRowPress).not.toHaveBeenCalled();
+    },
+  );
+
+  it("routes the direct close and the menu close through the same handler", () => {
     const onCloseTab = vi.fn();
-    const rendered = renderAccessory(tab, vi.fn(), { onCloseTab });
+    const rendered = renderAccessory(terminalTab(), vi.fn(), { onCloseTab });
     current = rendered;
 
-    expect(document.querySelector(`[data-testid="${rendered.base}-close-button"]`)).toBeNull();
-    expect(document.querySelector(`[data-testid="${rendered.base}-trigger"]`)).not.toBeNull();
+    fireEvent.click(
+      document.querySelector(`[data-testid="${rendered.base}-close-button"]`) as HTMLElement,
+    );
     fireEvent.click(
       document.querySelector(`[data-testid="${rendered.base}-close"]`) as HTMLElement,
     );
 
-    expect(onCloseTab.mock.calls).toEqual([[tabId]]);
+    expect(onCloseTab.mock.calls).toEqual([["terminal_abc"], ["terminal_abc"]]);
   });
 });
