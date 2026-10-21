@@ -41,3 +41,18 @@ test('legacy user boundaries and empty responses do not leak progress or blank r
     assert.deepEqual(answerOnlyRows(tail, [], false).tail.map((item) => item.id), ['q1', 'a1', 'q2']);
     assert.deepEqual(answerOnlyRows([], [], true), { tail: [], head: [] });
 });
+
+// 불러온 꼬리 범위가 모두 숨겨지면 완료된 턴의 마지막 답변 묶음만 남기고, 진행 중 턴은 계속 숨긴다.
+test('fully hidden loaded windows keep the last completed answer block instead of an empty chat', () => {
+    const tail = [
+        { kind: 'tool_call', id: 'tool1', turnId: 't1' },
+        { kind: 'assistant_message', id: 'b:0', blockGroupId: 'b', turnId: 't1', text: 'part one' },
+        { kind: 'assistant_message', id: 'b:1', blockGroupId: 'b', turnId: 't1', text: 'part two' },
+        { kind: 'assistant_message', id: 'blank', turnId: 't1', text: ' ' },
+        { kind: 'tool_call', id: 'tool2', turnId: 't1' },
+    ];
+    assert.deepEqual(answerOnlyRows(tail, [], false).tail.map((item) => item.id), ['b:0', 'b:1']);
+    assert.deepEqual(answerOnlyRows(tail.slice(0, 2), tail.slice(2), false).head.map((item) => item.id), ['b:1']);
+    assert.deepEqual(answerOnlyRows(tail, [], true), { tail: [], head: [] });
+    assert.deepEqual(answerOnlyRows([tail[0]], [], false), { tail: [], head: [] });
+});

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
+import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
@@ -74,13 +74,16 @@ export const SidebarRecentSessions = memo(function SidebarRecentSessions({
       {sessions.length === 0 ? (
         <Text style={styles.empty}>{t("sidebar.recentSessions.empty")}</Text>
       ) : (
-        sessions.map((agent) => (
-          <RecentSessionRow
-            key={`${agent.serverId}:${agent.id}`}
-            agent={agent}
-            onBeforeNavigate={onBeforeNavigate}
-          />
-        ))
+        // 고정 하단 영역이라 행이 많으면 이 목록만 스크롤해 작업공간 목록 높이를 지킨다.
+        <ScrollView style={styles.rows} testID="sidebar-recent-sessions-rows">
+          {sessions.map((agent) => (
+            <RecentSessionRow
+              key={`${agent.serverId}:${agent.id}`}
+              agent={agent}
+              onBeforeNavigate={onBeforeNavigate}
+            />
+          ))}
+        </ScrollView>
       )}
     </View>
   );
@@ -230,6 +233,11 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     paddingHorizontal: theme.spacing[2],
     paddingVertical: theme.spacing[1],
+  },
+  // 행 높이 30 기준 약 6행
+  rows: {
+    flexGrow: 0,
+    maxHeight: 186,
   },
   row: {
     flexDirection: "row",

@@ -627,7 +627,6 @@ export const en = {
       },
       menu: {
         openFor: "Open menu for {{label}}",
-        closeFor: "Close {{label}}",
         copyResumeCommand: "Copy resume command",
         copyAgentId: "Copy agent id",
         copyTerminalId: "Copy terminal id",

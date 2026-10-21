@@ -37,12 +37,34 @@ function answerOnlyRows(tail: StreamItem[], head: StreamItem[], isTurnActive: bo
   const visible = (item: StreamItem) => {
     if (item.kind === "assistant_message") {
       const key = groups.get(item)!;
-      return key !== active && answers.get(key) === (item.blockGroupId ?? item.id) && item.text.trim() !== "";
+      return (
+        key !== active &&
+        answers.get(key) === (item.blockGroupId ?? item.id) &&
+        item.text.trim() !== ""
+      );
     }
-    return item.kind === "user_message" || item.kind === "plugin" ||
-      (item.kind === "notification" && item.level !== "info");
+    return (
+      item.kind === "user_message" ||
+      item.kind === "plugin" ||
+      (item.kind === "notification" && item.level !== "info")
+    );
   };
-  return { tail: tail.filter(visible), head: head.filter(visible) };
+  const shown = { tail: tail.filter(visible), head: head.filter(visible) };
+  if (shown.tail.length || shown.head.length) return shown;
+  // 불러온 범위가 모두 숨겨지면 완료된 턴의 마지막 답변 묶음만 남겨 빈 대화로 보이지 않게 한다.
+  let last: StreamItem | null = null;
+  for (let index = items.length - 1; index >= 0 && !last; index--) {
+    const item = items[index]!;
+    if (item.kind === "assistant_message" && groups.get(item) !== active && item.text.trim() !== "")
+      last = item;
+  }
+  if (!last || last.kind !== "assistant_message") return shown;
+  const lastId = last.blockGroupId ?? last.id;
+  const kept = (item: StreamItem) =>
+    item.kind === "assistant_message" &&
+    (item.blockGroupId ?? item.id) === lastId &&
+    item.text.trim() !== "";
+  return { tail: tail.filter(kept), head: head.filter(kept) };
 }
 
 function retainItems(previous: StreamItem[], next: StreamItem[]): StreamItem[] {

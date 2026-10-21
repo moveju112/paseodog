@@ -433,6 +433,7 @@ function SidebarFooter({
   return (
     <UsageSidebarRoot>
       <View style={styles.footerContainer} testID="sidebar-footer">
+        <SidebarRecentSessions onBeforeNavigate={onBeforeNavigate} />
         <SidebarFooterRows onBeforeNavigate={onBeforeNavigate} />
         <View style={styles.sidebarFooter} testID="sidebar-footer-bottom-line">
           <FooterIconButton
@@ -577,16 +578,6 @@ function MobileSidebar({
   const handleWorkspacePress = useCallback(() => {
     closeSidebar();
   }, [closeSidebar]);
-  // 모바일은 최근 세션 이동 전에 사이드바를 닫는다.
-  const mobileListHeader = useMemo(
-    () => (
-      <>
-        <SidebarRecentSessions onBeforeNavigate={closeSidebar} />
-        {workspacesSectionHeaderElement}
-      </>
-    ),
-    [closeSidebar],
-  );
 
   const mobileSidebarInsetStyle = useMemo(
     () => ({
@@ -652,7 +643,7 @@ function MobileSidebar({
             onImportSession={handleImportSession}
             parentGestureRef={closeGestureRef}
             dragGestureHostActive={active}
-            listHeaderComponent={mobileListHeader}
+            listHeaderComponent={workspacesSectionHeaderElement}
           />
         )}
 
@@ -827,7 +818,7 @@ function DesktopSidebar({
             onRefresh={handleRefresh}
             onAddProject={handleOpenProject}
             onImportSession={handleImportSession}
-            listHeaderComponent={desktopListHeaderElement}
+            listHeaderComponent={workspacesSectionHeaderElement}
           />
         )}
 
@@ -876,13 +867,6 @@ function WorkspacesSectionHeader() {
 // Stable element so the sidebar list's listHeaderComponent prop keeps identity across
 // renders (WorkspacesSectionHeader takes no props).
 const workspacesSectionHeaderElement = <WorkspacesSectionHeader />;
-// 데스크톱 목록 머리: 최근 세션 섹션 다음에 작업공간 머리를 둔다.
-const desktopListHeaderElement = (
-  <>
-    <SidebarRecentSessions />
-    {workspacesSectionHeaderElement}
-  </>
-);
 
 // Static styles for Animated.Views — must NOT use Unistyles dynamic theme to
 // avoid the "Unable to find node on an unmounted component" crash when Unistyles

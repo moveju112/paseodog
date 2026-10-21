@@ -11,7 +11,7 @@
 
 ## 변경 소스와 빌드 입력
 
-- 원본 작업 폴더와 다른 사람의 변경을 보존한다. 임시 빌드 공간은 `mktemp` 등으로 고유하게 만들고, 임시 스크립트·로그는 `/tmp`에 둔다.
+- 원본 작업 폴더와 다른 사람의 변경을 보존한다. 임시 빌드 공간·스크립트·로그는 `mktemp -d /data/tmp/ubuntu/<작업>-XXXXXX`로 고유하게 만든다(systemd-tmpfiles 3일 TTL). 서명 키·init script처럼 다음 배포에 다시 필요한 입력은 이 TTL 폴더에 두지 않는다.
 - `deliverables/` 등 프로젝트 안에 APK·설치 파일·배포 압축본·버전별 서명 산출물을 누적 보관하지 않는다. 새 산출물은 고유 임시 작업 공간에 만들고, 게시 파일의 원격 바이트·해시 검증과 적용 검증이 끝나면 이번 작업에서 만든 불필요한 임시 산출물을 정리한다. 사용자가 요청한 보관본·복구 백업·미게시 산출물은 별도 승인 없이 삭제하지 않는다. 기존 `deliverables/` 내용도 삭제 승인 전에는 보존한다.
 - 기존 빌드 공간을 재사용할 때는 변경 파일의 복사 여부가 아니라 **최종 빌드 입력과 현재 소스의 바이트 일치**를 확인한다. Metro 설정·생성된 네이티브 파일처럼 의도적인 차이는 항목별로 구분한다.
 - 같은 작업 트리·Metro 산출물을 사용하는 Linux·Android 빌드는 동시에 실행하지 않는다. 동시에 실행하는 빌드는 캐시·산출물 충돌을 막되, 매 빌드마다 빈 캐시를 만드는 방식으로 격리하지 않는다.
@@ -43,12 +43,21 @@
 - 기기별 APK를 제공하고, 업데이터가 ABI에 맞는 파일을 선택하는지 확인한다. Galaxy S25는 `arm64-v8a`다. 통합 APK는 필요한 구버전 호환 경로로만 취급한다.
 - APK별로 패키지 ID·버전·ABI, `zipalign`, `apksigner` 검증을 수행한다. 기존 설치본과 인증서가 일치하지 않으면 덮어쓰기 가능한 업데이트라고 말하지 않는다.
 - 기존 키를 찾지 못했다고 임의의 새 키로 서명하지 않는다. 비밀번호·개인키는 출력하거나 배포하지 않는다.
+- Android 릴리스 서명 키는 `/data/backups/paseodog-signing-20261021-0Bq8ow/debug.keystore`(인증서 SHA-256 `FA:C6:17:45:…:91:03:3B:9C`)만 쓴다. init script의 `signingConfigs.debug.storeFile`이 이 경로를 가리키는지 빌드 전에 확인한다. 이 키가 없으면 빌드를 멈추고 보고한다.
 - 공개 디버그 키를 사용한 호환 빌드는 그 사실과 보안 한계를 명시한다. 정식 배포용 보안 서명으로 표현하지 않는다. 키 교체·이전은 별도 승인 대상이다.
 - 다운로드 크기는 실제 파일 바이트에서 얻는다. Linux 코드서명이 없으면 체크섬을 코드서명처럼 설명하지 않는다.
 - `scripts/package.py`는 `MANIFEST.sha256`에 열거된 경로만 포장한다. 새 필수 모듈·패치·실행 스크립트를 추가하면 허용 목록과 누락 회귀 테스트도 갱신한다.
 - ZIP의 필수 import 대상 존재, 소스 바이트·내부 체크섬·CRC를 검증한다. `node_modules`, 사용자 상태, 인증정보, `.local.` 파일, 임시 빌드 산출물을 포함하지 않는다.
 - 통합 ZIP의 대상 범위를 명시한다. 서버 통합 소스만 들어 있는 ZIP을 Android·PC 전체 재현 소스라고 부르지 않는다.
 - 업데이트 JSON의 버전·태그·URL·ABI·바이트·SHA-256을 실제 파일과 대조하고, `SHA256SUMS`도 검증한다.
+
+## Linux 데스크톱 앱 (앱 내 업데이트)
+
+- PC 앱은 `android/` 소스로 빌드한 `.deb`를 GitHub 릴리스로 배포하고, 설정 화면의 업데이트(electron-updater, `moveju112/paseodog`의 `releases/latest`)로 설치한다. 설치본에 패치를 덮어쓰는 `paseodog desktop-update --apply`는 이 방식으로 옮기기 전 설치본에만 쓰는 이전 경로다.
+- 빌드 순서는 `build:desktop`과 같다: `build:app-deps:clean` → `PASEO_WEB_PLATFORM=electron expo export --platform web` → `build:server:clean` → desktop `build:main` → `electron-builder --linux deb --publish never -c.extraMetadata.version=<버전>`. 빌드 scope 자원 제한은 Android와 같다.
+- 데스크톱 버전은 `<package.json version>.<Android versionCode>` 형식이다(예: `1.0.0-rc.7.11032`). 업데이터는 semver 크기만 비교하므로 배포할 때마다 versionCode가 커져야 하고, 같은 버전을 다시 쓰지 않는다.
+- 업데이터는 최신 릴리스 하나만 보기 때문에, Android와 PC를 함께 배포할 때는 한 릴리스에 APK·`paseodog-android-update.json`·`.deb`·`latest-linux.yml`·`SHA256SUMS`를 모두 올린다. Android만 배포하는 릴리스가 최신이 되면 PC 업데이트 확인에서 새 버전이 보이지 않는다.
+- `latest-linux.yml`의 `version`·`path`·`sha512`·`size`를 실제 `.deb`와 대조한다. 기존 설치본의 업데이트 확인이 막혀 있으면 첫 설치만 `sudo dpkg -i`로 하고, 그 뒤부터는 설정에서 업데이트한다.
 
 ## 게시와 실행 환경 적용
 

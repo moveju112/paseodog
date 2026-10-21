@@ -1,6 +1,6 @@
-import { useCallback, useMemo, type ReactElement } from "react";
+import { useMemo, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   ArrowLeftToLine,
@@ -38,62 +38,6 @@ function mobileTabMenuTriggerStyle({ open, pressed }: { open?: boolean; pressed?
     styles.mobileTabMenuTrigger,
     (Boolean(open) || Boolean(pressed)) && styles.mobileTabMenuTriggerActive,
   ];
-}
-
-// 메뉴 버튼과 터치 영역이 겹치지 않도록 오른쪽은 확장하지 않음
-const MOBILE_TAB_CLOSE_HIT_SLOP = { top: 6, bottom: 6, left: 6, right: 0 };
-
-// 닫기 버튼 스타일 (눌림 → 강조 배경)
-function mobileTabCloseButtonStyle({ pressed }: { pressed?: boolean }) {
-  return [styles.mobileTabCloseButton, Boolean(pressed) && styles.mobileTabMenuTriggerActive];
-}
-
-type WorkspaceTabMenuItemEntry = Extract<WorkspaceTabMenuEntry, { kind: "item" }>;
-
-// 메뉴의 "닫기" 항목 찾기 (행 직접 닫기 버튼이 같은 동작을 재사용)
-function findCloseMenuEntry(
-  menuEntries: WorkspaceTabMenuEntry[],
-): WorkspaceTabMenuItemEntry | null {
-  for (const entry of menuEntries) {
-    if (entry.kind === "item" && entry.key === "close") {
-      return entry;
-    }
-  }
-  return null;
-}
-
-// 행 직접 닫기 버튼 (탭 → 메뉴 닫기 항목 onSelect, 행 선택 전파 차단)
-function MobileTabCloseButton({
-  testID,
-  presentationLabel,
-  closeEntry,
-}: {
-  testID: string;
-  presentationLabel: string;
-  closeEntry: WorkspaceTabMenuItemEntry;
-}): ReactElement {
-  const { t } = useTranslation();
-  const { onSelect } = closeEntry;
-  const handlePress = useCallback(
-    (event: { stopPropagation?: () => void }) => {
-      event.stopPropagation?.();
-      onSelect();
-    },
-    [onSelect],
-  );
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={t("workspace.tabs.menu.closeFor", { label: presentationLabel })}
-      disabled={closeEntry.disabled}
-      hitSlop={MOBILE_TAB_CLOSE_HIT_SLOP}
-      onPress={handlePress}
-      style={mobileTabCloseButtonStyle}
-    >
-      <ThemedX size={16} uniProps={mutedColorMapping} />
-    </Pressable>
-  );
 }
 
 function MobileTabDropdownMenuItem({
@@ -140,7 +84,7 @@ function MobileTabDropdownMenuItem({
   );
 }
 
-// 탭 전환 행 우측 동작 (직접 닫기 버튼 + "…" 기타 동작 메뉴)
+// 탭 전환 행 우측 동작 ("…" 기타 동작 메뉴, 닫기는 메뉴 항목으로만)
 export function MobileTabTrailingAccessory({
   menuTestIDBase,
   presentationLabel,
@@ -151,16 +95,8 @@ export function MobileTabTrailingAccessory({
   menuEntries: WorkspaceTabMenuEntry[];
 }): ReactElement {
   const { t } = useTranslation();
-  const closeEntry = useMemo(() => findCloseMenuEntry(menuEntries), [menuEntries]);
   return (
     <View style={styles.mobileTabTrailingActions}>
-      {closeEntry ? (
-        <MobileTabCloseButton
-          testID={`${menuTestIDBase}-close-button`}
-          presentationLabel={presentationLabel}
-          closeEntry={closeEntry}
-        />
-      ) : null}
       <MobileTabActionsMenu
         menuTestIDBase={menuTestIDBase}
         presentationLabel={presentationLabel}
@@ -228,13 +164,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   mobileTabMenuTriggerActive: {
     backgroundColor: theme.colors.surface2,
-  },
-  mobileTabCloseButton: {
-    width: 32,
-    height: 32,
-    borderRadius: theme.borderRadius.md,
-    alignItems: "center",
-    justifyContent: "center",
   },
   menuItemHint: {
     color: theme.colors.foregroundMuted,

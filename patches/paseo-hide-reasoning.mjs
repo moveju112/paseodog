@@ -1,7 +1,7 @@
 // 로컬 패치: "추론 숨기기"를 켜면 표시 단계에서 완료된 최종 답변만 남긴다.
 // 모델 추론·네이티브 기록·스트림 원본·승인·오류·플러그인 행은 유지한다.
 // 공유 앱 원본(android/packages/app/src)의 같은 설정·표시 투영과 같은 의미다.
-import { answerOnlyRows } from './answer-only.mjs';
+import { answerOnlyRows, withCurrentAnswerOnly } from './answer-only.mjs';
 
 // 번들 문자열 리터럴과 같은 방식(0x7f 이상은 \xNN 또는 \uXXXX)으로 이스케이프한다.
 function escapeBundleText(text) {
@@ -95,6 +95,7 @@ function occurrences(source, text) {
 
 // 패치 지점이 모두 하나씩 있을 때만 원래 앵커로 되돌려 원본 해시 검증을 유지한다(중복·일부 적용은 실패).
 export function withoutHideReasoning(source) {
+    source = withCurrentAnswerOnly(source);
     const previousCounts = PREVIOUS_EDITS.map(([before]) => occurrences(source, before));
     if (previousCounts.some((count) => count > 1)) throw new Error('Paseo hide reasoning patch drift');
     if (previousCounts.some(Boolean)) {

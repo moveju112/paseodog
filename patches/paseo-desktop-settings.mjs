@@ -1,6 +1,6 @@
 // 로컬 패치: 설치된 PaseoDog 데스크톱 번들의 검토된 표시·메뉴 지점만 수정한다.
 import { gitBlob } from '../scripts/patch-mixdog.mjs';
-import { answerOnlyRows } from './answer-only.mjs';
+import { answerOnlyRows, withCurrentAnswerOnly } from './answer-only.mjs';
 import { HIDE_REASONING_RESOURCE_UPDATES } from './paseo-hide-reasoning.mjs';
 
 const edits = [
@@ -14,6 +14,7 @@ const edits = [
 
 // 원본·기적용 출력 확인 (검토한 전체 blob에만 동일한 표시 변경 적용)
 export function patchedDesktopSettings(source) {
+    source = withCurrentAnswerOnly(source);
     const original = edits.reduce((text, [before, after]) => text.replace(after, () => before), source);
     if (gitBlob(original) !== '4c53bd249bb6ac1cc3ebdf0a32a55bf9aaa7ed35')
         throw new Error('Desktop settings source hash mismatch');
