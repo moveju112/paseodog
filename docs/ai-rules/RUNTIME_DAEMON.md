@@ -2,20 +2,6 @@
 
 Build, signing and GitHub publish order: [tasks/RELEASE.md](tasks/RELEASE.md). This file: which daemon to use, and when/how source changes reach the running daemon and the installed PC app.
 
-## Immediate apply
-
-- **MUST** run build, deploy, release and PC apply (plugin reload, daemon restart, PC app install/update) immediately, regardless of other sessions, active turns or other agents' work; NEVER defer.
-  - why: explicit user instruction (2026-10-21). Do not hold, schedule or hand off to a final owner to protect active sessions.
-  - ❌ reporting "reload deferred to a safe point because another session is running" and stopping.
-  - ✅ after verification run `paseodog plugin reload paseodog-provider` or `paseodog daemon restart` right away; list any interrupted sessions in the result report.
-- **MUST** preserve other sessions' Git changes even while applying immediately: stage/commit only your own changes; NEVER revert or clean up others' work.
-  - why: the immediacy rule removes waiting, not ownership of others' work.
-  - ✅ select only your hunks with `git add -p`.
-- **MUST** treat every code-change request as including, after verification, commit/push, the full release ([tasks/RELEASE.md](tasks/RELEASE.md)) and every needed apply on this PC (build, install, reload, restart, web-bundle patch). Do not ask "apply?", "release?" or "push?". Doc-only edits that change no executable code get commit/push only, no build/release/restart.
-  - why: explicit user instruction (2026-10-21). The phone only updates in-app from a published release, so stopping at PC apply leaves the app behind.
-  - ❌ "PC에만 적용했고, 휴대폰은 릴리즈를 따로 말해줘야 해" 하고 멈추기.
-  - ✅ `plugin/` change → reload; shared app/desktop change → release, then install the same .deb; web-bundle patch change → `node scripts/patch-<이름>.mjs` + `--check`.
-
 ## Which daemon
 
 - **MUST** do PaseoDog work only on the dedicated daemon, started only via the `paseodog` wrapper (`paseodog start`).
@@ -42,7 +28,7 @@ Build, signing and GitHub publish order: [tasks/RELEASE.md](tasks/RELEASE.md). T
 - **NEVER** run `scripts/install.sh` as a check or upgrade trial.
   - why: install rewrites the profile, re-applies patches and starts/reloads the daemon.
   - ✅ check with `paseodog doctor`; patches with `node scripts/patch-<이름>.mjs --check`.
-- **NEVER** fold new public listeners, signing-key replacement, or chat/account data deletion into PC-apply approval.
+- **NEVER** fold new public listeners or chat/account data deletion into PC-apply approval.
   - why: the immediate-apply scope is this PC's dedicated PaseoDog environment.
   - ✅ get separate approval stating target and impact.
 
