@@ -38,7 +38,7 @@ Each entry: verbatim symptom (grep it) → cause → fix.
   - **Cause:** a path in `MANIFEST.sha256` is missing from the working tree (including deleted/moved docs). `evidence: scripts/package.py:59`
   - **Fix:** restore the file, or remove its line from `MANIFEST.sha256` and keep the `tests/package.test.mjs` required list in sync.
 - **Symptom:** a new module works in dev but import fails in the release ZIP.
-  - **Cause:** not added to `MANIFEST.sha256` (and `ROOT_FILES` for `android/` files), so the ZIP dropped it. `evidence: scripts/package.py:44`
+  - **Cause:** not added to `MANIFEST.sha256`, so the ZIP dropped it. `evidence: scripts/package.py:35`
   - **Fix:** add it and confirm the package test via `npm test`.
 - **Symptom:** PC app Settings update check shows no new version.
   - **Cause:** latest release lacks .deb/`latest-linux.yml` (Android-only publish) or the desktop version is not higher. The updater reads only `releases/latest`.

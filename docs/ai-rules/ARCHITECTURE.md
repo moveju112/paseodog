@@ -20,7 +20,7 @@ PaseoDog = Paseo (daemon, desktop/mobile/web/SSH clients) + Mixdog (inference, n
 
 - Product version: `package.json` `version` = `plugin/shared/release.json`. `evidence: tests/version.test.mjs:9`
 - Base versions: `package.json` `paseodogUpstream` (Paseo, Mixdog). Pinned in three places — `engine` (`mixdog`), `tools` (`@getpaseo/cli`), `plugin` (`@getpaseo/plugin`) — plus `scripts/patch-mixdog.mjs` `PIN`. `evidence: scripts/check-upstream.mjs:10`
-- Android `versionCode` = `androidVersionCode` (derived from the Paseo base version) + release offset `+N`. `evidence: android/packages/app/app.config.js:134`
+- Android `versionCode`: release builds pass `-PpaseodogVersionCode=<vc>` (latest release + 1); without it the prebuild fallback is `androidVersionCode` (derived from the Paseo base version) + offset in `app.config.js`. `evidence: android/packages/app/plugins/with-android-version-code.js:16`
 - Desktop version = `<제품 버전>.<versionCode>` (e.g. `1.0.0-rc.7.11036`).
 
 ## Runtime
