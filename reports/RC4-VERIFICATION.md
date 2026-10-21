@@ -20,6 +20,6 @@
 
 ## Safe delivery
 
-Server is changed in `plugin/server/connection.mjs`. A custom app patch lives at `scripts/patch-paseo-android.mjs` and `docs/ANDROID-TERMINAL.md`; it is **not applied by `scripts/install.sh`** because PaseoDog and the Android app are separate codebases.
+Server is changed in `plugin/server/connection.mjs`. A custom app patch lives at `scripts/patch-paseo-android.mjs`; it is **not applied by `scripts/install.sh`** because PaseoDog and the Android app are separate codebases.
 
 No actual credentials or API tokens are required for test scripts. Live model calls require user opt-in and plan quota. Commands approved through Mixdog run with the hosting Unix user's permissions; this tool is not a sandbox.

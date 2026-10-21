@@ -71,7 +71,7 @@ cd ~/dev/test-repository
 - Paseo 암호화 릴레이: `paseodog daemon config set daemon.relay.enabled true` 실행 후 앱의 호스트 설정에서 **Pair Device**를 사용합니다.
 - Tailscale/VPN: 서버의 VPN IP에만 리스닝하고 허용 호스트를 설정합니다. 휴대폰도 같은 VPN에 접속합니다.
 
-세부 명령과 재접속 검증은 [`docs/OPERATIONS.md`](docs/OPERATIONS.md)에 있습니다. 포트포워딩이나 공인망의 무인증 `0.0.0.0` 노출을 자동 설정하지 않습니다.
+포트포워딩이나 공인망의 무인증 `0.0.0.0` 노출을 자동 설정하지 않습니다.
 
 ## 실제 계정 검증
 
@@ -80,7 +80,7 @@ cd /설치/경로/paseodog
 node scripts/live-smoke.mjs --confirm-api-use
 ```
 
-이 명령은 **실제 모델 요청 2회**를 수행해 응답과 네이티브 세션 복원을 확인합니다. API 비용 또는 구독 할당량이 사용될 수 있습니다. 모든 도구 실행은 거절합니다. 이 테스트만으로 Paseo 플러그인 로딩·실제 도구 승인·휴대폰 연결이 검증되는 것은 아닙니다. 전체 체크리스트는 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)를 따릅니다.
+이 명령은 **실제 모델 요청 2회**를 수행해 응답과 네이티브 세션 복원을 확인합니다. API 비용 또는 구독 할당량이 사용될 수 있습니다. 모든 도구 실행은 거절합니다. 이 테스트만으로 Paseo 플러그인 로딩·실제 도구 승인·휴대폰 연결이 검증되는 것은 아닙니다.
 
 ## 독립 설정과 데이터
 
@@ -121,7 +121,7 @@ Mixdog의 기본 역할들은 꺼져 있습니다. Paseo 연결 환경에 `PASEO
 
 `node scripts/live-acceptance.mjs --confirm-subscription-use --agent <테스트-agent-id> --cwd <임시-작업폴더>`는 실제 실행 중인 Paseo 데몬·플러그인·구독 모델을 통과해 병렬 Worker, 승인/거절, 동일 tag 후속 지시, 취소, 클라이언트 재접속·중복 방지를 검사합니다. 제목이 `PaseoDog live verification`인 테스트용 paseodog 에이전트만 대상으로 하며, 테스트 파일을 임시 작업폴더에 생성합니다. 기존 프로젝트나 사용자 세션에는 실행하지 마세요.
 
-`npm run upstream:check`는 Mixdog·Paseo CLI·Paseo SDK의 고정 버전과 npm 최신 배포를 읽기 전용으로 비교합니다. 자동 설치는 하지 않습니다. 업데이트 검토·패치 이식·검증 절차는 [`docs/UPSTREAM.md`](docs/UPSTREAM.md)를 따릅니다.
+`npm run upstream:check`는 Mixdog·Paseo CLI·Paseo SDK의 고정 버전과 npm 최신 배포를 읽기 전용으로 비교합니다. 자동 설치는 하지 않습니다. 상위 패치 규칙은 [`docs/ai-rules/CODING_RULES.md`](docs/ai-rules/CODING_RULES.md)를 따릅니다.
 
 **전체 원본 저장소, node_modules, 실행 바이너리는 ZIP에 포함하지 않습니다.** 최초 인터넷 설치 시 내려받으며, 생성된 lockfile을 검토·커밋한 뒤 이후 설치에서는 `npm ci`를 사용합니다. 검토한 lockfile이 저장소에 포함되지 않은 경우에는 모든 전이 의존성이 동결된 오프라인 배포판은 아닙니다.
 
@@ -153,8 +153,8 @@ npm run typecheck      # plugin 의존성 설치 필요
 npm run package       # Python 3 필요
 ```
 
-Android native 터미널 입력 수정안은 **별도 Paseo 앱 소스 패치**이며 설치된 APK를 자동으로 바꾸지 않습니다. [Android 터미널 수정과 실기기 수용 검사](docs/ANDROID-TERMINAL.md)를 참조하세요.
+Android native 터미널 입력 수정안은 **별도 Paseo 앱 소스 패치**이며 설치된 APK를 자동으로 바꾸지 않습니다.
 
-관련 문서: [아키텍처](docs/ARCHITECTURE.md), [운영](docs/OPERATIONS.md), [보안 경계](docs/SECURITY.md), [상위 프로젝트·패치](docs/UPSTREAM.md).
+관련 문서: [아키텍처](docs/ai-rules/ARCHITECTURE.md), [데몬 운영](docs/ai-rules/RUNTIME_DAEMON.md), [코딩·상위 패치](docs/ai-rules/CODING_RULES.md), [빌드·릴리즈](docs/ai-rules/tasks/RELEASE.md).
 
 라이선스: Apache-2.0. 서드파티 라이선스 및 고지는 `NOTICE`와 각 설치된 패키지를 확인하세요.

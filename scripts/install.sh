@@ -64,4 +64,4 @@ node bin/paseodog.mjs start
 node bin/paseodog.mjs plugin install "$ROOT/plugin"
 node bin/paseodog.mjs reload
 printf '\nInstalled. Next:\n  %s auth\n  %s password\n  %s doctor\n' "$HOME/.local/bin/paseodog" "$HOME/.local/bin/paseodog" "$HOME/.local/bin/paseodog"
-echo "Keep this project folder at its installed absolute path. See docs/OPERATIONS.md for mobile and systemd."
+echo "Keep this project folder at its installed absolute path. See docs/ai-rules/RUNTIME_DAEMON.md for daemon and systemd."
