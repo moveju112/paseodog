@@ -4,6 +4,10 @@ Paseo is a mobile app for monitoring and controlling your local AI coding agents
 
 **Supported agents:** Claude Code, Codex, GitHub Copilot, OpenCode, Pi, Antigravity, and Muse Code.
 
+## PaseoDog integration scope
+
+This directory is PaseoDog's integrated Paseo source checkout, not an independent upstream delivery target. Follow the parent `AI_RULES.md` and `docs/ai-rules/tasks/RELEASE.md` for authorization, local rollout, concurrent-session handoff and publication. Their daemon/profile and delivery rules take precedence over upstream defaults below. Local source commands and conventions remain scoped to `android/`.
+
 ## Repository map
 
 This is an npm workspace monorepo:
@@ -96,42 +100,42 @@ npm run dev:app                      # Start Expo against the dev daemon
 npm run dev:desktop                  # Start Electron desktop dev
 npm run cli -- ls -a -g              # List all agents
 npm run cli -- daemon status         # Check daemon status
-npm run typecheck                    # Always run after changes
-npm run lint                         # Always run after changes
-npm run format                       # Auto-format with Biome
+npm run typecheck                    # Or the affected package's typecheck after code changes
+npm run lint -- <changed-path>       # Lint affected code only
+npm run format:files -- <paths>      # Format only this session's changed files
 npm run format:check                 # Check formatting without writing
 ```
 
-Repo dev commands use checkout-local state by default. In this checkout, `PASEO_HOME` resolves to `.dev/paseo-home`, and `npm run cli -- ...` targets that same dev home automatically. The packaged desktop app and production-style daemon keep using `~/.paseo` on port `6767`.
+Repo dev commands use checkout-local state by default. In this checkout, `PASEO_HOME` resolves to `.dev/paseo-home`, and `npm run cli -- ...` targets that same dev home automatically. These commands do not prove that the installed PaseoDog app or dedicated daemon was updated. For PaseoDog rollout, identify the actual dedicated home/host under the parent `docs/ai-rules/RUNTIME_DAEMON.md`; do not use stock `~/.paseo` on port `6767` as an automatic target.
 
 See [docs/development.md](docs/development.md) for full setup, build sync requirements, and debugging.
 
 ## Release branches
 
-When the user says "this goes to next", create or
+This is upstream branch guidance, not permission to open an upstream PR or change PaseoDog's branch/remote. Within an explicitly authorized upstream contribution, when the user says "this goes to next", create or
 retarget the PR to `next` and preserve that destination through delivery. Follow
 [release branch discipline](docs/release.md#release-branch-discipline) for creating
 and updating `next`, integrating it after a release, and releasing a hotfix from a tag.
 
 ## Critical rules
 
-- **NEVER restart the main Paseo daemon on port 6767 without permission** — it manages all running agents. If you're an agent, restarting it kills your own process.
+- **Never treat the stock Paseo daemon as a PaseoDog rollout target.** Identify the daemon by home, server ID and process, not port alone. Safe local dedicated-daemon reload/restart follows the parent PaseoDog rules; interrupting active turns still needs explicit approval.
 - **NEVER assume a timeout means the service needs restarting** — timeouts can be transient.
-- **NEVER add auth checks to tests** — agent providers handle their own auth.
+- **NEVER make default tests depend on real provider login, credentials or billable calls.** Use deterministic fixtures for authentication and authorization boundaries; keep regression tests for permission allow/deny, ownership and access control.
 - **Before changing app routes, startup routing, remembered workspace restore, or active workspace selection, read [docs/expo-router.md](docs/expo-router.md).**
 - **NEVER run the full test suite locally.** The test suites are heavy and will freeze the machine, especially if multiple agents run them in parallel. Rules:
-  - Run only the specific test file you changed: `npx vitest run <file> --bail=1`
-  - Never run `npm run test` for an entire workspace unless explicitly asked.
-  - If you must run a broad suite, pipe output to a file and read it afterward: `npx vitest run <file> --bail=1 > /tmp/test-output.txt 2>&1` then read the file.
-  - Never re-run a test suite that another agent already ran and reported green — trust the result.
-  - For full suite verification, push to CI and check GitHub Actions instead.
+  - Run the test files affected by the behavior change: `npx vitest run <file> --bail=1`.
+  - Never run `npm run test` for the entire monorepo/workspace unless explicitly asked. This does not prohibit the parent PaseoDog root's `tests/*.test.mjs` suite.
+  - If logs must be saved on this work server, allocate a unique directory under `/data/tmp/ubuntu` with the parent rules' 3-day TTL; do not overwrite shared `/tmp/test-output.txt`.
+  - Reuse another session's observed success only when the tested inputs and scope still match; rerun affected checks after relevant changes.
+  - Full-suite CI runs follow an authorized push, not a push made merely to run checks.
 - Add tests to existing suites and reuse their npm scripts and CI jobs instead of creating feature-specific ones.
-- **Always run typecheck and lint after every change.**
+- **After code changes, run affected-package typecheck and targeted lint.** Documentation-only changes do not require Android typecheck, lint or builds; the parent PaseoDog root checks still apply.
 - **Build workspace packages before diagnosing cross-package type errors.** This repo consumes generated declarations across workspaces. If typecheck fails in a package that depends on another workspace, rebuild the owning stack first so `dist` declarations are current:
   - `npm run build:client` — rebuild protocol and client declarations.
   - `npm run build:server` — rebuild highlight, relay, protocol, client, server, and CLI when server/CLI types may be stale.
   - Do not patch inferred callback parameters or add local duplicate types just to silence stale declaration errors.
-- **Run `npm run format` before committing.** This repo uses Biome for formatting. Do not manually fix formatting — let the formatter handle it.
+- **Before committing, format only this session's changed files with `npm run format:files -- <paths>`.** Use the configured formatter, not whole-tree `npm run format` over other sessions' work.
 - **Always use npm scripts for linting and formatting.** Do not run tools directly with `npx eslint`, `npx oxfmt`, `npx oxlint`, or package-local binaries. For targeted checks, pass file paths through the npm script:
   - `npm run lint -- packages/app/src/components/message.tsx`
   - `npm run format:files -- CLAUDE.md packages/app/src/components/message.tsx`

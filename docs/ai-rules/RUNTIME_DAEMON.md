@@ -28,27 +28,34 @@ processes see source changes.
 
 ## Live plugin vs source tree
 
-Release approval, rollout checks and completion reporting:
+Standing local authorization, release approval, rollout checks and completion reporting:
 [tasks/RELEASE.md](tasks/RELEASE.md). GitHub publication does not reload a plugin,
 restart a daemon or install a phone app. A scheduled restart is not a verified restart.
+Verified code changes authorize necessary local application to the dedicated PaseoDog
+daemon and installed desktop app without another approval prompt. Apply promptly when
+safe; never interrupt an active turn or unsaved client work merely to apply an update.
 
 The plugin is registered from the source checkout (`evidence: scripts/install.sh` `plugin install "$ROOT/plugin"`), and each
 engine child runs `engine/bin/paseodog-engine.mjs` from the same tree. A running daemon keeps the
 plugin code and `release.json` it loaded; new engine children read the disk.
 
-- **MUST** reload the plugin on every daemon that registered it after changing `plugin/`, the product version, or upstream pins.
+- **MUST** reload the plugin on the authorized local dedicated daemon after changing `plugin/`, the product version, or upstream pins, once active work is safe.
   - why: provider status compares the loaded `VERSION` with `paseodog-engine --check`; a version bump on disk makes the provider unavailable until reload.
   - ✅ `evidence: plugin/server/provider.ts` `status()` version check
   - ✅ commands:
     ```bash
     paseodog plugin reload paseodog-provider                                   # dedicated home
-    tools/node_modules/.bin/paseo plugin reload paseodog-provider --home ~/.paseo   # only if registered there
     paseodog provider ls                                                       # expect paseodog = available
     ```
+  - Other registered hosts need their own authorization. Stock Paseo and personal profiles are not automatic rollout targets; report an unexpected registration instead of reloading it.
 
-- **NEVER** reload or restart a daemon during another agent's active turn without operator approval.
+- **NEVER** reload or restart a daemon during an active turn, including this conversation, without explicit approval of that interruption.
   - why: reload stops the provider; an in-flight turn fails and its side effects stay done.
-  - ✅ check `paseodog ls` for running agents first; ask, then reload.
+  - ✅ check `paseodog ls` and related-session handoffs first. Defer to a safe point or the final delivery owner without asking again. Ask only if an unavoidable interruption needs approval; report deferred, scheduled and completed operations separately.
+
+- **MUST** apply verified desktop changes to the actual installed PaseoDog app, not just its source tree.
+  - why: source, build, published release and installed/running app are different states.
+  - ✅ follow [tasks/RELEASE.md](tasks/RELEASE.md) for the source-built Linux package and local application. Do not hand-edit the installed bundle; preserve active sessions and unsaved client work.
 
 - **NEVER** run `scripts/install.sh` or `scripts/service.mjs --install` as a check or to try an upgrade; both change config/services.
   - why: install rewrites the profile, re-applies patches and starts/reloads the daemon; the systemd unit is opt-in.

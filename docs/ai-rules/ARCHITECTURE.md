@@ -1,8 +1,9 @@
 # Architecture
 
-PaseoDog combines two upstreams instead of forking either: **Paseo** (daemon, desktop/web/
+PaseoDog integrates two upstreams: **Paseo** (daemon, desktop/web/
 mobile/SSH clients, plugin SDK) and **Mixdog** (inference, context, native sessions). PaseoDog
-is the adapter between them plus a set of hash-gated local patches on the installed upstreams.
+owns the adapter, hash-gated patches on installed npm upstreams, and the integrated
+Paseo client/daemon source checkout in `android/`. Inference remains in Mixdog.
 
 Project reference: `docs/ARCHITECTURE.md` (boundary, transport, journal). This file is the agent map.
 
@@ -10,7 +11,8 @@ Project reference: `docs/ARCHITECTURE.md` (boundary, transport, journal). This f
 
 | Layer | Owner | Lives in |
 |---|---|---|
-| Clients, daemon, plugin host, relay, CLI | Paseo (npm `@getpaseo/cli`, `@getpaseo/plugin`) | `tools/node_modules`, `plugin/node_modules` |
+| Integrated mobile/web/desktop clients and their daemon stack | Paseo source with PaseoDog integration changes | `android/packages/` |
+| Pinned CLI, plugin host and SDK used by the wrapper/adapter | Paseo (npm `@getpaseo/cli`, `@getpaseo/plugin`) | `tools/node_modules`, `plugin/node_modules` |
 | Inference, model history, prompt cache, native sessions | Mixdog (npm `mixdog`) | `engine/node_modules/mixdog` |
 | Lifecycle, approvals, journal, wire mapping | PaseoDog adapter | `plugin/server/`, `engine/src/` |
 | Upstream patches (exact-blob gated) | PaseoDog | `scripts/patch-*.mjs`, `patches/` |
@@ -27,12 +29,13 @@ Project reference: `docs/ARCHITECTURE.md` (boundary, transport, journal). This f
 |---|---|---|---|
 | `scripts/patch-paseo-*.mjs`, `patch-mixdog.mjs`, `patches/paseo-*`, `tests/paseo-*` | PaseoDog patches/tests that target upstream | yes | edit directly |
 | `tools/node_modules/@getpaseo/*`, `engine/node_modules/mixdog` | installed upstream, rewritten by `npm ci` | no | a `scripts/patch-*.mjs` patch or a pin bump |
-| installed PaseoDog desktop app bundle | Paseo desktop build, rewritten by each desktop update | no | `scripts/patch-paseo-composer.mjs` applied by `paseodog desktop-update` |
+| `android/packages/{app,desktop,server,...}` | integrated Paseo source for clients and their daemon stack | yes (integration checkout) | edit owned source, follow `android/CLAUDE.md`, build agreed targets under [tasks/RELEASE.md](tasks/RELEASE.md) |
+| installed PaseoDog desktop app bundle | generated installation, rewritten by each update | no (generated artifact) | rebuild/install from `android/`; `paseodog desktop-update` is only for legacy installations |
 | `~/project/mixdog`, `~/project/mixdog-fork-dist` | separate Mixdog fork checkouts, not referenced here | no | not a PaseoDog input; npm pin is `evidence: engine/package.json` |
 | `~/.paseo`, `~/.mixdog` | personal stock Paseo / Mixdog profiles | no | never edit for PaseoDog work |
 | `~/.local/share/paseodog/{paseo,mixdog,sessions}` | PaseoDog dedicated state | yes (runtime state) | `paseodog` wrapper / `scripts/configure.mjs` |
 
-- **MUST** resolve "fix it in Paseo/Mixdog" to a patch script or a pin bump in this repo, never to an upstream copy elsewhere.
+- **MUST** resolve "fix it in Paseo/Mixdog" to the owned `android/` source when that is the build input, or a gated patch/pin for installed npm upstreams; never edit an upstream copy elsewhere.
   - why: edits to installed or sibling upstream code never reach the PaseoDog build and bypass the reviewed-hash gate.
   - ✅ [tasks/MERGE_UPSTREAM.md](tasks/MERGE_UPSTREAM.md) step 8 (backport) or steps 4-7 (base upgrade).
 
@@ -40,6 +43,7 @@ Project reference: `docs/ARCHITECTURE.md` (boundary, transport, journal). This f
 
 | Path | Role |
 |---|---|
+| `android/packages/app`, `android/packages/desktop`, `android/packages/server` | integrated client and daemon sources; not Android-only despite the parent directory name |
 | `bin/paseodog.mjs` | CLI wrapper: sets the dedicated `PASEO_HOME`, passes other args to pinned Paseo CLI |
 | `plugin/index.server.ts`, `plugin/server/provider.ts` | Paseo provider registration (`id: 'paseodog'`) |
 | `plugin/server/connection.mjs` | provider connection, advertised `CAPABILITIES`, turn lifecycle |
@@ -59,14 +63,16 @@ Project reference: `docs/ARCHITECTURE.md` (boundary, transport, journal). This f
 | `scripts/patch-mixdog.mjs`, `patch-paseo-*.mjs` | exact-hash upstream patches applied after install |
 | `scripts/check-upstream.mjs` | read-only pinned-vs-latest npm comparison |
 | `scripts/configure.mjs`, `install.sh`, `service.mjs` | dedicated profile, install, systemd unit |
-| `scripts/desktop-release.mjs` | reviewed update of the installed PaseoDog desktop app |
+| `scripts/desktop-release.mjs` | gated update path for legacy installed desktop bundles |
 | `tests/*.test.mjs` | `node --test`; fixtures in `tests/fixtures/`, helpers in `tests/helpers.mjs` |
 
 ## Stack
 
 Node `^22.19 || >=24` ESM (.mjs files), TypeScript only at the SDK boundary (`plugin/*.ts`,
 `plugin/client/*.tsx`), shell for install, one Python packager (`scripts/package.py`).
-Three separate npm packages, each with its own lockfile: `engine/`, `plugin/`, `tools/`.
+Three adapter/runtime npm packages, each with its own lockfile: `engine/`, `plugin/`, `tools/`.
+The `android/` source checkout is a separate npm workspace monorepo with its own tooling.
+Keep command working directories and test scopes distinct.
 
 ## Data flow
 

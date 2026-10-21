@@ -1,6 +1,6 @@
 # AGENTS.md — Paseo Server Development Guide
 
-For AI coding agents working in `packages/server`. Supplements [CLAUDE.md](../CLAUDE.md) at the repo root.
+For AI coding agents working in `android/packages/server`. Supplements `android/CLAUDE.md`; PaseoDog root rules govern authorization, dedicated-daemon rollout, concurrent sessions and release delivery.
 
 ## Project Overview
 
@@ -15,9 +15,9 @@ Paseo is a mobile + CLI app for monitoring and controlling local AI coding agent
 ```bash
 npm run dev                          # Start daemon + Expo in Tmux
 npm run build:server                 # Build: highlight + relay + protocol + client + server + cli
-npm run typecheck                    # Typecheck all packages
-npm run test                         # Test all packages
-npm run format                       # Format with Biome (in-place)
+npm run typecheck                    # Broad typecheck; prefer the affected package when sufficient
+npm run test                         # Full monorepo suite: only when explicitly requested
+npm run format:files -- <paths>      # Format only this session's changed files
 ```
 
 ### Server package (`packages/server`)
@@ -59,7 +59,9 @@ npm run cli -- daemon status                 # Check daemon status
 
 ## Code Style
 
-### Biome (formatting only, no linting)
+### Formatting
+
+Use the current npm formatter scripts in `android/package.json`; the following source style is not a reason to run a different formatter or rewrite unrelated files.
 
 ```json
 {
@@ -145,10 +147,10 @@ Tests prove behavior, not structure. Every test should answer: "what user-visibl
 
 ## Critical Rules
 
-1. **NEVER restart the daemon on port 6767** — it kills your own process
+1. **Do not restart stock Paseo or interrupt active turns**; identify the dedicated daemon by home, server ID and process, and follow the parent PaseoDog safe local rollout rules rather than deciding by port alone
 2. **NEVER assume timeouts need a restart** — they can be transient
-3. **Always run `npm run typecheck` after changes**
-4. **NEVER add auth checks to tests** — agent providers handle their own auth
+3. **Run affected-package typecheck and targeted lint after code changes**; documentation-only changes follow the PaseoDog root checks
+4. **Never depend on real provider login, credentials or billable calls in default tests**; test authentication/authorization, permission denials, ownership and access control with deterministic fixtures
 5. **NEVER make breaking WebSocket/message schema changes** — always backward-compatible
 
 ---
@@ -189,8 +191,8 @@ npm run db:query -- "SELECT * FROM agent_timeline_rows..."
 
 | File                                                       | What it covers                                   |
 | ---------------------------------------------------------- | ------------------------------------------------ |
-| [../CLAUDE.md](../CLAUDE.md)                               | Repository overview, critical rules, quick start |
-| [../docs/architecture.md](../docs/architecture.md)         | System design, WebSocket protocol, data flow     |
-| [../docs/coding-standards.md](../docs/coding-standards.md) | Type hygiene, error handling, React patterns     |
-| [../docs/testing.md](../docs/testing.md)                   | TDD workflow, determinism, real deps over mocks  |
-| [../SECURITY.md](../SECURITY.md)                           | Relay threat model, E2E encryption               |
+| [android/CLAUDE.md](../../CLAUDE.md)                               | Repository overview, critical rules, quick start |
+| [android/docs/architecture.md](../../docs/architecture.md)         | System design, WebSocket protocol, data flow     |
+| [android/docs/coding-standards.md](../../docs/coding-standards.md) | Type hygiene, error handling, React patterns     |
+| [android/docs/testing.md](../../docs/testing.md)                   | TDD workflow, determinism, real deps over mocks  |
+| [android/SECURITY.md](../../SECURITY.md)                           | Relay threat model, E2E encryption               |

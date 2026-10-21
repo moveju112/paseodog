@@ -2052,6 +2052,7 @@ export const ptBR: TranslationResources = {
     tokens: "{{used}} / {{max}} tokens",
     sessionCost: "Custo da sessão {{cost}}",
     accessibility: "Janela de contexto {{percentage}}% usada",
+    compact: "Compactar contexto",
   },
   review: {
     comment: {

@@ -48,6 +48,7 @@ import {
   type DraftAgentControlsProps,
 } from "@/composer/agent-controls";
 import { ContextWindowMeter } from "@/components/context-window-meter";
+import { useAgentCommandsQuery } from "@/hooks/use-agent-commands-query";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
 import { selectAgentTurnPresentation, useSessionStore } from "@/stores/session-store";
 import { useFilePicker } from "@/hooks/use-file-picker";
@@ -2022,6 +2023,25 @@ function ComposerContentImpl({
   );
 
   const contextWindowMeterGlyphSize = isCompactLayout ? ICON_SIZE.md : buttonIconSize;
+  // 프로바이더가 /compact를 광고할 때만 컨텍스트 툴팁에 압축 버튼을 노출한다
+  const { commands: agentCommands } = useAgentCommandsQuery({
+    serverId,
+    agentId,
+    enabled: hasAgent,
+  });
+  const supportsCompact = agentCommands.some((command) => command.name === "compact");
+  // 컨텍스트 압축 (툴팁 버튼 -> /compact 전송)
+  const handleCompactContext = useCallback(() => {
+    const send = sendAgentMessageRef.current;
+    if (!send) {
+      toastErrorRef.current(t("workspace.terminal.hostDisconnected"));
+      return;
+    }
+    send(agentIdRef.current, "/compact", [], "interrupt").catch((error: unknown) => {
+      console.error("[Composer] Failed to compact context:", error);
+      toastErrorRef.current(error instanceof Error ? error.message : String(error));
+    });
+  }, [t]);
   const beforeVoiceContent = useMemo(
     () =>
       hasAgent ? (
@@ -2033,6 +2053,8 @@ function ComposerContentImpl({
             usedTokens={agentState.contextWindowUsedTokens}
             totalCostUsd={agentState.totalCostUsd}
             glyphSize={contextWindowMeterGlyphSize}
+            onCompact={supportsCompact ? handleCompactContext : undefined}
+            compactDisabled={isAgentRunning || !isConnected}
           />
         </View>
       ) : null,
@@ -2044,6 +2066,10 @@ function ComposerContentImpl({
       agentState.contextWindowUsedTokens,
       agentState.totalCostUsd,
       contextWindowMeterGlyphSize,
+      supportsCompact,
+      handleCompactContext,
+      isAgentRunning,
+      isConnected,
     ],
   );
 

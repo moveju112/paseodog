@@ -38,9 +38,9 @@ list: [../UPSTREAM_INTAKE.md](../UPSTREAM_INTAKE.md). One component (Paseo or Mi
     `evidence: package.json` scripts `check`, `test`
 12. Mixdog: `node scripts/patch-mixdog.mjs --check` and `npm run test:native` (local fixture provider, no billing).
     `evidence: docs/UPSTREAM.md` § "Reviewed host boundary patches"
-13. Live/model/mobile acceptance only with operator approval: `paseodog live-test --confirm-api-use`, then `docs/ACCEPTANCE.md`.
+13. Real model calls, cost-incurring or remote/device-changing acceptance need their applicable operator approval: `paseodog live-test --confirm-api-use`, then `docs/ACCEPTANCE.md`. Local fixture checks do not establish real model/device acceptance.
     `evidence: docs/UPSTREAM.md` § "Upgrade procedure" step 5
-14. Reload `paseodog-provider` on every daemon that registered it, then `paseodog provider ls` -> `available`. Ask first if agents are running.
+14. Apply verified changes to the authorized local dedicated daemon and affected desktop app under [RELEASE.md](RELEASE.md), then `paseodog provider ls` -> `available`. Defer while turns are active; do not routinely ask for local rollout approval or reload stock/remote daemons.
     `evidence: plugin/server/provider.ts` `status()`
 
 Never run `scripts/install.sh` to try an upgrade — see [../RUNTIME_DAEMON.md](../RUNTIME_DAEMON.md).

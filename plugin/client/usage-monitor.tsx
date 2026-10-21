@@ -1,8 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { AppState, Pressable, Text, TextInput, View } from 'react-native';
 import { ScrollView } from '@getpaseo/plugin/client/react-native';
 import { useRpc, type PluginSurfaceProps } from '@getpaseo/plugin/client';
 import { engineMetrics } from '../shared/controls.js';
+import { createLiveMonitor } from './live-monitor.mjs';
+
+// 화면을 보는 동안 2분마다 다시 조회한다(OAuth 실시간 갱신 여부는 호스트 정책이 정함).
+const autoRefreshMs = 120000;
 
 type Metric = { turns?: number; tokens?: number; input?: number; output?: number; cacheRead?: number;
     cacheWrite?: number; cacheHitRate?: number | null; costUsd?: number; costBilled?: number;
@@ -100,18 +104,27 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
     const [data, setData] = useState<Metrics | null>(null);
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
+    const forceNext = useRef(false);
     useEffect(() => {
-        let active = true;
         setData(null);
         setError('');
         setBusy(false);
         if (view === 'custom' && (!/^\d{4}-\d{2}-\d{2}$/.test(startDay) || !/^\d{4}-\d{2}-\d{2}$/.test(endDay))) return;
         setBusy(true);
-        void latest.current({ view, ...(view === 'custom' ? { startDay, endDay } : {}), refresh: revision > 0 })
-            .then((value) => { if (active) setData(value as Metrics); })
-            .catch(() => { if (active) setError('사용량 조회 실패. 연결 상태와 날짜 범위를 확인해 주세요.'); })
-            .finally(() => { if (active) setBusy(false); });
-        return () => { active = false; };
+        // 새로고침을 누른 직후 첫 조회만 강제하고 이후에는 자동 주기로 이어간다.
+        const monitor = createLiveMonitor({
+            delayMs: autoRefreshMs,
+            read: () => {
+                const refresh = forceNext.current ? 'force' : 'auto';
+                forceNext.current = false;
+                return latest.current({ view, ...(view === 'custom' ? { startDay, endDay } : {}), refresh });
+            },
+            onValue: (value: unknown) => { setData(value as Metrics); setError(''); setBusy(false); },
+            onError: () => { setError('사용량 조회 실패. 연결 상태와 날짜 범위를 확인해 주세요. 자동으로 다시 확인해요.'); setBusy(false); },
+        });
+        monitor.setActive(AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
+        const subscription = AppState.addEventListener('change', (state) => monitor.setActive(state === 'active'));
+        return () => { monitor.stop(); subscription.remove(); };
     }, [view, startDay, endDay, revision]);
     const colors = theme.colors;
     const text = { color: colors.foreground, fontSize: 14 };
@@ -140,10 +153,10 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <View style={{ flexShrink: 1, gap: 4, minWidth: 220 }}>
                 <Text style={{ ...text, fontSize: 22, fontWeight: '700' }}>PaseoDog 토큰·OAuth 사용량</Text>
-                <Text style={muted}>PaseoDog 전용 엔진 프로필의 기록 · 구독 환산 비용은 실제 청구액이 아니에요.</Text>
+                <Text style={muted}>PaseoDog 전용 엔진 프로필의 기록 · 2분마다 자동 갱신 · 구독 환산 비용은 실제 청구액이 아니에요.</Text>
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel="사용량 새로고침" disabled={busy}
-                onPress={() => setRevision((value) => value + 1)}
+                onPress={() => { forceNext.current = true; setRevision((value) => value + 1); }}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8,
                     borderRadius: 8, backgroundColor: colors.accent, opacity: busy ? 0.6 : 1 }}>
                 <Text style={{ color: colors.accentForeground, fontSize: 13, fontWeight: '600' }}>

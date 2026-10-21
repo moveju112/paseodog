@@ -4,7 +4,7 @@ Layout and ownership: [ARCHITECTURE.md](ARCHITECTURE.md). Upstream patches: [UPS
 
 ## Style
 
-- **MUST** write a short Korean flow comment above every new function; identifiers stay English camelCase, 4-space indent, ESM .mjs files.
+- **MUST** write a short Korean flow comment above every new function in adapter/runtime scripts; identifiers stay English camelCase, 4-space indent, ESM .mjs files. In `android/`, preserve that source tree's language, TypeScript and formatter conventions instead of reformatting upstream-style code to adapter style.
   - why: existing scripts/tests document intent this way; an English-only or comment-less function stands out in review.
   - ✅ `evidence: scripts/check-upstream.mjs` — `// 고정 버전·lockfile·패치 대상의 일치를 검사한 뒤 최신 배포와 비교한다.`
   - ✅ `evidence: scripts/patch-paseo-terminal.mjs` — `// 전체 원본 해시 확인 -> 뷰포트·스크롤백의 연속 셀만 보존.`
@@ -32,6 +32,7 @@ Layout and ownership: [ARCHITECTURE.md](ARCHITECTURE.md). Upstream patches: [UPS
 - **MUST** default sessions to `ask`; only an explicitly selected session `bypass` skips asks, and upstream deny/block stays deny in every mode.
   - why: the host policy is the only gate between the model and shell/file tools.
   - ✅ `evidence: engine/src/policy.mjs` — `attachHostPolicy(session, { mode = 'ask', ... })`; modes validated right below it.
+  - Development standing authorization in [tasks/RELEASE.md](tasks/RELEASE.md) controls task scope, not the runtime tool permission implementation. Never remove asks/denials from the product to avoid development approval prompts.
 
 - **NEVER** seed personal custom agents, fixed agent models, or default-on built-in agents; keep user enable/model choices across configure, refresh and restart.
   - why: settings are user state; configure/refresh must not replace explicit choices with boot defaults.
@@ -53,7 +54,7 @@ Layout and ownership: [ARCHITECTURE.md](ARCHITECTURE.md). Upstream patches: [UPS
 
 ## Tests and checks
 
-- **MUST** run `npm run check` and `npm test` for every change; add `npm run typecheck` when touching `plugin/*.ts(x)`.
+- **MUST** use the path-scoped checks in [tasks/RELEASE.md](tasks/RELEASE.md): root `npm run check` and `npm test` for every change, root `npm run typecheck` for plugin TS, plus affected package checks for `android/` code. Reuse still-valid observed results; do not run the Android monorepo full suite automatically.
   - why: `check` is syntax/JSON only; `test` is behavior; neither compiles the TS SDK boundary.
   - ✅ `evidence: package.json` scripts `test`, `check`, `typecheck`.
 

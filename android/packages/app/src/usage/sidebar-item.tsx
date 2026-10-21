@@ -18,6 +18,7 @@ import {
 import { StyleSheet } from "react-native-unistyles";
 import { builtinSidebarNavLabelKey } from "@/sidebar-nav/model";
 import { useUsagePreferences } from "./display";
+import { DonutUsageTrigger } from "./donut";
 import { useUsageHostId } from "./hosts";
 import { useUsageHostReports } from "./queries";
 import { UsageSourceIcon } from "./source-icon";
@@ -54,7 +55,18 @@ export function UsageSidebarItem() {
   const label = t(builtinSidebarNavLabelKey("usage"));
   const openUsage = useOpenSidebarUsage();
   const sources = useUsageSummary();
+  const { preferences } = useUsagePreferences();
   if (sources.length === 0) return null;
+  // PaseoDog: 사용량 옵션에서 도넛을 고르면 창마다 링과 초기화 카운트다운으로 그린다.
+  if (preferences.sidebarStyle === "donut") {
+    return (
+      <DonutUsageTrigger
+        accessibilityLabel={pinnedUsageLabel(label, sources)}
+        sources={sources}
+        onPress={openUsage}
+      />
+    );
+  }
   return <PinnedUsageTrigger label={label} sources={sources} onPress={openUsage} />;
 }
 

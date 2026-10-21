@@ -2043,6 +2043,7 @@ export const en = {
     tokens: "{{used}} / {{max}} tokens",
     sessionCost: "Session cost {{cost}}",
     accessibility: "Context window {{percentage}}% used",
+    compact: "Compact context",
   },
   review: {
     comment: {

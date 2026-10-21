@@ -15,6 +15,8 @@ export interface PinnedUsageWindow {
   percent: number;
   percentText: string;
   tone: UsageTone;
+  /** PaseoDog: when the window resets, for the donut summary's countdown. */
+  resetsAt: string | null;
 }
 
 /** One account's summary windows, under its source's icon. */
@@ -114,6 +116,7 @@ export function resolvePinnedUsage(
           percent,
           percentText,
           tone: windowTone(window),
+          resetsAt: window.resetsAt ?? null,
         };
       });
     if (windows.length === 0) return [];

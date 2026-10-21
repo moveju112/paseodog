@@ -5,6 +5,9 @@ import type { UsageReportEntry } from "./types";
 /** Whether percentages read as the share used or the share left. */
 export type UsageDisplayAs = "used" | "remaining";
 
+/** PaseoDog: how the sidebar summary draws each window. Absent reads as "bar". */
+export type UsageSidebarStyle = "bar" | "donut";
+
 /** A window the user pinned to the sidebar Usage item. It matches every account of the source. */
 export interface UsagePin {
   sourceId: string;
@@ -18,6 +21,8 @@ export interface UsagePreferences {
   pins: UsagePin[] | null;
   /** The host the user picked to show usage for; null until they pick one. */
   serverId: string | null;
+  /** PaseoDog: stored only when the user picked donuts. */
+  sidebarStyle?: UsageSidebarStyle;
 }
 
 export const DEFAULT_USAGE_PREFERENCES: UsagePreferences = {
@@ -36,10 +41,14 @@ export const UsagePreferencesSchema = z
     // Old [] meant defaults. Read it only when the new selection is absent.
     pinned: pinsSchema.optional().catch([]),
     serverId: z.string().nullable().catch(null),
+    sidebarStyle: z.enum(["bar", "donut"]).optional().catch(undefined),
   })
-  .transform(({ displayAs, pins, pinned, serverId }): UsagePreferences => {
+  .transform(({ displayAs, pins, pinned, serverId, sidebarStyle }): UsagePreferences => {
     const legacyPins = pinned && pinned.length > 0 ? pinned : null;
-    return { displayAs, pins: pins === undefined ? legacyPins : pins, serverId };
+    return Object.assign(
+      { displayAs, pins: pins === undefined ? legacyPins : pins, serverId },
+      sidebarStyle === "donut" ? { sidebarStyle } : {},
+    );
   })
   .catch(DEFAULT_USAGE_PREFERENCES);
 
@@ -102,4 +111,12 @@ export function setUsageDisplayAs(
 
 export function setUsageHost(preferences: UsagePreferences, serverId: string): UsagePreferences {
   return { ...preferences, serverId };
+}
+
+// 사이드바 요약 표시 방식 저장 (막대 -> 도넛)
+export function setUsageSidebarStyle(
+  preferences: UsagePreferences,
+  sidebarStyle: UsageSidebarStyle,
+): UsagePreferences {
+  return { ...preferences, sidebarStyle };
 }

@@ -5,10 +5,12 @@ import { useUsageHostReports } from "./queries";
 import {
   isUsagePinned,
   setUsageDisplayAs,
+  setUsageSidebarStyle,
   toggleUsagePin,
   type UsageDisplayAs,
   type UsagePin,
   type UsagePreferences,
+  type UsageSidebarStyle,
 } from "./preferences";
 import type { UsageReportEntry } from "./types";
 
@@ -23,6 +25,8 @@ export interface UsageDisplay {
 interface UsagePreferencesState {
   preferences: UsagePreferences;
   display: UsageDisplay;
+  /** PaseoDog: switches the sidebar summary between bars and donuts. */
+  setSidebarStyle: (sidebarStyle: UsageSidebarStyle) => void;
 }
 
 /** The device's usage preferences, with pins resolved against a host's reports. */
@@ -58,5 +62,13 @@ export function useUsageDisplay(reports: readonly UsageReportEntry[]): UsagePref
     }),
     [preferences, reports, setDisplayAs, togglePin],
   );
-  return { preferences, display };
+  const setSidebarStyle = useCallback(
+    (sidebarStyle: UsageSidebarStyle) => {
+      void updateSettings((current) => ({
+        usage: setUsageSidebarStyle(current.usage, sidebarStyle),
+      }));
+    },
+    [updateSettings],
+  );
+  return { preferences, display, setSidebarStyle };
 }

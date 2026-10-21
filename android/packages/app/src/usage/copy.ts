@@ -37,4 +37,7 @@ export const usageCopy = {
   displayRemaining: "Remaining",
   showInSidebar: "Summary in sidebar",
   showInSidebarHint: "Pinned windows show in the sidebar footer",
+  sidebarStyle: "Sidebar style",
+  sidebarStyleBar: "Bars",
+  sidebarStyleDonut: "Donuts",
 } as const;

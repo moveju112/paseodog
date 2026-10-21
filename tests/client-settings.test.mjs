@@ -214,17 +214,17 @@ test('usage dashboard preserves metrics, quota percentages and period refresh co
     assert.equal(period('지난 24시간').props.accessibilityState.selected, true);
     for (const [view, label] of [['1h', '지난 1시간'], ['8h', '지난 8시간']]) {
         await act(async () => period(label).props.onPress());
-        assert.deepEqual(calls.at(-1), { input: { view, refresh: view === '8h' }, name: 'engine-metrics' });
+        assert.deepEqual(calls.at(-1), { input: { view, refresh: 'auto' }, name: 'engine-metrics' });
         assert.equal(period(label).props.accessibilityState.selected, true);
         await act(async () => button('사용량 새로고침').props.onPress());
-        assert.deepEqual(calls.at(-1).input, { view, refresh: true });
+        assert.deepEqual(calls.at(-1).input, { view, refresh: 'force' });
     }
     await act(async () => period('사용자 지정').props.onPress());
     const field = (label) => tree.root.findAllByType('input').find((node) => node.props.accessibilityLabel === label);
     await act(async () => field('사용량 시작일').props.onChangeText('2026-10-01'));
     await act(async () => field('사용량 종료일').props.onChangeText('2026-10-02'));
     assert.deepEqual(calls.at(-1).input, {
-        view: 'custom', startDay: '2026-10-01', endDay: '2026-10-02', refresh: true,
+        view: 'custom', startDay: '2026-10-01', endDay: '2026-10-02', refresh: 'auto',
     });
     await act(async () => button('분석 모달 닫기').props.onPress());
 });
@@ -352,14 +352,14 @@ test('monitor switches to native token and OAuth usage with period selection and
     };
     const screen = await renderScreen(liveScreen);
     await screen.press('토큰·OAuth 사용량');
-    assert.deepEqual(calls.at(-1), ['engine-metrics', { view: 'hour', refresh: false }]);
+    assert.deepEqual(calls.at(-1), ['engine-metrics', { view: 'hour', refresh: 'auto' }]);
     assert.match(JSON.stringify(screen.tree.toJSON()), /Codex|65%|리셋 티켓/);
     assert.doesNotMatch(JSON.stringify(screen.tree.toJSON()), /지난 7일|지난 90일|지난 1년/);
     for (const [view, label] of [['1h', '지난 1시간'], ['8h', '지난 8시간']]) {
         await screen.press(label);
-        assert.deepEqual(calls.at(-1), ['engine-metrics', { view, refresh: view === '8h' }]);
+        assert.deepEqual(calls.at(-1), ['engine-metrics', { view, refresh: 'auto' }]);
         await screen.press('사용량 새로고침');
-        assert.deepEqual(calls.at(-1), ['engine-metrics', { view, refresh: true }]);
+        assert.deepEqual(calls.at(-1), ['engine-metrics', { view, refresh: 'force' }]);
     }
 });
 

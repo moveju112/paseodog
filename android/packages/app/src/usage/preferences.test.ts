@@ -4,6 +4,7 @@ import {
   isUsagePinned,
   setUsageDisplayAs,
   setUsageHost,
+  setUsageSidebarStyle,
   toggleUsagePin,
   UsagePreferencesSchema,
 } from "./preferences";
@@ -61,6 +62,19 @@ describe("usage preferences", () => {
     expect(UsagePreferencesSchema.parse({ displayAs: "remaining", pinned: [codexWeekly] })).toEqual(
       { displayAs: "remaining", pins: [codexWeekly], serverId: null },
     );
+  });
+
+  it("keeps the donut sidebar style and reads bars, missing or malformed styles as bars", () => {
+    const donut = setUsageSidebarStyle(DEFAULT_USAGE_PREFERENCES, "donut");
+    expect(UsagePreferencesSchema.parse(donut)).toEqual({
+      ...DEFAULT_USAGE_PREFERENCES,
+      sidebarStyle: "donut",
+    });
+    for (const sidebarStyle of ["bar", "ring", 3, undefined]) {
+      expect(UsagePreferencesSchema.parse({ ...DEFAULT_USAGE_PREFERENCES, sidebarStyle })).toEqual(
+        DEFAULT_USAGE_PREFERENCES,
+      );
+    }
   });
 });
 

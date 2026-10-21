@@ -82,7 +82,8 @@ export const engineMetrics = defineRpc({
         view: z.enum(['1h', '8h', 'hour', '7d', 'day', 'week', 'month', 'all', 'custom']).default('hour'),
         startDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         endDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-        refresh: z.boolean().optional(),
+        // auto: 화면 표시 중 주기 조회, force: 사용자가 누른 새로고침
+        refresh: z.enum(['auto', 'force']).optional(),
     }).strict(),
     output: z.unknown(),
 });

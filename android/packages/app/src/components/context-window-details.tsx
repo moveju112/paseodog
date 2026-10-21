@@ -1,6 +1,7 @@
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import { AgentUsage } from "@/usage";
 import { formatTokenCount } from "./context-window-meter.utils";
 
@@ -17,6 +18,9 @@ interface ContextWindowDetailsProps {
   showTitle: boolean;
   /** Whether the usage cards have a Refresh button; without one they show their freshness. */
   refreshable: boolean;
+  /** 호스트가 /compact를 지원하고 누를 수 있는 표면에서만 압축 버튼을 그린다. */
+  onCompact?: () => void;
+  compactDisabled?: boolean;
 }
 
 /**
@@ -30,6 +34,8 @@ export function ContextWindowDetails({
   sessionCost,
   showTitle,
   refreshable,
+  onCompact,
+  compactDisabled = false,
 }: ContextWindowDetailsProps) {
   const { t } = useTranslation();
   return (
@@ -53,6 +59,18 @@ export function ContextWindowDetails({
         )}
         {sessionCost ? (
           <Text style={styles.detail}>{t("contextWindow.sessionCost", { cost: sessionCost })}</Text>
+        ) : null}
+        {onCompact ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={onCompact}
+            disabled={compactDisabled}
+            testID="context-window-compact"
+            style={styles.compactButton}
+          >
+            {t("contextWindow.compact")}
+          </Button>
         ) : null}
       </View>
       <AgentUsage serverId={serverId} agentId={agentId} refreshable={refreshable} />
@@ -78,5 +96,9 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     lineHeight: theme.fontSize.sm * 1.4,
+  },
+  compactButton: {
+    marginTop: theme.spacing[1],
+    alignSelf: "flex-start",
   },
 }));

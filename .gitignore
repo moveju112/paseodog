@@ -11,6 +11,9 @@ reports/*.local.txt
 __pycache__/
 deliverables/
 
+# Machine-specific rules must not enter Git or release source archives
+/config/rules.local.md
+
 # Never commit local credential/session state, even if moved into the checkout
 state/
 secrets/

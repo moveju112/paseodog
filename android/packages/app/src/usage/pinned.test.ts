@@ -147,6 +147,7 @@ describe("resolvePinnedUsage", () => {
           percent: 31,
           percentText: "31%",
           tone: "default",
+          resetsAt: null,
         },
         {
           key: "claude:default/weekly",
@@ -155,6 +156,7 @@ describe("resolvePinnedUsage", () => {
           percent: 80,
           percentText: "80%",
           tone: "warning",
+          resetsAt: null,
         },
       ],
     });

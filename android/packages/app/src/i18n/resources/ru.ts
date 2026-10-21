@@ -2052,6 +2052,7 @@ export const ru: TranslationResources = {
     tokens: "Токены: {{used}} / {{max}}",
     sessionCost: "Стоимость сессии: {{cost}}",
     accessibility: "Использовано {{percentage}}% контекстного окна",
+    compact: "Сжать контекст",
   },
   review: {
     comment: {

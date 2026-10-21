@@ -1,6 +1,7 @@
 import { processEngineFactory } from './process-engine.mjs';
 import { createJsonLineDecoder, encodeFrame } from './json-lines.mjs';
 import { deadline } from './util.mjs';
+import { createQuotaRefreshPolicy } from './quota-refresh.mjs';
 
 // 상주형 제어 프로세스와 통신하는 경량 JSONL 클라이언트를 생성한다.
 function createControlDaemon({ launch, spawnProcess, terminateProcess }) {
@@ -85,6 +86,7 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
     let statusRequest, lastSessions = [];
     const connections = new Set();
     const statusRows = new Map();
+    const quotaRefresh = createQuotaRefreshPolicy();
 
     async function invokeControls(request) {
         if (typeof spawnProcess === 'function') {
@@ -182,11 +184,15 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
             return run;
         },
         // 통계는 설정 캐시와 분리해 명시한 기간마다 네이티브 원장에서 조회한다.
+        // OAuth 할당량 실시간 갱신은 호스트 공용 정책이 허용할 때만 요청한다.
         metrics(request = {}) {
+            const { refresh, ...period } = request;
+            const startedAt = quotaRefresh.admit(refresh);
             const run = queue.then(async () => {
                 if (!launch) throw new Error('PaseoDog 공급자를 새로고침한 뒤 다시 열어주세요.');
-                return await invokeControls({ ...request, action: 'metrics' });
+                return await invokeControls({ ...period, refresh: startedAt !== null, action: 'metrics' });
             });
+            if (startedAt !== null) run.then((value) => quotaRefresh.settle(startedAt, value), () => quotaRefresh.settle(startedAt, null));
             queue = run.catch(() => {});
             return run;
         },

@@ -160,7 +160,7 @@ test('only weekly wk becomes 7D; 5H, other labels, values, tones and accessible 
     }
     const [weekly] = pinned.resolvePinnedUsage([codex], { ...defaults, pins: [{ sourceId: 'codex', windowId: 'weekly' }] })[0].windows;
     assert.deepEqual(weekly, { key: 'codex:default/weekly', label: 'Codex Weekly 97% used', shortLabel: '7D', percent: 97,
-        percentText: '97%', tone: 'danger' });
+        percentText: '97%', tone: 'danger', resetsAt: null });
 });
 
 test('Android pinned source renders the same fixed order and labels as the patched web bundle', () => {

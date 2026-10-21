@@ -21,6 +21,9 @@ interface ContextWindowMeterProps {
   showPercentage?: boolean;
   /** Optional glyph envelope for icon-toolbar alignment. */
   glyphSize?: number;
+  /** /compact 실행; 없으면 압축 버튼을 숨긴다. */
+  onCompact?: () => void;
+  compactDisabled?: boolean;
 }
 
 const SVG_SIZE = 14;
@@ -149,6 +152,8 @@ export function ContextWindowMeter({
   totalCostUsd,
   showPercentage = false,
   glyphSize,
+  onCompact,
+  compactDisabled,
 }: ContextWindowMeterProps) {
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
@@ -160,6 +165,17 @@ export function ContextWindowMeter({
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const openSheet = useCallback(() => setIsSheetOpen(true), []);
   const closeSheet = useCallback(() => setIsSheetOpen(false), []);
+  // 시트에서 압축을 누르면 시트를 닫고 /compact를 보낸다
+  const compactFromSheet = useMemo(
+    () =>
+      onCompact
+        ? () => {
+            setIsSheetOpen(false);
+            onCompact();
+          }
+        : undefined,
+    [onCompact],
+  );
   const percentage =
     maxTokens !== null && usedTokens !== null ? getUsagePercentage(maxTokens, usedTokens) : null;
   const geometry = getMeterGeometry(showPercentage, glyphSize);
@@ -219,6 +235,8 @@ export function ContextWindowMeter({
             sessionCost={formattedSessionCost}
             showTitle={false}
             refreshable
+            onCompact={compactFromSheet}
+            compactDisabled={compactDisabled}
           />
         </ContextWindowSheet>
       </>
@@ -294,6 +312,8 @@ export function ContextWindowMeter({
           sessionCost={formattedSessionCost}
           showTitle
           refreshable
+          onCompact={onCompact}
+          compactDisabled={compactDisabled}
         />
       </HoverCardContent>
     </HoverCard>

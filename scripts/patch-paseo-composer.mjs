@@ -1,4 +1,4 @@
-// 로컬 패치: Paseo 0.11.4 검토 번들에 White2·호스트 전체 협업 스위치·현재 세션 하위 작업 진행 알약·하단 도구줄 분석 아이콘·사이드바 쿼터 고정 순서·채팅 추론 숨기기 설정을 추가하고 워크트리 설정 팁·도움말 문제 신고 묶음을 뺀다.
+// 로컬 패치: Paseo 0.11.4 검토 번들에 White2·호스트 전체 협업 스위치·현재 세션 하위 작업 진행 알약·하단 도구줄 분석 아이콘·사이드바 쿼터 고정 순서·사이드바 쿼터 도넛 표시 옵션·채팅 추론 숨기기 설정을 추가하고 워크트리 설정 팁·도움말 문제 신고 묶음을 뺀다.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,7 @@ import { withAutoEffort, withoutAutoEffort } from '../patches/paseo-auto-effort.
 import { withHelpMenu, withoutHelpMenu } from '../patches/paseo-help-menu.mjs';
 import { withUsageColors, withoutUsageColors } from '../patches/paseo-usage-colors.mjs';
 import { withUsageOrder, withoutUsageOrder } from '../patches/paseo-usage-order.mjs';
+import { withUsageDonut, withoutUsageDonut } from '../patches/paseo-usage-donut.mjs';
 import { withHideReasoning, withoutHideReasoning } from '../patches/paseo-hide-reasoning.mjs';
 import { withImportCwd, withoutImportCwd } from '../patches/paseo-import-cwd.mjs';
 import { withAgentsSettings, withoutAgentsSettings } from '../patches/paseo-agents-settings.mjs';
@@ -40,7 +41,7 @@ export function withoutWorktreeSetupTip(source) {
 // 기존 첨부파일·대기열 저장 및 배출 로직을 유지하면서 PaseoDog의 자동 턴 교체만 차단한다.
 export function patchedComposerSource(source) {
     const withoutSetupTip = withoutWorktreeSetupTip(withoutImportCwd(withoutAgentsSettings(source)));
-    const base = withoutHideReasoning(withoutUsageOrder(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutSetupTip)))))))));
+    const base = withoutHideReasoning(withoutUsageOrder(withoutUsageDonut(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutSetupTip))))))))));
     let original = base;
     for (const [before, after] of [...edits].reverse()) original = original.replace(after, before);
     if (!REVIEWED_BLOBS.has(gitBlob(original)))
@@ -58,10 +59,11 @@ export function patchedComposerSource(source) {
     // 도움말 메뉴의 문제 신고 묶음(Discord·GitHub 이슈)만 렌더 목록에서 뺀다.
     // 사이드바 쿼터 게이지 채움도 호스트 windowTone 단계 색을 쓴다.
     // 사이드바 쿼터 공급자 순서를 Codex -> Claude로 고정하고 주간 짧은 이름 wk를 7D로 맞춘다.
+    // 사용량 옵션의 Sidebar style에서 Donuts를 고르면 사이드바 쿼터를 링·초기화 카운트다운으로 그린다.
     // 워크트리 스크립트 설정을 권하는 팁은 프로젝트 설정 여부와 무관하게 숨긴다.
     // "추론 숨기기"를 켜면 완료된 최종 답변만 표시한다(모델 추론·네이티브 기록·승인·오류 유지).
     const hiddenSetupTip = original.replace(...worktreeSetupTip);
-    return withAgentsSettings(withImportCwd(withHideReasoning(withUsageOrder(withUsageColors(withWhite2Theme(withCollaboration(withAutoEffort(withAgentProgress(withSidebarToolbar(withHelpMenu(hiddenSetupTip)))))))))));
+    return withAgentsSettings(withImportCwd(withHideReasoning(withUsageOrder(withUsageDonut(withUsageColors(withWhite2Theme(withCollaboration(withAutoEffort(withAgentProgress(withSidebarToolbar(withHelpMenu(hiddenSetupTip))))))))))));
 }
 
 // 고정된 웹 입력창 번들만 수정하고 다른 클라이언트·공급자 동작은 건드리지 않는다.

@@ -2064,6 +2064,7 @@ export const fr: TranslationResources = {
     tokens: "{{used}} / {{max}} tokens",
     sessionCost: "Coût de la session : {{cost}}",
     accessibility: "Fenêtre de contexte : {{percentage}} % utilisés",
+    compact: "Compacter le contexte",
   },
   review: {
     comment: {

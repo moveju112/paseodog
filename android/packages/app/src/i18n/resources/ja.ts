@@ -2038,6 +2038,7 @@ export const ja: TranslationResources = {
     tokens: "{{used}} / {{max}}トークン",
     sessionCost: "セッションコスト: {{cost}}",
     accessibility: "コンテキストウィンドウ{{percentage}}%使用",
+    compact: "コンテキストを圧縮",
   },
   review: {
     comment: {
