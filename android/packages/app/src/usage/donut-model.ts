@@ -16,6 +16,23 @@ export function usageCountdownText(resetsAt: string | null, now: number): string
   return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
+// 호버 문구 (usage_widget 툴팁처럼 공급자당 한 줄: "Claude: 5H 31% / 7D 64%")
+export function usageTooltipText(
+  sources: readonly {
+    label: string;
+    windows: readonly { shortLabel: string; percentText: string }[];
+  }[],
+): string {
+  return sources
+    .map(
+      (source) =>
+        `${source.label}: ${source.windows
+          .map((window) => `${window.shortLabel} ${window.percentText}`.trim())
+          .join(" / ")}`,
+    )
+    .join("\n");
+}
+
 // 반원 두 개의 호 회전각 (퍼센트 -> 오른쪽·왼쪽 회전각, 보이지 않는 쪽은 null)
 // 왼쪽·아래 테두리만 칠한 원은 135°~315° 호라서 회전만으로 각 반쪽의 채움 길이를 정한다.
 export function donutArcRotations(percent: number): { right: number | null; left: number | null } {

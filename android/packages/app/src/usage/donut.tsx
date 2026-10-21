@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
-import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
+import { Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { DONUT_SIZE, DONUT_STROKE, donutArcRotations, usageCountdownText } from "./donut-model";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DONUT_SIZE,
+  DONUT_STROKE,
+  donutArcRotations,
+  usageCountdownText,
+  usageTooltipText,
+} from "./donut-model";
 import type { PinnedUsageSource, PinnedUsageWindow } from "./pinned";
 import { UsageSourceIcon } from "./source-icon";
 import type { UsageTone } from "./types";
@@ -79,7 +86,7 @@ function UsageDonut({
 }
 
 /** PaseoDog: the sidebar summary as one ring per pinned window, chosen in the usage options. */
-// 도넛 요약 줄 (요약 원본 -> 창별 도넛, 30초마다 카운트다운 갱신)
+// 도넛 요약 줄 (요약 원본 -> 가운데 정렬 창별 도넛·호버 사용량, 30초마다 카운트다운 갱신)
 export function DonutUsageTrigger({
   accessibilityLabel,
   sources,
@@ -95,19 +102,24 @@ export function DonutUsageTrigger({
     return () => clearInterval(timer);
   }, []);
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      style={triggerStyle}
-      testID="sidebar-usage"
-    >
-      {sources.flatMap((source) =>
-        source.windows.map((window) => (
-          <UsageDonut key={window.key} icon={source.icon} window={window} now={now} />
-        )),
-      )}
-    </Pressable>
+    <Tooltip delayDuration={300}>
+      <TooltipTrigger
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        style={triggerStyle}
+        testID="sidebar-usage"
+      >
+        {sources.flatMap((source) =>
+          source.windows.map((window) => (
+            <UsageDonut key={window.key} icon={source.icon} window={window} now={now} />
+          )),
+        )}
+      </TooltipTrigger>
+      <TooltipContent side="top" align="center" offset={8}>
+        <Text style={styles.tooltipText}>{usageTooltipText(sources)}</Text>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -117,9 +129,10 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "flex-start",
-    columnGap: theme.spacing[3],
-    rowGap: theme.spacing[1],
-    paddingVertical: theme.spacing[1],
+    justifyContent: "center",
+    columnGap: theme.spacing[4],
+    rowGap: theme.spacing[0.5],
+    paddingVertical: theme.spacing[0.5],
     paddingHorizontal: theme.spacing[2],
     borderRadius: theme.borderRadius.lg,
   },
@@ -128,7 +141,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   cell: {
     alignItems: "center",
-    gap: 2,
+  },
+  tooltipText: {
+    fontSize: theme.fontSize.base,
+    color: theme.colors.popoverForeground,
   },
   ring: {
     width: DONUT_SIZE,
@@ -201,6 +217,7 @@ const styles = StyleSheet.create((theme) => ({
   countdown: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
+    lineHeight: 14,
     fontVariant: ["tabular-nums"],
   },
 }));

@@ -22,6 +22,8 @@ export interface PinnedUsageWindow {
 /** One account's summary windows, under its source's icon. */
 export interface PinnedUsageSource {
   key: string;
+  /** PaseoDog: the source and account name, for the donut summary's hover text. */
+  label: string;
   icon: string | null;
   windows: PinnedUsageWindow[];
 }
@@ -52,9 +54,14 @@ export function choosePinnedUsageLayout(input: {
   return percentsWidth < labelsWidth ? "percents" : "labels";
 }
 
-function describe(entry: UsageReportEntry, windowLabel: string): string {
+// 공급자·계정 이름 (보고서 -> "Claude (work)")
+function sourceName(entry: UsageReportEntry): string {
   const account = entry.account.label ? ` (${entry.account.label})` : "";
-  return `${entry.sourceLabel}${account} ${windowLabel}`;
+  return `${entry.sourceLabel}${account}`;
+}
+
+function describe(entry: UsageReportEntry, windowLabel: string): string {
+  return `${sourceName(entry)} ${windowLabel}`;
 }
 
 // PaseoDog: 보고서 도착 순서와 무관하게 Codex -> Claude -> 나머지 공급자 순으로 고정한다.
@@ -120,6 +127,6 @@ export function resolvePinnedUsage(
         };
       });
     if (windows.length === 0) return [];
-    return [{ key: entry.id, icon: entry.icon ?? null, windows }];
+    return [{ key: entry.id, label: sourceName(entry), icon: entry.icon ?? null, windows }];
   });
 }

@@ -4,8 +4,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { Script } from 'node:vm';
 import { COMPOSER_FILE, DESKTOP_COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { USAGE_DONUT_EDITS, createUsageSummaryTrigger, donutArcRotations, usageCountdownText, withUsageDonut, withoutUsageDonut }
-    from '../patches/paseo-usage-donut.mjs';
+import { usageDonutEdits, createUsageSummaryTrigger, donutArcRotations, usageCountdownText, usageTooltipText, withUsageDonut,
+    withoutUsageDonut } from '../patches/paseo-usage-donut.mjs';
 
 const { z } = createRequire(new URL('../tools/package.json', import.meta.url))('zod');
 const pluginRequire = createRequire(new URL('../plugin/package.json', import.meta.url));
@@ -31,7 +31,7 @@ function loadBundleModule(source, marker) {
 function loadAndroidDonutModel() {
     const code = stripTypeScriptTypes(readFileSync(new URL('../android/packages/app/src/usage/donut-model.ts', import.meta.url), 'utf8'))
         .replace(/^export /gm, '');
-    return new Function(`${code}\nreturn { usageCountdownText, donutArcRotations, DONUT_SIZE, DONUT_STROKE };`)();
+    return new Function(`${code}\nreturn { usageCountdownText, usageTooltipText, donutArcRotations, DONUT_SIZE, DONUT_STROKE };`)();
 }
 
 test('sidebar usage donut patch is hash gated, idempotent and reversible', () => {
@@ -39,13 +39,21 @@ test('sidebar usage donut patch is hash gated, idempotent and reversible', () =>
     assert.equal(withUsageDonut(current), patched);
     assert.equal(patchedComposerSource(current), patched);
     assert.equal(patchedComposerSource(patched), patched);
-    for (const [before, after] of USAGE_DONUT_EDITS) {
+    const edits = usageDonutEdits(current);
+    for (const [before, after] of edits) {
         assert.equal(patched.split(after).length, 2);
         assert.equal(current.split(before).length, 2);
     }
+    // 툴팁은 번들의 실제 TooltipContent 모듈을 Metro 번호로 불러온다.
+    const tooltipId = /\},(\d+),\[/.exec(patched.slice(patched.indexOf('e.TooltipContent=function')))[1];
+    assert.ok(patched.includes(`TooltipContent:r(${tooltipId}).TooltipContent`));
     assert.throws(() => withUsageDonut(patched), /anchor mismatch/);
-    const partial = patched.replace(USAGE_DONUT_EDITS[0][1], USAGE_DONUT_EDITS[0][0]);
+    const partial = patched.replace(edits[0][1], edits[0][0]);
     assert.throws(() => patchedComposerSource(partial), /Partial Paseo usage donut/);
+    // 이전 버전(공급자 이름 편집 없음·다른 트리거 본문)도 새 패치로 교체된다.
+    const labelEdit = edits.find(([before]) => before === '[{key:l.id,icon:l.icon??null,windows:s}]');
+    const legacy = patched.replace(labelEdit[1], labelEdit[0]).replace('tooltipText:function usageTooltipText', 'legacy:function usageTooltipText');
+    assert.equal(patchedComposerSource(legacy), patched);
 });
 
 test('bundle preferences keep donuts only and the setter stores the choice', () => {
@@ -75,35 +83,45 @@ test('Android donut model matches the bundle countdown and arc math', () => {
     assert.deepEqual(donutArcRotations(140), { right: 225, left: 45 });
     for (let percent = -10; percent <= 110; percent += 0.5)
         assert.deepEqual(android.donutArcRotations(percent), donutArcRotations(percent));
+    const sources = [{ label: 'Codex', windows: [{ shortLabel: '5h', percentText: '0%' }, { shortLabel: '7D', percentText: '97%' }] },
+        { label: 'Claude (work)', windows: [{ shortLabel: '', percentText: '31%' }] }];
+    assert.equal(usageTooltipText(sources), 'Codex: 5h 0% / 7D 97%\nClaude (work): 31%');
+    assert.equal(android.usageTooltipText(sources), usageTooltipText(sources));
 });
 
 test('summary trigger draws donuts with countdowns and falls back to the bar trigger', async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-    const theme = { spacing: { 1: 4, 2: 8, 3: 12 }, borderRadius: { lg: 8 }, fontSize: { sm: 12 },
-        colors: { surfaceSidebarHover: 'hover', surface3: 'track', foregroundMuted: 'muted', foreground: 'text',
+    const theme = { spacing: { 0.5: 2, 2: 8, 4: 16 }, borderRadius: { lg: 8 }, fontSize: { sm: 12, base: 14 },
+        colors: { surfaceSidebarHover: 'hover', surface3: 'track', foregroundMuted: 'muted', foreground: 'text', popoverForeground: 'popover',
             statusSuccess: 'ok', statusWarning: 'warning', statusDanger: 'danger' } };
     let style = 'donut';
     const Trigger = createUsageSummaryTrigger({
-        React, jsx, jsxs, View: 'view', Text: 'text', Pressable: 'pressable', SourceIcon: 'icon',
+        React, jsx, jsxs, View: 'view', Text: 'text', SourceIcon: 'icon',
         usePreferences: () => ({ preferences: style === 'donut' ? { sidebarStyle: 'donut' } : {} }),
         StyleSheet: { create: (factory) => factory(theme) }, BarTrigger: 'bar',
+        Tooltip: 'tooltip', TooltipTrigger: 'tooltip-trigger', TooltipContent: 'tooltip-content',
         describe: (label, sources) => `${label}: ${sources.length}`, countdown: usageCountdownText, rotations: donutArcRotations,
+        tooltipText: usageTooltipText,
     });
     const resetsAt = new Date(Date.now() + (53 * 60 + 30) * 1000).toISOString();
-    const sources = [{ key: 'claude', icon: '<svg/>', windows: [
-        { key: 'claude/5h', shortLabel: '5H', percent: 80, tone: 'warning', resetsAt },
-        { key: 'claude/7d', shortLabel: '7D', percent: 95, tone: 'danger', resetsAt: null },
+    const sources = [{ key: 'claude', label: 'Claude', icon: '<svg/>', windows: [
+        { key: 'claude/5h', shortLabel: '5H', percent: 80, percentText: '80%', tone: 'warning', resetsAt },
+        { key: 'claude/7d', shortLabel: '7D', percent: 95, percentText: '95%', tone: 'danger', resetsAt: null },
     ] }];
     let tree;
     await act(async () => { tree = create(jsx(Trigger, { label: 'Usage', sources, onPress() {} })); });
     const cells = tree.root.findAll((node) => node.props.testID === 'sidebar-usage-pinned-window' && node.type === 'view');
     assert.equal(cells.length, 2);
     const texts = tree.root.findAllByType('text').map((node) => node.props.children);
-    assert.deepEqual(texts, ['5H', '0:53', '7D', '--:--']);
+    assert.deepEqual(texts, ['5H', '0:53', '7D', '--:--', 'Claude: 5H 80% / 7D 95%']);
+    const trigger = tree.root.findByType('tooltip-trigger');
+    assert.equal(trigger.props.style({ hovered: false }).justifyContent, 'center');
+    assert.equal(trigger.props.style({ hovered: false }).columnGap, 16);
+    assert.equal(tree.root.findByType('tooltip').props.delayDuration, 300);
     const arcs = tree.root.findAll((node) => node.type === 'view' && Array.isArray(node.props.style) && node.props.style.length === 4);
     assert.deepEqual(arcs.map((node) => [node.props.style[2].borderLeftColor, node.props.style[3].transform[0].rotate]),
         [['warning', '225deg'], ['warning', '-27deg'], ['danger', '225deg'], ['danger', '27deg']]);
-    assert.equal(tree.root.findByType('pressable').props.accessibilityLabel, 'Usage: 1');
+    assert.equal(trigger.props.accessibilityLabel, 'Usage: 1');
     style = 'bar';
     await act(async () => tree.update(jsx(Trigger, { label: 'Usage', sources, onPress() {} })));
     assert.equal(tree.root.findAllByType('bar').length, 1);
