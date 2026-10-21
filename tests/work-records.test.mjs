@@ -85,7 +85,10 @@ test('legacy messages use existing completed-turn boundaries without guessing pa
     assert.deepEqual(result.tail[1].items, [first]);
     assert.equal(result.tail[2].text, last.text);
     assert.equal(result.tail[2].answerStart, true);
-    assert.equal(project({ tail: [user, last], head: [] }, true).tail[1].kind, 'work_record');
+    // 진행 중에도 도구가 뒤따르지 않은 마지막 본문은 답변 자리에 바로 흐른다
+    const live = project({ tail: [user, last], head: [] }, true);
+    assert.equal(live.tail[1].answerStart, true);
+    assert.equal(project({ tail: [user, first, last], head: [] }, true).tail[1].items[0], first);
 });
 
 test('native final continuations retain every final part rather than discarding a partial code block', () => {

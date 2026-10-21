@@ -131,7 +131,7 @@ export default {
       usesCleartextTraffic: true,
       permissions: buildProfile.androidPermissions,
       package: variant.packageId,
-      versionCode: nativeReleaseVersion.androidVersionCode + 37,
+      versionCode: nativeReleaseVersion.androidVersionCode + 38,
       ...(variant.googleServicesFile ? { googleServicesFile: variant.googleServicesFile } : {}),
     },
     web: {

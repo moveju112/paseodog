@@ -70,6 +70,52 @@ test("missing per-item turn metadata does not detach progress from its request",
   expect(getGapBetweenStreamItems(result.tail[1]!, result.head[0]!)).toBe(16);
 });
 
+test("active turn streams an unphased trailing message as the answer until a tool follows", () => {
+  const timestamp = new Date(1);
+  const request: StreamItem = {
+    kind: "user_message",
+    id: "request",
+    turnId: "turn",
+    timestamp,
+    text: "요청",
+  };
+  const preamble: StreamItem = {
+    kind: "assistant_message",
+    id: "preamble",
+    turnId: "turn",
+    timestamp,
+    text: "확인할게",
+  };
+  const streaming: StreamItem = { ...preamble, id: "streaming", text: "답변 작성 중" };
+  const tool = {
+    kind: "tool_call",
+    id: "tool",
+    turnId: "turn",
+    timestamp,
+    payload: { source: "agent", data: { status: "running" } },
+  } as unknown as StreamItem;
+
+  const live = projectWorkRecords({ tail: [request, preamble, tool], head: [streaming] }, true);
+  expect(live.tail[1]).toMatchObject({ kind: "work_record", items: [preamble, tool] });
+  expect(live.head[0]).toMatchObject({ id: "streaming", answerStart: true });
+
+  // 도구가 뒤따르면 같은 본문은 진행 기록으로 들어간다
+  const nextTool = { ...tool, id: "next-tool" } as StreamItem;
+  const moved = projectWorkRecords({ tail: [request, streaming], head: [nextTool] }, true);
+  expect([...moved.tail, ...moved.head].some((item) => item.kind === "assistant_message")).toBe(
+    false,
+  );
+
+  // 명시된 commentary는 마지막이어도 기록에 남는다
+  const commentary = { ...streaming, assistantPhase: "commentary" } as StreamItem;
+  const tagged = projectWorkRecords({ tail: [request], head: [commentary] }, true);
+  expect(tagged.head[0]).toMatchObject({ kind: "work_record" });
+
+  // 추론 숨기기 모드는 기존 규칙을 유지한다
+  const hidden = projectWorkRecords({ tail: [request], head: [streaming] }, true, undefined, true);
+  expect(hidden.head).toHaveLength(0);
+});
+
 test("late native phase survives the real live reducer and Markdown projection", () => {
   const timestamp = new Date(1);
   const event = {

@@ -112,6 +112,17 @@ export function projectWorkRecords<
         answers.add(sourceId(item));
       } else answers.clear();
     }
+    // 진행 중 턴: 도구가 뒤따르지 않은 마지막 미표시 본문은 단계가 끝에서야 붙어도 답변 자리에 바로 흘린다
+    const last = group.findLast(
+      (item) => item.kind === "assistant_message" || item.kind === "tool_call",
+    );
+    if (
+      key === active &&
+      !hideReasoning &&
+      last?.kind === "assistant_message" &&
+      !last.assistantPhase
+    )
+      answers.add(sourceId(last));
     return answers;
   }
 

@@ -1,6 +1,7 @@
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
+import { Minimize2 } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { AgentUsage } from "@/usage";
 import { formatTokenCount } from "./context-window-meter.utils";
@@ -62,8 +63,9 @@ export function ContextWindowDetails({
         ) : null}
         {onCompact ? (
           <Button
-            variant="outline"
-            size="sm"
+            variant="default"
+            size="md"
+            leftIcon={Minimize2}
             onPress={onCompact}
             disabled={compactDisabled}
             testID="context-window-compact"
@@ -98,7 +100,9 @@ const styles = StyleSheet.create((theme) => ({
     lineHeight: theme.fontSize.sm * 1.4,
   },
   compactButton: {
-    marginTop: theme.spacing[1],
-    alignSelf: "flex-start",
+    // 잘 보이도록 강조 채움 버튼을 가운데에 둔다
+    marginTop: theme.spacing[2],
+    alignSelf: "center",
+    minWidth: 160,
   },
 }));

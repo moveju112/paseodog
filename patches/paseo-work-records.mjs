@@ -72,6 +72,13 @@ function withCurrentRecordGap(source) {
     return source.replace(previous, spacingEdits[0][1]);
 }
 
+// 검토한 이전 투영 주입본 (기록 간격 판, 진행 중 답변 즉시 표시 이전 판)
+// 값: 그 판에 간격 편집이 함께 들어 있었는지
+const LEGACY_PROJECTION_HASHES = new Map([
+    ['77b55376fb26b763b90c94346a7eb757f9009d1311d49cd9a6bd2973e092fa6c', false],
+    ['b6bf3716ac78d587356bb6f1399347df171b4742179363da145cdab86804e66c', true],
+]);
+
 // 전체 패치만 제거해 기존 번들 원본 해시 검증과 독립 패치 검사를 보존한다.
 export function withoutWorkRecords(source) {
     let edits = WORK_RECORD_EDITS;
@@ -81,10 +88,11 @@ export function withoutWorkRecords(source) {
         const endMarker = ';const l=new WeakMap,H=';
         const end = source.indexOf(endMarker, start);
         const previous = source.slice(start, end + endMarker.length);
-        if (end === -1 || createHash('sha256').update(previous).digest('hex') !== '77b55376fb26b763b90c94346a7eb757f9009d1311d49cd9a6bd2973e092fa6c')
+        const hash = createHash('sha256').update(previous).digest('hex');
+        if (end === -1 || !LEGACY_PROJECTION_HASHES.has(hash))
             throw new Error('Paseo work record legacy projection drift');
         source = source.replace(previous, projectionInjected);
-        edits = WORK_RECORD_EDITS.slice(0, -spacingEdits.length);
+        if (!LEGACY_PROJECTION_HASHES.get(hash)) edits = WORK_RECORD_EDITS.slice(0, -spacingEdits.length);
     }
     const counts = edits.map(([, after]) => source.split(after).length - 1);
     if (counts.some((count, index) => count !== 0 && count !== (edits[index][2] ?? 1)))
