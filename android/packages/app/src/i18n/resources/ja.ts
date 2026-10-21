@@ -1145,7 +1145,6 @@ export const ja: TranslationResources = {
     title: "新着情報",
     installed: "インストール済み",
     showMore: "もっと見る",
-    openWebsite: "変更履歴をすべて表示",
     error: {
       title: "変更履歴を読み込めません",
       description: "接続を確認してもう一度お試しください。",
@@ -1239,9 +1238,6 @@ export const ja: TranslationResources = {
       sectionHelp: "ヘルプ",
       diagnostics: "診断を実行",
       shortcuts: "キーボードショートカット",
-      reportIssue: "問題を報告",
-      discord: "Discord",
-      github: "GitHub Issueを作成",
       whatsNew: "新着情報",
       appName: "Paseo",
     },

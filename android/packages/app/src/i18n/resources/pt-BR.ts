@@ -1158,7 +1158,6 @@ export const ptBR: TranslationResources = {
     title: "Novidades",
     installed: "Instalada",
     showMore: "Mostrar mais",
-    openWebsite: "Changelog completo",
     error: {
       title: "Não foi possível carregar o changelog",
       description: "Verifique sua conexão e tente novamente.",
@@ -1251,9 +1250,6 @@ export const ptBR: TranslationResources = {
       sectionHelp: "Ajuda",
       diagnostics: "Executar diagnóstico",
       shortcuts: "Atalhos de teclado",
-      reportIssue: "Relatar um problema",
-      discord: "Discord",
-      github: "Criar issue no GitHub",
       whatsNew: "Novidades",
       appName: "Paseo",
     },

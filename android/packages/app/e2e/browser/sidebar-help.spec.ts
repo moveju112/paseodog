@@ -3,11 +3,6 @@ import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { openSettingsSection } from "../support/helpers/settings";
 import { openWhatsNew, release, serveChangelog } from "../support/helpers/changelog";
 
-const DISCORD_DESTINATION =
-  /^https:\/\/(?:discord\.gg\/jz8T2uahpH|discord\.com\/invite\/jz8T2uahpH)(?:[/?#]|$)/;
-const GITHUB_ISSUE_DESTINATION =
-  /^https:\/\/github\.com\/(?:getpaseo\/paseo\/issues\/new(?:\/choose)?(?:[/?#]|$)|login\?return_to=https%3A%2F%2Fgithub\.com%2Fgetpaseo%2Fpaseo%2Fissues%2Fnew$)/;
-const CHANGELOG_DESTINATION = /^https:\/\/paseo\.sh\/changelog(?:[/?#]|$)/;
 // The name and the version are separate cells of a key/value row, so they meet with no space
 // between them in the row's text content.
 const APP_VERSION = /^Paseo\s*v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -30,26 +25,15 @@ async function closeSheet(page: Page, testID: string): Promise<void> {
   await expect(sheet).not.toBeVisible();
 }
 
-async function expectExternalPage(
-  page: Page,
-  actionTestID: string,
-  expectedUrl: RegExp,
-): Promise<void> {
-  const popupPromise = page.waitForEvent("popup");
-  await page.getByTestId(actionTestID).click();
-  const popup = await popupPromise;
-  expect(popup.url()).toMatch(expectedUrl);
-  await popup.close();
-}
-
-test("opens troubleshooting and support destinations", async ({ page }) => {
+test("opens troubleshooting destinations", async ({ page }) => {
   await gotoAppShell(page);
   await expect(page.getByTestId("sidebar-help")).toBeVisible();
 
   await test.step("opens diagnostics and keyboard shortcuts", async () => {
     await openHelpMenu(page);
     await expect(page.getByText("Help", { exact: true })).toBeVisible();
-    await expect(page.getByText("Report an issue", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("sidebar-help-discord")).toHaveCount(0);
+    await expect(page.getByTestId("sidebar-help-github")).toHaveCount(0);
     await expect(page.getByText("What's new", { exact: true })).toBeVisible();
     await expect(page.getByTestId("sidebar-help-version")).toHaveText(APP_VERSION);
 
@@ -62,17 +46,9 @@ test("opens troubleshooting and support destinations", async ({ page }) => {
     await expect(page.getByTestId("keyboard-shortcuts-dialog")).toBeVisible();
     await closeSheet(page, "keyboard-shortcuts-dialog");
   });
-
-  await test.step("opens support pages", async () => {
-    await openHelpMenu(page);
-    await expectExternalPage(page, "sidebar-help-discord", DISCORD_DESTINATION);
-
-    await openHelpMenu(page);
-    await expectExternalPage(page, "sidebar-help-github", GITHUB_ISSUE_DESTINATION);
-  });
 });
 
-test("renders the changelog in the app and links the website", async ({ page }) => {
+test("renders the changelog in the app without an external link", async ({ page }) => {
   // A callout, a section name the app has never seen, and a fenced sample whose
   // contents look like a release heading.
   await serveChangelog(page, [
@@ -113,7 +89,7 @@ test("renders the changelog in the app and links the website", async ({ page }) 
   await expect(release(sheet, "9.0.0")).toBeVisible();
   await expect(release(sheet, "0.0.0")).toHaveCount(0);
 
-  await expectExternalPage(page, "changelog-open-website", CHANGELOG_DESTINATION);
+  await expect(page.getByTestId("changelog-open-website")).toHaveCount(0);
   await closeSheet(page, "changelog-sheet");
 });
 

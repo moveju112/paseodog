@@ -3,14 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import {
-  QrCode,
-  Link2,
-  ClipboardPaste,
-  ExternalLink,
-  Settings,
-  Terminal,
-} from "lucide-react-native";
+import { QrCode, Link2, ClipboardPaste, Settings, Terminal } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { HostProfile } from "@/types/host-connection";
 import { getHostRuntimeStore, isHostRuntimeConnected, useHosts } from "@/runtime/host-runtime";
@@ -22,9 +15,8 @@ import { resolveAppVersion } from "@/utils/app-version";
 import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
 import { buildOpenProjectRoute } from "@/utils/host-routes";
 import { PaseodogLogo as PaseoLogo } from "@/components/icons/paseodog-logo";
-import { openExternalUrl } from "@/utils/open-external-url";
 import { isFdroidBuild } from "@/constants/build-profile";
-import { isWeb, isNative } from "@/constants/platform";
+import { isWeb } from "@/constants/platform";
 import { isElectronRuntime } from "@/desktop/host";
 
 interface WelcomeAction {
@@ -99,17 +91,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   actionTextPrimary: {
     color: theme.colors.accentForeground,
-  },
-  setupLink: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  setupLinkText: {
-    color: theme.colors.accent,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.medium,
   },
   versionLabel: {
     color: theme.colors.foregroundMuted,
@@ -187,10 +168,6 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
   const finishOnboarding = useCallback(() => {
     router.replace(buildOpenProjectRoute());
   }, [router]);
-
-  const handleOpenPaseoSite = useCallback(() => {
-    void openExternalUrl("https://github.com/moveju112/paseodog");
-  }, []);
 
   const handleOpenSettings = useCallback(() => {
     router.push("/settings");
@@ -290,12 +267,6 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
           <View style={styles.copyBlock}>
             <Text style={styles.title}>{t("onboarding.title")}</Text>
             <Text style={styles.subtitle}>{t("onboarding.subtitle")}</Text>
-            {isNative ? (
-              <Pressable style={styles.setupLink} onPress={handleOpenPaseoSite}>
-                <Text style={styles.setupLinkText}>PaseoDog · GitHub</Text>
-                <ExternalLink size={14} color={theme.colors.accent} />
-              </Pressable>
-            ) : null}
           </View>
 
           <View style={styles.actions}>

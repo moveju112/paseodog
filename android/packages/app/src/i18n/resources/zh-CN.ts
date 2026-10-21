@@ -1124,7 +1124,6 @@ export const zhCN: TranslationResources = {
     title: "新功能",
     installed: "已安装",
     showMore: "显示更多",
-    openWebsite: "完整更新日志",
     error: {
       title: "无法加载更新日志",
       description: "请检查网络连接后重试。",
@@ -1217,9 +1216,6 @@ export const zhCN: TranslationResources = {
       sectionHelp: "帮助",
       diagnostics: "运行诊断",
       shortcuts: "键盘快捷键",
-      reportIssue: "报告问题",
-      discord: "Discord",
-      github: "创建 GitHub Issue",
       whatsNew: "新功能",
       appName: "Paseo",
     },

@@ -1149,7 +1149,6 @@ export const ru: TranslationResources = {
     title: "Что нового",
     installed: "Установлена",
     showMore: "Показать ещё",
-    openWebsite: "Полный список изменений",
     error: {
       title: "Не удалось загрузить список изменений",
       description: "Проверьте подключение и попробуйте снова.",
@@ -1243,9 +1242,6 @@ export const ru: TranslationResources = {
       sectionHelp: "Помощь",
       diagnostics: "Запустить диагностику",
       shortcuts: "Сочетания клавиш",
-      reportIssue: "Сообщить о проблеме",
-      discord: "Discord",
-      github: "Создать issue на GitHub",
       whatsNew: "Что нового",
       appName: "Paseo",
     },

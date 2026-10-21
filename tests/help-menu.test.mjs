@@ -14,7 +14,7 @@ test('help menu drops only the report-issue group and keeps help items and versi
     assert.equal(patched.split(HELP_MENU).length, 2);
     assert.equal(patched.includes(HELP_MENU_ANCHOR), false);
     const children = HELP_MENU.match(/children:\[([^\]]+)\]/)[1].split(',');
-    // 원본 목록: de 제목, ae 단축키, pe 새 소식, he 진단, ge 구분선, Ie 문제 신고 제목, me Discord, Se GitHub, fe 구분선, ve 버전
+    // 원본 목록: de 제목, ae 단축키, pe 새 소식, he 진단, ge 구분선, Ie 문제 신고 제목, me·Se 외부 링크, fe 구분선, ve 버전
     assert.deepEqual(children, ['de', 'ae', 'pe', 'he', 'fe', 've']);
     for (const [name, testId] of [['ae', 'sidebar-help-shortcuts'], ['pe', 'sidebar-help-changelog'],
         ['he', 'sidebar-help-diagnostics'], ['me', 'sidebar-help-discord'], ['Se', 'sidebar-help-github']]) {

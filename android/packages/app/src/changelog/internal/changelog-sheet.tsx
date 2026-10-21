@@ -1,6 +1,6 @@
-import { memo, useCallback, useMemo } from "react";
-import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
-import { ExternalLink, Gift } from "lucide-react-native";
+import { memo, useMemo } from "react";
+import { Text, View } from "react-native";
+import { Gift } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 
@@ -9,14 +9,9 @@ import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import {
-  iconButtonChromeGlyphSize,
-  iconButtonChromeStyle,
-} from "@/components/ui/icon-button-chrome";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { resolveAppVersion } from "@/utils/app-version";
-import { openExternalUrl } from "@/utils/open-external-url";
 import { useChangelog, type ChangelogState } from "./changelog-source";
 import { useRevealedReleases } from "./use-revealed-releases";
 import {
@@ -25,15 +20,10 @@ import {
   type ChangelogSection,
 } from "./parse-changelog";
 
-const WEBSITE_CHANGELOG_URL = "https://github.com/moveju112/paseodog/releases";
-
 const ThemedGift = withUnistyles(Gift);
-const ThemedExternalLink = withUnistyles(ExternalLink);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const sheetLeadingIcon = <ThemedGift size={ICON_SIZE.md} uniProps={mutedColorMapping} />;
-const websiteButtonStyle = (state: PressableStateCallbackType & { hovered?: boolean }) =>
-  iconButtonChromeStyle({ size: "large", state });
 
 interface ChangelogSheetProps {
   visible: boolean;
@@ -45,31 +35,12 @@ export function ChangelogSheet({ visible, onClose }: ChangelogSheetProps) {
   const { state, reload } = useChangelog(visible);
   const { count, showMore } = useRevealedReleases(visible && state.status === "ready");
 
-  const handleOpenWebsite = useCallback(() => {
-    void openExternalUrl(WEBSITE_CHANGELOG_URL);
-  }, []);
-
   const header: SheetHeader = useMemo(
     () => ({
       title: t("changelog.title"),
       leading: sheetLeadingIcon,
-      actions: (
-        <Pressable
-          onPress={handleOpenWebsite}
-          hitSlop={8}
-          style={websiteButtonStyle}
-          accessibilityRole="button"
-          accessibilityLabel={t("changelog.openWebsite")}
-          testID="changelog-open-website"
-        >
-          <ThemedExternalLink
-            size={iconButtonChromeGlyphSize("large")}
-            uniProps={mutedColorMapping}
-          />
-        </Pressable>
-      ),
     }),
-    [handleOpenWebsite, t],
+    [t],
   );
 
   return (

@@ -1168,7 +1168,6 @@ export const es: TranslationResources = {
     title: "Novedades",
     installed: "Instalada",
     showMore: "Mostrar más",
-    openWebsite: "Registro de cambios completo",
     error: {
       title: "No se pudo cargar el registro de cambios",
       description: "Comprueba tu conexión e inténtalo de nuevo.",
@@ -1261,9 +1260,6 @@ export const es: TranslationResources = {
       sectionHelp: "Ayuda",
       diagnostics: "Ejecutar diagnóstico",
       shortcuts: "Atajos de teclado",
-      reportIssue: "Informar de un problema",
-      discord: "Discord",
-      github: "Crear incidencia en GitHub",
       whatsNew: "Novedades",
       appName: "Paseo",
     },

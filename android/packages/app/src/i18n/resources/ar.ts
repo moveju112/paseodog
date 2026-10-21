@@ -1132,7 +1132,6 @@ export const ar: TranslationResources = {
     title: "ما الجديد",
     installed: "مثبّت",
     showMore: "عرض المزيد",
-    openWebsite: "سجل التغييرات الكامل",
     error: {
       title: "تعذّر تحميل سجل التغييرات",
       description: "تحقق من اتصالك وحاول مرة أخرى.",
@@ -1225,9 +1224,6 @@ export const ar: TranslationResources = {
       sectionHelp: "المساعدة",
       diagnostics: "تشغيل التشخيص",
       shortcuts: "اختصارات لوحة المفاتيح",
-      reportIssue: "الإبلاغ عن مشكلة",
-      discord: "Discord",
-      github: "إنشاء مشكلة على GitHub",
       whatsNew: "ما الجديد",
       appName: "Paseo",
     },

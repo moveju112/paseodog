@@ -5,10 +5,11 @@ import { Script } from 'node:vm';
 import { COMPOSER_FILE, DESKTOP_COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import { HIDE_REASONING_EDITS, withHideReasoning, withoutHideReasoning } from '../patches/paseo-hide-reasoning.mjs';
 import { withoutWorkRecords } from '../patches/paseo-work-records.mjs';
+import { withoutExternalLinks } from '../patches/paseo-external-links.mjs';
 
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
 const complete = patchedComposerSource(installed);
-const patched = withoutWorkRecords(complete);
+const patched = withoutWorkRecords(withoutExternalLinks(complete));
 const current = withoutHideReasoning(patched);
 const androidResources = new URL('../android/packages/app/src/i18n/resources/', import.meta.url);
 
@@ -177,6 +178,6 @@ test('chat view reads the setting and invalidates the presentation memo with it'
 });
 
 test('reviewed desktop bundle carries the same hide reasoning patch', { skip: !existsSync(DESKTOP_COMPOSER_FILE) }, () => {
-    const desktop = withoutWorkRecords(patchedComposerSource(readFileSync(DESKTOP_COMPOSER_FILE, 'utf8')));
+    const desktop = withoutWorkRecords(withoutExternalLinks(patchedComposerSource(readFileSync(DESKTOP_COMPOSER_FILE, 'utf8'))));
     assert.equal(withHideReasoning(withoutHideReasoning(desktop)), desktop);
 });

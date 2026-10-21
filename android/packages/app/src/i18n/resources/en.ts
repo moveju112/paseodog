@@ -1140,7 +1140,6 @@ export const en = {
     title: "What's new",
     installed: "Installed",
     showMore: "Show more",
-    openWebsite: "Full changelog",
     error: {
       title: "Unable to load the changelog",
       description: "Check your connection and try again.",
@@ -1233,9 +1232,6 @@ export const en = {
       sectionHelp: "Help",
       diagnostics: "Run diagnostics",
       shortcuts: "Keyboard shortcuts",
-      reportIssue: "Report an issue",
-      discord: "Discord",
-      github: "Create GitHub issue",
       whatsNew: "What's new",
       appName: "Paseo",
     },

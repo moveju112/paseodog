@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: Apache-2.0
-// PR https://github.com/getpaseo/paseo/pull/6607: ACK 대기와 오류 매핑만 0.11.4 배포 JS에 이식.
+// upstream Paseo PR #6607:ACK 대기와 오류 매핑만 0.11.4 배포 JS에 이식.
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';

@@ -18,6 +18,7 @@ import { withImportCwd, withoutImportCwd } from '../patches/paseo-import-cwd.mjs
 import { withAgentsSettings, withoutAgentsSettings } from '../patches/paseo-agents-settings.mjs';
 import { withSidebarStatusShapes, withoutSidebarStatusShapes } from '../patches/paseo-sidebar-status-shapes.mjs';
 import { withWorkRecords, withoutWorkRecords } from '../patches/paseo-work-records.mjs';
+import { withExternalLinks, withoutExternalLinks } from '../patches/paseo-external-links.mjs';
 
 const PRECOMPRESSED = [['.br', brotliCompressSync, brotliDecompressSync], ['.gz', gzipSync, gunzipSync]];
 
@@ -42,7 +43,7 @@ export function withoutWorktreeSetupTip(source) {
 
 // 기존 첨부파일·대기열 저장 및 배출 로직을 유지하면서 PaseoDog의 자동 턴 교체만 차단한다.
 export function patchedComposerSource(source) {
-    const withoutSetupTip = withoutWorktreeSetupTip(withoutImportCwd(withoutAgentsSettings(withoutSidebarStatusShapes(withoutWorkRecords(source)))));
+    const withoutSetupTip = withoutWorktreeSetupTip(withoutImportCwd(withoutAgentsSettings(withoutSidebarStatusShapes(withoutWorkRecords(withoutExternalLinks(source))))));
     const base = withoutHideReasoning(withoutUsageOrder(withoutUsageDonut(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutSetupTip))))))))));
     let original = base;
     for (const [before, after] of [...edits].reverse()) original = original.replace(after, before);
@@ -58,14 +59,15 @@ export function patchedComposerSource(source) {
     // diff 알약 요소는 그대로 두고 별도 트랙 바 모듈에 현재 세션 하위 작업 진행 알약을 붙인다.
     // PaseoDog 하단 사이드바 분석 아이콘은 쿼터 행 대신 좌측 하단 도구줄에 둔다.
     // PaseoDog Effort 목록에 호스트 자동 추론 항목을 넣고 모델 선택창·토큰 설정의 중복 스위치는 뺀다.
-    // 도움말 메뉴의 문제 신고 묶음(Discord·GitHub 이슈)만 렌더 목록에서 뺀다.
+    // 도움말 메뉴의 문제 신고 묶음만 렌더 목록에서 뺀다.
+    // 외부 커뮤니티·저장소 링크 버튼은 렌더하지 않는다.
     // 사이드바 쿼터 게이지 채움도 호스트 windowTone 단계 색을 쓴다.
     // 사이드바 쿼터 공급자 순서를 Codex -> Claude로 고정하고 주간 짧은 이름 wk를 7D로 맞춘다.
     // 사용량 옵션의 Sidebar style에서 Donuts를 고르면 사이드바 쿼터를 링·초기화 카운트다운으로 그린다.
     // 워크트리 스크립트 설정을 권하는 팁은 프로젝트 설정 여부와 무관하게 숨긴다.
     // "추론 숨기기"를 켜면 완료된 최종 답변만 표시한다(모델 추론·네이티브 기록·승인·오류 유지).
     const hiddenSetupTip = original.replace(...worktreeSetupTip);
-    return withWorkRecords(withSidebarStatusShapes(withAgentsSettings(withImportCwd(withHideReasoning(withUsageOrder(withUsageDonut(withUsageColors(withWhite2Theme(withCollaboration(withAutoEffort(withAgentProgress(withSidebarToolbar(withHelpMenu(hiddenSetupTip))))))))))))));
+    return withExternalLinks(withWorkRecords(withSidebarStatusShapes(withAgentsSettings(withImportCwd(withHideReasoning(withUsageOrder(withUsageDonut(withUsageColors(withWhite2Theme(withCollaboration(withAutoEffort(withAgentProgress(withSidebarToolbar(withHelpMenu(hiddenSetupTip)))))))))))))));
 }
 
 // 고정된 웹 입력창 번들만 수정하고 다른 클라이언트·공급자 동작은 건드리지 않는다.
