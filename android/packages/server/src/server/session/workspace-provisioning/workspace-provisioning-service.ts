@@ -10,6 +10,7 @@ import {
 } from "../../workspace-registry-model.js";
 import {
   createPersistedWorkspaceRecord,
+  resolveProjectDisplayName,
   type PersistedProjectRecord,
   type PersistedWorkspaceRecord,
   type ProjectRegistry,
@@ -232,7 +233,8 @@ export function createWorkspaceProvisioningService(deps: {
       workspaceId: context?.workspaceId ?? generateWorkspaceId(),
       projectId: project.projectId,
       ...initialWorkspacePlacement({ source: "checkout", cwd: normalizedCwd, checkout }),
-      title: title?.trim() || null,
+      title: title?.trim() || resolveProjectDisplayName(project),
+      titleOrigin: title?.trim() ? "user" : "provisional",
       createdAt: timestamp,
       updatedAt: timestamp,
     });
@@ -265,7 +267,8 @@ export function createWorkspaceProvisioningService(deps: {
         baseBranch: input.baseBranch,
         mainRepoRoot: repoRoot,
       }),
-      title: input.title,
+      title: input.title?.trim() || resolveProjectDisplayName(project),
+      titleOrigin: input.title?.trim() ? "user" : "provisional",
       createdAt: timestamp,
       updatedAt: timestamp,
       ...(input.untrustedSource ? { untrustedSource: input.untrustedSource } : {}),

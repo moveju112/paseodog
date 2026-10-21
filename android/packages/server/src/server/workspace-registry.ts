@@ -50,6 +50,7 @@ const PersistedProjectRecordSchema = z.object({
 
 const PersistedWorkspaceRecordSchema = z.object({
   workspaceId: z.string(),
+  titleOrigin: z.enum(["provisional", "generated", "user"]).optional(),
   projectId: z.string(),
   cwd: z.string(),
   kind: z.enum(["local_checkout", "worktree", "directory"]),
@@ -667,6 +668,7 @@ export function resolveProjectDisplayName(record: PersistedProjectRecord): strin
 
 export function createPersistedWorkspaceRecord(input: {
   workspaceId: string;
+  titleOrigin?: "provisional" | "generated" | "user";
   projectId: string;
   cwd: string;
   kind: PersistedWorkspaceKind;

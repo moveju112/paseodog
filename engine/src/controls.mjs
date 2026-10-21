@@ -35,6 +35,10 @@ function workflowPackProjection(pack) {
 // 설정 요청은 허용된 항목만 받으며 전용 프로필의 네이티브 API로 저장한다.
 export async function controlRuntime(runtime, request = {}, options = {}) {
     const action = request.action || 'read';
+    if (action === 'title') {
+        const generate = options.generateTitle || (await import('./session-title.mjs')).generateConversationTitle;
+        return generate(request);
+    }
     if (action === 'resources') return resourceControls(runtime, request);
     if (action === 'usage') return await readClaudeUsage(runtime);
     if (action === 'metrics') return await readUsageMetrics(runtime, request);
@@ -493,7 +497,7 @@ async function openControlRuntime() {
     return { native, runtime };
 }
 
-// 별도 프로세스에서 전용 프로필만 열며 모델 추론이나 도구 실행은 시작하지 않는다.
+// 전용 프로필을 열어 설정을 처리하고, 제목 요청만 명시된 네이티브 추론 경로에 전달한다.
 export async function runControls(request) {
     const { runtime } = await openControlRuntime();
     try { return await controlRuntime(runtime, request); }

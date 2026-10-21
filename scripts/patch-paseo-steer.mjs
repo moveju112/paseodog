@@ -3,9 +3,13 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitBlob } from './patch-mixdog.mjs';
 import { agentMessageTransportEdits } from '../patches/paseo-agent-messages.mjs';
+import { ADAPTER_PHASE_EDITS, withAssistantPhase, withoutAssistantPhase } from '../patches/paseo-assistant-phase.mjs';
 
 // PaseoDog의 미지원 지시는 대기열 사용을 안내하고 암묵적인 턴 교체를 막는다.
 export function patchedSteerSource(source) {
+    const phaseBase = withoutAssistantPhase(source, ADAPTER_PHASE_EDITS);
+    const hadPhase = phaseBase !== source;
+    source = phaseBase;
     let transportOriginal = source;
     for (const [before, after] of [...agentMessageTransportEdits].reverse())
         transportOriginal = transportOriginal.replace(after, before);
@@ -22,7 +26,7 @@ export function patchedSteerSource(source) {
         for (const [before, after] of agentMessageTransportEdits) result = result.replace(before, after);
         if (result !== source) throw new Error('Partial Paseo agent-message transport patch');
     }
-    return result;
+    return hadPhase ? withAssistantPhase(result, ADAPTER_PHASE_EDITS) : result;
 }
 
 // 미지원 지시는 활성 턴을 교체하지 못하게 차단하고 검토한 설치본에만 적용한다.

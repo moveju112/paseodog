@@ -424,6 +424,7 @@ test("session create keeps the prompt title after the initial prompt settles", a
 
     const created = await storage.get(snapshot.id);
     expect(created?.title).toBe(title);
+    expect(created?.titleOrigin).toBe("provisional");
 
     await agentManager.waitForAgentEvent(snapshot.id, { waitForActive: true });
 
@@ -462,6 +463,7 @@ test("session create keeps an explicit title after the initial prompt settles", 
 
     const created = await storage.get(snapshot.id);
     expect(created?.title).toBe(title);
+    expect(created?.titleOrigin).toBe("user");
 
     await agentManager.waitForAgentEvent(snapshot.id, { waitForActive: true });
 

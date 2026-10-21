@@ -4,9 +4,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { Script } from 'node:vm';
 import { COMPOSER_FILE, DESKTOP_COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import { HIDE_REASONING_EDITS, withHideReasoning, withoutHideReasoning } from '../patches/paseo-hide-reasoning.mjs';
+import { withoutWorkRecords } from '../patches/paseo-work-records.mjs';
 
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = patchedComposerSource(installed);
+const complete = patchedComposerSource(installed);
+const patched = withoutWorkRecords(complete);
 const current = withoutHideReasoning(patched);
 const androidResources = new URL('../android/packages/app/src/i18n/resources/', import.meta.url);
 
@@ -62,8 +64,8 @@ test('hide reasoning patch is hash gated, idempotent and reversible', () => {
     new Script(patched);
     assert.equal(withoutHideReasoning(current), current);
     assert.equal(withHideReasoning(current), patched);
-    assert.equal(patchedComposerSource(patched), patched);
-    assert.equal(patchedComposerSource(current), patched);
+    assert.equal(patchedComposerSource(patched), complete);
+    assert.equal(patchedComposerSource(current), complete);
     for (const [before, after] of HIDE_REASONING_EDITS) {
         assert.equal(patched.split(after).length, 2);
         assert.equal(current.split(before).length, 2);
@@ -175,6 +177,6 @@ test('chat view reads the setting and invalidates the presentation memo with it'
 });
 
 test('reviewed desktop bundle carries the same hide reasoning patch', { skip: !existsSync(DESKTOP_COMPOSER_FILE) }, () => {
-    const desktop = patchedComposerSource(readFileSync(DESKTOP_COMPOSER_FILE, 'utf8'));
+    const desktop = withoutWorkRecords(patchedComposerSource(readFileSync(DESKTOP_COMPOSER_FILE, 'utf8')));
     assert.equal(withHideReasoning(withoutHideReasoning(desktop)), desktop);
 });

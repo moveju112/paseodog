@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } fr
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
-import { AgentStatusDot } from "@/components/agent-status-dot";
+import { WorkspaceStatusIndicator } from "@/components/sidebar/sidebar-workspace-row-content";
 import { useCompactTimeAgo } from "@/hooks/use-time-ago";
 import { useRecentSessionsStore } from "@/stores/recent-sessions-store";
 import { useSessionStore, type Agent } from "@/stores/session-store";
@@ -14,6 +14,7 @@ import {
   type RecentSessionsWindow,
 } from "@/utils/recent-sessions";
 import { subscribeToRelativeTimeTick } from "@/utils/relative-time-ticker";
+import { deriveSidebarStateBucket } from "@/utils/sidebar-agent-state";
 
 const WINDOW_LABEL_KEYS = {
   "15m": "sidebar.recentSessions.windows.fifteenMinutes",
@@ -131,7 +132,7 @@ function RecentWindowOption({
   );
 }
 
-// 최근 세션 행 (상태 점·제목·작업공간·경과 시간 -> 누르면 세션 이동)
+// 최근 세션 행 (상태 링·체크·제목·경과 시간 -> 누르면 세션 이동)
 function RecentSessionRow({
   agent,
   onBeforeNavigate,
@@ -166,11 +167,14 @@ function RecentSessionRow({
       testID={`sidebar-recent-session-${agent.serverId}-${agent.id}`}
     >
       <View style={styles.dotSlot}>
-        <AgentStatusDot
-          status={agent.status}
-          requiresAttention={agent.requiresAttention}
-          attentionReason={agent.attentionReason}
-          pendingPermissionCount={agent.pendingPermissions.length}
+        <WorkspaceStatusIndicator
+          bucket={deriveSidebarStateBucket({
+            status: agent.status,
+            requiresAttention: agent.requiresAttention ?? false,
+            attentionReason: agent.attentionReason,
+            pendingPermissionCount: agent.pendingPermissions.length,
+          })}
+          workspaceKind="directory"
         />
       </View>
       <Text style={styles.rowTitle} numberOfLines={1}>
@@ -251,7 +255,7 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surfaceSidebarHover,
   },
   dotSlot: {
-    width: 8,
+    width: theme.iconSize.md,
     alignItems: "center",
   },
   rowTitle: {

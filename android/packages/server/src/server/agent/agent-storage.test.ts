@@ -61,6 +61,32 @@ function buildDefaultCapabilities() {
   };
 }
 
+test("automatic titles preserve provenance across reloads and snapshots, and manual names win", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "paseodog-title-storage-"));
+  try {
+    const storage = new AgentStorage(root, createTestLogger());
+    const agent = createManagedAgent();
+    await storage.applySnapshot(agent, { title: "Initial prompt" });
+    expect((await storage.get(agent.id))?.titleOrigin).toBe("provisional");
+    expect(await storage.setGeneratedTitle(agent.id, "Goal title", "Initial prompt")).toBe(true);
+    await storage.applySnapshot(agent);
+    const reloaded = new AgentStorage(root, createTestLogger());
+    expect(await reloaded.get(agent.id)).toMatchObject({
+      title: "Goal title",
+      titleOrigin: "generated",
+    });
+    await storage.applySnapshot(agent, { title: "Goal title", titleOrigin: "user" });
+    expect(await storage.setGeneratedTitle(agent.id, "Replacement", "Goal title")).toBe(false);
+    expect((await storage.get(agent.id))?.titleOrigin).toBe("user");
+    expect(
+      await storage.setGeneratedTitle(agent.id, "Replacement", "Goal title", () => false),
+    ).toBe(false);
+    expect(await storage.setGeneratedTitle("missing", "Replacement", null)).toBe(false);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 function buildDefaultRuntimeInfo(params: {
   provider: AgentProvider;
   config: AgentSessionConfig;

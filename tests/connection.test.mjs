@@ -317,6 +317,42 @@ test('native continuation snapshots reconcile with streamed aggregate and duplic
         .map((row) => row.item.text), ['First second']);
     assert.equal(f.events.some((event) => event.type === 'session.notice'), false);
 });
+
+// 명시 단계·원래 메시지 경계를 합계 스냅샷과 대조해 중복 없이 저장한다.
+test('native commentary and final answer stay separate while aggregate snapshots remain single-copy', async (t) => {
+    const f = fixture({ async ask(_text, callbacks) {
+        callbacks.onStreamItemStart({ kind: 'text', messageId: 'native-progress', phase: 'commentary' });
+        callbacks.onTextDelta('확인 중. ');
+        callbacks.onStreamItemStart({ kind: 'text', messageId: 'native-progress', phase: 'commentary' });
+        callbacks.onStreamItemStart({ kind: 'text', messageId: 'native-final', phase: 'final_answer' });
+        callbacks.onTextDelta('최종 답변.');
+        callbacks.onStreamItemStart({ kind: 'text', messageId: 'native-final', phase: 'final_answer' });
+        return { content: '확인 중. 최종 답변.' };
+    } });
+    t.after(() => f.connection.close());
+    await f.ready(); await f.run();
+    const messages = f.store.list()[0].items.filter((row) => row.item.type === 'assistant_message').map((row) => row.item);
+    assert.deepEqual(messages.map(({ text, phase }) => ({ text, phase })),
+        [{ text: '확인 중. ', phase: 'commentary' }, { text: '최종 답변.', phase: 'final_answer' }]);
+    assert.notEqual(messages[0].id, messages[1].id);
+});
+
+// item-done에서 늦게 오는 단계도 같은 메시지의 선택 메타데이터로 반영한다.
+test('late native phase metadata does not duplicate or discard streamed answer text', async (t) => {
+    const f = fixture({ async ask(_text, callbacks) {
+        callbacks.onStreamItemStart({ kind: 'text', messageId: 'native-progress', phase: 'commentary' });
+        callbacks.onTextDelta('진행 안내. ');
+        callbacks.onStreamItemStart({ kind: 'text', messageId: 'native-answer' });
+        callbacks.onTextDelta('답변.');
+        callbacks.onStreamItemStart({ kind: 'text', messageId: 'native-answer', phase: 'final_answer' });
+        return { content: '진행 안내. 답변.' };
+    } });
+    t.after(() => f.connection.close());
+    await f.ready(); await f.run();
+    const messages = f.store.list()[0].items.filter((row) => row.item.type === 'assistant_message').map((row) => row.item);
+    assert.deepEqual(messages.map(({ text, phase }) => ({ text, phase })),
+        [{ text: '진행 안내. ', phase: 'commentary' }, { text: '답변.', phase: 'final_answer' }]);
+});
 // 스트림이 없는 연속 메시지도 동일한 네이티브 합계로 전달한다.
 test('snapshot-only continuations and final-only revisions retain complete text', async (t) => {
     for (const streamed of [false, true]) {

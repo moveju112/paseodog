@@ -85,7 +85,22 @@ export type StreamItem =
   | TodoListItem
   | NotificationItem
   | CompactionItem
-  | PluginTimelineStreamItem;
+  | PluginTimelineStreamItem
+  | WorkRecordItem;
+
+/** 표시 전용 묶음이며 원본 타임라인이나 모델 컨텍스트에는 저장하지 않는다. */
+export interface WorkRecordItem {
+  kind: "work_record";
+  id: string;
+  turnId?: string;
+  timelineCursor?: TimelinePosition;
+  timestamp: Date;
+  items: StreamItem[];
+  active: boolean;
+  count: number;
+  preview: string;
+  groupRevision?: unknown;
+}
 
 export type UserMessageImageAttachment = AttachmentMetadata;
 
@@ -710,6 +725,9 @@ export interface AssistantMessageItem {
   timelineCursor?: TimelinePosition;
   text: string;
   timestamp: Date;
+  assistantPhase?: "commentary" | "final_answer";
+  /** 표시 전용: 답변 묶음의 첫 Markdown 블록에만 제목을 단다. */
+  answerStart?: boolean;
   /** Display-only fields, assigned after source-item plugin transforms. */
   blockGroupId?: string;
   blockIndex?: number;
@@ -909,6 +927,13 @@ function appendUserMessage(
   return upsertUserMessage(state, nextItem);
 }
 
+// 선택 단계 필드를 한 번만 만들어 일반 델타와 단계만 오는 갱신에 함께 쓴다.
+function assistantPhaseFields(
+  assistantPhase: AssistantMessageItem["assistantPhase"],
+): Pick<AssistantMessageItem, "assistantPhase"> {
+  return assistantPhase ? { assistantPhase } : {};
+}
+
 function appendAssistantMessage(
   state: StreamItem[],
   text: string,
@@ -917,9 +942,11 @@ function appendAssistantMessage(
   messageId?: string,
   reservedItemIds?: ReadonlySet<string>,
   timelineCursor?: TimelinePosition,
+  assistantPhase?: "commentary" | "final_answer",
 ): StreamItem[] {
   const { chunk, hasContent } = normalizeChunk(text);
-  if (!chunk) {
+  const phaseFields = assistantPhaseFields(assistantPhase);
+  if (!chunk && !assistantPhase) {
     return state;
   }
 
@@ -932,6 +959,7 @@ function appendAssistantMessage(
     const updated: AssistantMessageItem = {
       ...last,
       text: `${last.text}${chunk}`,
+      ...phaseFields,
       timestamp,
       ...(timelineCursor ? { timelineCursor } : {}),
     };
@@ -950,6 +978,7 @@ function appendAssistantMessage(
     const updated: AssistantMessageItem = {
       ...secondLast,
       text: `${secondLast.text}${chunk}`,
+      ...phaseFields,
       timestamp,
       ...(timelineCursor ? { timelineCursor } : {}),
     };
@@ -969,6 +998,7 @@ function appendAssistantMessage(
     ...(timelineCursor ? { timelineCursor } : {}),
     text: chunk,
     timestamp,
+    ...phaseFields,
   };
   return [...state, item];
 }
@@ -1524,6 +1554,7 @@ function reduceTimelineEvent(
           item.messageId,
           reservedItemIds,
           timelineCursor,
+          item.phase,
         ),
       );
     case "reasoning":

@@ -17,13 +17,16 @@ test('source allowlist includes required runtime modules and release commands', 
         'plugin/client/session-tools.tsx', 'plugin/client/resource-settings.tsx', 'tests/native-session-features.test.mjs',
         'engine/src/orchestration.mjs', 'plugin/server/compaction.mjs',
         'patches/effort-usage.mjs', 'tests/worktree-setup-tip.test.mjs', 'scripts/android-update-manifest.py',
-        'scripts/check-upstream.mjs', 'scripts/live-acceptance.mjs'])
+        'scripts/check-upstream.mjs', 'scripts/live-acceptance.mjs',
+        'android/scripts/build-package.mjs', 'android/scripts/clean-package-dist.mjs',
+        'android/scripts/is-main-module.mjs', 'tests/incremental-build.test.mjs',
+        'android/scripts/build-daemon-web-ui.mjs', 'tests/web-compression.test.mjs'])
         assert.ok(entries.has(path), `Required release source missing: ${path}`);
 });
 test('source archive has valid hashes, safe paths and no runtime state or dependencies',t=>{
     const dir=mkdtempSync(join(tmpdir(),'paseodog-package-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
     const output=join(dir,'release.zip');const built=spawnSync('python3',['scripts/package.py','--output',output],{cwd:root,encoding:'utf8'});assert.equal(built.status,0,built.stderr);
-    const check=spawnSync('python3',['-c',`import zipfile,hashlib,stat,sys\nwith zipfile.ZipFile(sys.argv[1]) as z:\n names=z.namelist()\n assert all(n.startswith('paseodog/') and '..' not in n.split('/') for n in names)\n assert all('node_modules/' not in n and '.local.' not in n for n in names)\n for line in z.read('paseodog/MANIFEST.sha256').decode().splitlines():\n  digest,name=line.split('  ',1)\n  assert hashlib.sha256(z.read('paseodog/'+name)).hexdigest()==digest\n assert z.testzip() is None\n agents=z.getinfo('paseodog/AGENTS.md')\n assert stat.S_ISREG(agents.external_attr>>16)\n assert z.read(agents)==open(sys.argv[2],'rb').read()\n`,output,join(root,'AI_RULES.md')],{encoding:'utf8'});assert.equal(check.status,0,check.stderr);
+    const check=spawnSync('python3',['-c',`import zipfile,hashlib,stat,sys\nwith zipfile.ZipFile(sys.argv[1]) as z:\n names=z.namelist()\n assert all(n.startswith('paseodog/') and '..' not in n.split('/') for n in names)\n assert all('node_modules/' not in n and '.local.' not in n for n in names)\n for line in z.read('paseodog/MANIFEST.sha256').decode().splitlines():\n  digest,name=line.split('  ',1)\n  assert hashlib.sha256(z.read('paseodog/'+name)).hexdigest()==digest\n assert z.testzip() is None\n expected={'paseodog/'+line.strip().split('  ',1)[1] for line in open(sys.argv[2])}\n assert set(names)==expected|{'paseodog/MANIFEST.sha256'}\n assert all(stat.S_ISREG(info.external_attr>>16) for info in z.infolist())\n`,output,join(root,'MANIFEST.sha256')],{encoding:'utf8'});assert.equal(check.status,0,check.stderr);
 });
 
 // 임시 소스 트리 생성 -> 정식 규칙·일반 소스·외부 비밀 파일 기록 (AGENTS.md는 케이스가 구성)

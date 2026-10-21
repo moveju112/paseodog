@@ -4,6 +4,7 @@ export type ProjectStatusBadgeDotBucket = "failed" | "attention" | "running";
 
 export type ProjectStatusBadgeContent =
   | { kind: "alert" }
+  | { kind: "check"; bucket: "attention" | "done" }
   | { kind: "dot"; bucket: ProjectStatusBadgeDotBucket };
 
 /**
@@ -11,10 +12,8 @@ export type ProjectStatusBadgeContent =
  * no badge should show at all. Kept as plain data (no React) so it's testable without JSDOM
  * or component mounting — see docs/testing.md's two test categories.
  *
- * Running is a dot like failed and attention rather than its own glyph. The badge is 14pt;
- * anything with internal detail at that size loses to a solid disc, so the buckets separate
- * by color and — for running alone — by pulsing. Only needs_input earns a glyph, because
- * "someone must act" has to survive being the one amber state next to running.
+ * 진행 링·완료 체크·입력 대기 느낌표를 같은 슬롯에서 구분한다.
+ * 실패 표시는 기존 위험 상태를 보존한다.
  */
 export function getProjectStatusBadgeContent(
   statusBucket: SidebarStateBucket | null,
@@ -22,7 +21,10 @@ export function getProjectStatusBadgeContent(
   if (statusBucket === "needs_input") {
     return { kind: "alert" };
   }
-  if (statusBucket === "failed" || statusBucket === "attention" || statusBucket === "running") {
+  if (statusBucket === "attention" || statusBucket === "done") {
+    return { kind: "check", bucket: statusBucket };
+  }
+  if (statusBucket === "failed" || statusBucket === "running") {
     return { kind: "dot", bucket: statusBucket };
   }
   return null;

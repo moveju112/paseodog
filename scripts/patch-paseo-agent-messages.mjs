@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { gitBlob } from './patch-mixdog.mjs';
 import { patchedSteerSource } from './patch-paseo-steer.mjs';
 import { agentMessageTransportEdits } from '../patches/paseo-agent-messages.mjs';
+import { ADAPTER_PHASE_EDITS, PROVIDER_PHASE_EDITS, withAssistantPhase, withoutAssistantPhase } from '../patches/paseo-assistant-phase.mjs';
 
 export const AGENT_MESSAGE_PATCHES = [
     {
@@ -51,6 +52,11 @@ export const AGENT_MESSAGE_PROTOCOL_PATCH = {
 
 // 원본과 완성된 패치만 허용하며 모든 anchor의 정확한 출현 횟수를 확인한다.
 export function patchedAgentMessageSource(source, spec) {
+    const phaseEdits = spec.file.endsWith('/plugin-provider.js') ? ADAPTER_PHASE_EDITS
+        : spec.file === 'dist/server/provider.js' ? PROVIDER_PHASE_EDITS : [];
+    const phaseBase = withoutAssistantPhase(source, phaseEdits);
+    const hadPhase = phaseBase !== source;
+    source = phaseBase;
     let original = source;
     for (const [before, after] of [...spec.edits].reverse()) original = original.split(after).join(before);
     if (spec.normalize) original = spec.normalize(original);
@@ -64,7 +70,7 @@ export function patchedAgentMessageSource(source, spec) {
     }
     if (source !== result && source !== original && (!spec.normalize || spec.normalize(source) !== original))
         throw new Error(`Partial Paseo agent-message patch: ${spec.file}`);
-    return result;
+    return hadPhase ? withAssistantPhase(result, phaseEdits) : result;
 }
 
 // 서버와 양쪽 SDK 프로토콜을 전부 검증한 뒤 설치 경로에서만 적용한다.

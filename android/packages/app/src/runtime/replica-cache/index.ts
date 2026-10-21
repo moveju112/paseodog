@@ -124,6 +124,7 @@ const StoredTimelineItemSchema = z.discriminatedUnion("kind", [
     kind: z.literal("assistant_message"),
     messageId: z.string().optional(),
     text: z.string(),
+    assistantPhase: z.enum(["commentary", "final_answer"]).optional(),
     // Reject old caches containing display fragments; refetch the complete source text.
   }),
   z.strictObject({
@@ -449,7 +450,10 @@ function serializeTimelineItem(item: StreamItem): StoredTimelineItem | null {
         kind: item.kind,
         ...(item.messageId ? { messageId: item.messageId } : {}),
         text: item.text,
+        ...(item.assistantPhase ? { assistantPhase: item.assistantPhase } : {}),
       };
+    case "work_record":
+      return null;
     case "thought":
       return { ...base, kind: item.kind, text: item.text, status: item.status };
     case "todo_list":
@@ -539,6 +543,7 @@ function deserializeBuiltinTimelineItem(
         kind: item.kind,
         ...(item.messageId ? { messageId: item.messageId } : {}),
         text: item.text,
+        ...(item.assistantPhase ? { assistantPhase: item.assistantPhase } : {}),
       };
     case "thought":
       return { ...base, kind: item.kind, text: item.text, status: item.status };

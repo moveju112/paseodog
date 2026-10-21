@@ -1,6 +1,17 @@
 import { defineRpc } from '@getpaseo/plugin';
 import { z } from 'zod';
 
+// 완료된 대화의 제목만 생성하며 세션 실행·도구 호출·설정 변경은 허용하지 않는다.
+export const engineTitle = defineRpc({
+    name: 'engine-title',
+    input: z.object({
+        conversation: z.string().min(1).max(20000),
+        currentTitle: z.string().max(200),
+        provisional: z.boolean(),
+    }).strict(),
+    output: z.object({ title: z.string().max(32).nullable() }).strict(),
+});
+
 // 열린 세션의 네이티브 기능은 제한된 입력과 명시적인 변경 확인으로만 호출한다.
 export const engineSession = defineRpc({
     name: 'engine-session',

@@ -1,5 +1,6 @@
 import type { StreamItem } from "@/types/stream";
 import { SPACING } from "@/styles/theme";
+import { getWorkRecordGap } from "./work-record-model";
 
 export function isSameAssistantBlockGroup(params: {
   item: StreamItem | null | undefined;
@@ -40,6 +41,8 @@ export function getGapBetweenStreamItems(
   item: StreamItem | null,
   belowItem: StreamItem | null,
 ): number {
+  const recordGap = getWorkRecordGap(item, belowItem);
+  if (recordGap !== null) return recordGap;
   if (!item || !belowItem) {
     return 0;
   }

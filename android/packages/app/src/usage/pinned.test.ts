@@ -138,6 +138,7 @@ describe("resolvePinnedUsage", () => {
     ]);
     expect(sources[1]).toEqual({
       key: "claude:default",
+      sourceId: "claude",
       label: "Claude",
       icon: "<svg/>",
       windows: [

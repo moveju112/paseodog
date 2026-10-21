@@ -2,6 +2,7 @@ import type { AssistantMessageItem, StreamItem, UserMessageItem } from "@/types/
 import type { TimelineItemTransform } from "@/plugins/timeline/model";
 import { projectPluginTimelineItems } from "@/plugins/timeline/projection";
 import { splitMarkdownBlocks } from "@/utils/split-markdown-blocks";
+import { projectWorkRecords, type WorkRecordCache } from "./work-record-model";
 import {
   prepareToolCallHistory,
   projectToolCallDetailLevel,
@@ -17,6 +18,7 @@ interface PresentationInput {
   isTurnActive: boolean;
   /** Display-only: show completed final answers; source items and model history stay intact. */
   hideReasoning?: boolean;
+  groupWorkRecords?: boolean;
 }
 
 // 답변 전용 표시 (턴별 마지막 도구 이후 답변만 유지, 진행 중 본문·도구·추론 행 제외)
@@ -91,6 +93,7 @@ export function getStreamItemMessageId(item: StreamItem): string {
 function isReusableBlock(block: AssistantMessageItem, source: AssistantMessageItem, id: string) {
   return (
     block.id === id &&
+    block.assistantPhase === source.assistantPhase &&
     block.turnId === source.turnId &&
     block.timestamp.getTime() === source.timestamp.getTime() &&
     block.timelineCursor?.epoch === source.timelineCursor?.epoch &&
@@ -101,6 +104,7 @@ function isReusableBlock(block: AssistantMessageItem, source: AssistantMessageIt
 /** Source messages reach plugins before any Markdown splitting or Overview grouping. */
 export function createStreamPresentation() {
   const userMessageCache = new WeakMap<UserMessageItem, UserMessageItem>();
+  const workRecordCache: WorkRecordCache = { records: new Map(), answers: new WeakMap() };
 
   function presentUserMessage(item: UserMessageItem): UserMessageItem {
     const cached = userMessageCache.get(item);
@@ -218,21 +222,25 @@ export function createStreamPresentation() {
       displayHistory = historyRows;
       promotedRows = nextPromoted;
     }
-    const visible = input.hideReasoning
-      ? answerOnlyRows(displayTail, head, input.isTurnActive)
-      : { tail: displayTail, head };
+    const visible =
+      input.hideReasoning && !input.groupWorkRecords
+        ? answerOnlyRows(displayTail, head, input.isTurnActive)
+        : { tail: displayTail, head };
     const visibleTail = visible.tail;
     if (preparedTail !== visibleTail || preparedLevel !== input.level) {
       preparedHistory = prepareToolCallHistory(input.level, visibleTail);
       preparedTail = visibleTail;
       preparedLevel = input.level;
     }
-    return projectToolCallDetailLevel({
+    const projected = projectToolCallDetailLevel({
       level: input.level,
       tail: visibleTail,
       head: visible.head,
       preparedHistory,
       isTurnActive: input.isTurnActive,
     });
+    return input.groupWorkRecords
+      ? projectWorkRecords(projected, input.isTurnActive, workRecordCache, input.hideReasoning)
+      : projected;
   };
 }

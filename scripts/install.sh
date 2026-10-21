@@ -38,8 +38,12 @@ node scripts/patch-paseo-steer.mjs
 node scripts/patch-paseo-steer.mjs --check
 node scripts/patch-paseo-agent-messages.mjs
 node scripts/patch-paseo-agent-messages.mjs --check
+node scripts/patch-paseo-assistant-phase.mjs
+node scripts/patch-paseo-assistant-phase.mjs --check
 node scripts/patch-paseo-workspace-name.mjs
 node scripts/patch-paseo-workspace-name.mjs --check
+node scripts/patch-paseo-session-titles.mjs
+node scripts/patch-paseo-session-titles.mjs --check
 node scripts/patch-paseo-composer.mjs
 node scripts/patch-paseo-composer.mjs --check
 npm run check

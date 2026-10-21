@@ -13,7 +13,7 @@ const work = join(directory, 'work');
 mkdirSync(work);
 const allowedFile = join(work, 'allowed.txt'), deniedFile = join(work, 'denied.txt');
 const undoFile = join(work, 'undo-proof.txt');
-const undoPatch = `*** Begin Patch\n*** Update File: ${undoFile}\n@@\n-before\n+after\n*** End Patch\n`;
+const undoEdit = { file_path: undoFile, old_string: 'before\n', new_string: 'after\n' };
 writeFileSync(allowedFile, 'PASEODOG_READ_PROOF');
 for (const name of Object.keys(process.env)) {
     if (!['PATH', 'LANG', 'LC_ALL', 'TMPDIR'].includes(name)) delete process.env[name];
@@ -23,7 +23,7 @@ Object.assign(process.env, { HOME: directory, MIXDOG_HOME: join(directory, 'prof
     PASEODOG_TEST_PARENT_WORKER: 'true' });
 const requests = [], approvals = [], readProofs = [], responses = [];
 let mcpRequests = 0;
-let undoLoadRequested = false, undoPatchSent = false;
+let undoLoadRequested = false, undoEditSent = false;
 let nativeEngine, cancelApproval, abortPromise, cancelStarted, resolveCancelStarted;
 cancelStarted = new Promise((resolve) => { resolveCancelStarted = resolve; });
 
@@ -85,10 +85,10 @@ const server = createServer(async (request, response) => {
             if (readFileSync(undoFile, 'utf8') === 'after\n') send(response, { text: 'UNDO_PROOF_DONE' });
             else if (!undoLoadRequested) {
                 undoLoadRequested = true;
-                send(response, { calls: [{ id: 'undo-proof-load', name: 'load_tool', args: { names: 'apply_patch' } }] });
-            } else if (!undoPatchSent) {
-                undoPatchSent = true;
-                send(response, { calls: [{ id: 'undo-proof-edit', name: 'apply_patch', args: { patch: undoPatch } }] });
+                send(response, { calls: [{ id: 'undo-proof-load', name: 'load_tool', args: { names: 'edit' } }] });
+            } else if (!undoEditSent) {
+                undoEditSent = true;
+                send(response, { calls: [{ id: 'undo-proof-edit', name: 'edit', args: undoEdit }] });
             } else {
                 console.error(JSON.stringify({ undoToolFeedback: String(results.at(-1).content).slice(0, 2000) }));
                 send(response, { text: 'UNDO_PATCH_FAILED' });
@@ -266,11 +266,12 @@ try {
     nativeEngine = await createNativeEngine(args);
     await nativeEngine.ask('PASEODOG_UNDO_PROOF', {
         ...callbacks,
-        // 테스트가 만든 한 파일의 정확한 패치만 허용한다.
+        // 특정 공급자의 custom patch 지원 대신 공통 edit로 테스트 파일 하나의 정확한 변경만 허용한다.
         onToolApproval: async (info) => {
             console.log(JSON.stringify({ undoApproval: { name: info.name, args: info.args } }));
-            return { approved: (info.name === 'load_tool' && info.args.names === 'apply_patch')
-                || (info.name === 'apply_patch' && info.args.patch === undoPatch) };
+            return { approved: (info.name === 'load_tool' && info.args.names === 'edit')
+                || (info.name === 'edit' && info.args.file_path === undoEdit.file_path
+                    && info.args.old_string === undoEdit.old_string && info.args.new_string === undoEdit.new_string) };
         },
     });
     assert.equal(readFileSync(undoFile, 'utf8'), 'after\n');

@@ -171,6 +171,13 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
                         stream('onTextDelta', chunk);
                     };
                     callbacks.onReasoningDelta = (chunk) => stream('onReasoningDelta', chunk);
+                    // 공급자가 명시한 본문 단계만 전달하고 임의 메타데이터·내용 추정은 넣지 않는다.
+                    callbacks.onStreamItemStart = (detail) => {
+                        if (detail?.kind !== 'text') return;
+                        turnEvent(turn, 'onStreamItemStart', [{ kind: 'text',
+                            ...(typeof detail.messageId === 'string' ? { messageId: detail.messageId } : {}),
+                            ...(['commentary', 'final_answer'].includes(detail.phase) ? { phase: detail.phase } : {}) }]);
+                    };
                     callbacks.onAssistantText = (text) => {
                         if (live(turn)) turnEvent(turn, 'onAssistantText', [assistantText(text)]);
                     };

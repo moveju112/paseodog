@@ -8,6 +8,7 @@ import {
   donutArcRotations,
   usageCountdownText,
   usageTooltipText,
+  usageIconSvg,
 } from "./donut-model";
 import type { PinnedUsageSource, PinnedUsageWindow } from "./pinned";
 import { UsageSourceIcon } from "./source-icon";
@@ -115,7 +116,12 @@ export function DonutUsageTrigger({
       >
         {sources.flatMap((source) =>
           source.windows.map((window) => (
-            <UsageDonut key={window.key} icon={source.icon} window={window} now={now} />
+            <UsageDonut
+              key={window.key}
+              icon={usageIconSvg(source.icon, source.sourceId)}
+              window={window}
+              now={now}
+            />
           )),
         )}
       </TooltipTrigger>

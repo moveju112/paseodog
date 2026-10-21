@@ -6,6 +6,8 @@ export function createClaudeUsageSource(controls: { usage(): Promise<UsageReport
     return {
         id: 'claude',
         label: 'Claude',
+        // 데몬은 icon을 플러그인 폴더 기준 SVG 파일 경로로 읽는다.
+        icon: 'shared/claude-usage-icon.svg',
         input: z.object({}).strict(),
         async discover(scope) {
             if (scope.kind === 'session' && scope.provider !== 'paseodog') return [];

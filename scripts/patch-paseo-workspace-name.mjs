@@ -1,4 +1,4 @@
-// 로컬 패치: Paseo 0.11.4 서버에서 새 작업공간 기본 이름을 프로젝트 표시 이름으로 두고 AI·첫 프롬프트 작업공간 이름을 끈다.
+// 로컬 패치: 프로젝트명을 임시 작업공간 이름으로 쓰고 완료된 대화 관찰자가 자동 제목을 확정한다.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,17 +35,23 @@ export const WORKSPACE_NAME_PATCHES = [
             'import { createPersistedWorkspaceRecord, resolveProjectDisplayName, } from "../../workspace-registry.js";\n',
         ], [
             '            title: title?.trim() || null,\n',
-            '            title: title?.trim() || resolveProjectDisplayName(project),\n',
+            '            title: title?.trim() || resolveProjectDisplayName(project),\n            titleOrigin: title?.trim() ? "user" : "provisional",\n',
         ], [
             '            title: input.title,\n',
-            '            title: input.title?.trim() || resolveProjectDisplayName(project),\n',
+            '            title: input.title?.trim() || resolveProjectDisplayName(project),\n            titleOrigin: input.title?.trim() ? "user" : "provisional",\n',
         ]],
     },
 ];
 
 // 원본 또는 완성된 패치만 허용하고 각 anchor가 정확히 한 번 나오는지 확인한다.
 export function patchedWorkspaceNameSource(source, spec) {
+    const legacy = source.replace('            titleOrigin: title?.trim() ? "user" : "provisional",\n', '')
+        .replace('            titleOrigin: input.title?.trim() ? "user" : "provisional",\n', '');
     let original = source;
+    if (spec.file.endsWith('workspace-provisioning-service.js')) {
+        original = legacy.replace('            title: title?.trim() || resolveProjectDisplayName(project),\n', '            title: title?.trim() || null,\n')
+            .replace('            title: input.title?.trim() || resolveProjectDisplayName(project),\n', '            title: input.title,\n');
+    }
     for (const [before, after] of [...spec.edits].reverse()) original = original.split(after).join(before);
     if (gitBlob(original) !== spec.blob) throw new Error(`Paseo workspace-name source hash mismatch: ${spec.file}`);
     let result = original;
@@ -53,7 +59,10 @@ export function patchedWorkspaceNameSource(source, spec) {
         if (result.split(before).length !== 2) throw new Error(`Paseo workspace-name anchor mismatch: ${spec.file}`);
         result = result.replace(before, after);
     }
-    if (source !== original && source !== result) throw new Error(`Partial Paseo workspace-name patch: ${spec.file}`);
+    const legacyResult = result.replace('            titleOrigin: title?.trim() ? "user" : "provisional",\n', '')
+        .replace('            titleOrigin: input.title?.trim() ? "user" : "provisional",\n', '');
+    if (source !== original && source !== result && source !== legacyResult)
+        throw new Error(`Partial Paseo workspace-name patch: ${spec.file}`);
     return result;
 }
 

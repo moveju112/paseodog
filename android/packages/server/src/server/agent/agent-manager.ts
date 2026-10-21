@@ -2013,8 +2013,22 @@ export class AgentManager {
       return;
     }
     this.touchUpdatedAt(agent);
-    await this.persistSnapshot(agent, { title: normalizedTitle });
+    await this.persistSnapshot(agent, { title: normalizedTitle, titleOrigin: "user" });
     this.emitState(agent, { persist: false });
+  }
+
+  // 자동 제목은 저장소의 출처 검사를 통과할 때만 반영하고 작업 활동 시각은 바꾸지 않는다.
+  async setGeneratedTitle(
+    agentId: string,
+    title: string,
+    expectedTitle: string | null,
+    isCurrent: () => boolean = () => true,
+  ): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!agent || agent.internal || !this.registry) return;
+    if (await this.registry.setGeneratedTitle(agentId, title, expectedTitle, isCurrent)) {
+      this.emitState(agent, { persist: false });
+    }
   }
 
   async setLabels(agentId: string, labels: Record<string, string>): Promise<void> {
@@ -2051,7 +2065,7 @@ export class AgentManager {
 
     const nextRecord = {
       ...record,
-      ...(patch.title ? { title: patch.title } : {}),
+      ...(patch.title ? { title: patch.title, titleOrigin: "user" as const } : {}),
       ...(patch.labels ? { labels: applyLabelPatch(record.labels, patch.labels) } : {}),
       updatedAt: this.nextStoredUpdatedAt(record),
     };
@@ -3898,7 +3912,7 @@ export class AgentManager {
 
   private async persistSnapshot(
     agent: ManagedAgent,
-    options?: { title?: string | null; internal?: boolean },
+    options?: { title?: string | null; internal?: boolean; titleOrigin?: "user" },
   ): Promise<void> {
     if (!this.registry) {
       return;

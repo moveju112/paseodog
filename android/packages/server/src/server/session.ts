@@ -3694,6 +3694,7 @@ export class Session {
       const updated = await this.workspaceRegistry.update(workspaceId, (existing) => ({
         ...existing,
         title: nextTitle,
+        titleOrigin: "user",
         updatedAt,
       }));
       if (!updated) {

@@ -1,5 +1,6 @@
 import type { PluginRegistries } from "@getpaseo/protocol/plugin-registry";
 import { describeHookWorkspace } from "./plugins/lifecycle/index.js";
+import { startConversationTitles } from "./conversation-titles.js";
 import express from "express";
 import { createServer as createHTTPServer, type IncomingMessage, type ServerResponse } from "http";
 import { constants, existsSync, unlinkSync } from "fs";
@@ -1110,6 +1111,16 @@ export async function createPaseoDaemon(
     logger,
   });
 
+  const stopConversationTitles = startConversationTitles({
+    agentManager,
+    agentStorage,
+    workspaceRegistry,
+    generateTitle: (input) =>
+      pluginRuntime.invokePluginRpc("paseodog-provider", "engine-title", input),
+    emitWorkspaceUpdate: (workspaceId) => emitWorkspaceUpdatesExternal([workspaceId]),
+    logger,
+  });
+
   setupAutoArchiveOnMerge({
     paseoHome: config.paseoHome,
     paseoWorktreesBaseRoot: config.worktreesRoot,
@@ -1801,6 +1812,7 @@ export async function createPaseoDaemon(
   };
 
   const stop = async () => {
+    stopConversationTitles();
     localCredential = null;
     await deleteLocalCredential(config.paseoHome);
     // Stop tracking plugin provider registrations before anything tears plugins

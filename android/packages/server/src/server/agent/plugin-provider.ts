@@ -1669,6 +1669,30 @@ function mapPromptContent(prompt: AgentPromptInput): ProviderContent[] {
   return toJsonValue(content, "prompt content") as ProviderContent[];
 }
 
+// 본문 델타와 늦게 도착한 선택 단계를 함께 투영하되 빈 초기 메시지는 만들지 않는다.
+function mapTextTimelineItem(
+  item: Extract<ProviderTimelineItem, { type: "assistant_message" | "reasoning" }>,
+  previous: ProviderTimelineItem | undefined,
+): AgentTimelineItem | null {
+  const previousText = previous?.type === item.type ? previous.text : "";
+  const text = item.text.startsWith(previousText)
+    ? item.text.slice(previousText.length)
+    : item.text;
+  const phaseChanged =
+    item.type === "assistant_message" &&
+    item.phase !== undefined &&
+    (previous?.type !== "assistant_message" || previous.phase !== item.phase);
+  if (text.length === 0 && !phaseChanged) return null;
+  return item.type === "assistant_message"
+    ? {
+        type: "assistant_message",
+        text,
+        messageId: item.messageId ?? item.id,
+        ...(item.phase ? { phase: item.phase } : {}),
+      }
+    : { type: "reasoning", text };
+}
+
 function mapTimelineItem(
   item: ProviderTimelineItem,
   snapshots: Map<string, ProviderTimelineItem>,
@@ -1685,14 +1709,7 @@ function mapTimelineItem(
   }
 
   if (item.type === "assistant_message" || item.type === "reasoning") {
-    const previousText = previous?.type === item.type ? previous.text : "";
-    const text = item.text.startsWith(previousText)
-      ? item.text.slice(previousText.length)
-      : item.text;
-    if (text.length === 0) return null;
-    return item.type === "assistant_message"
-      ? { type: "assistant_message", text, messageId: item.messageId ?? id }
-      : { type: "reasoning", text };
+    return mapTextTimelineItem(item, previous);
   }
   if (item.type === "user_message") {
     if (previous?.type === "user_message" && previous.text === item.text) return null;

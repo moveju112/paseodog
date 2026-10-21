@@ -33,6 +33,7 @@ pnpm-debug.log*
 # TypeScript
 *.tsbuildinfo
 tsconfig.tsbuildinfo
+**/.cache/paseodog-build/
 
 # IDEs
 .vscode/

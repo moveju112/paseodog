@@ -22,7 +22,6 @@ import { getStatusDotColor } from "@/utils/status-dot-color";
 import {
   STATUS_INDICATOR_ALERT_SIZE,
   STATUS_INDICATOR_DOT_SIZE,
-  STATUS_INDICATOR_FILLED_DOT_SIZE,
 } from "@/utils/status-indicator-geometry";
 import { shouldRenderSyncedStatusLoader } from "@/utils/status-loader";
 import { StatusRing } from "@/components/status-ring";
@@ -99,7 +98,6 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   isCreating = false,
   shortcutNumber = null,
   showShortcutBadge = false,
-  reserveIdleStatusIndicatorSpace = true,
   children,
 }: {
   workspace: SidebarWorkspaceEntry;
@@ -115,7 +113,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   isCreating?: boolean;
   shortcutNumber?: number | null;
   showShortcutBadge?: boolean;
-  /** Keep the empty leading slot when the workspace has no active status. */
+  /** @deprecated Completed rows always show a check in the existing leading slot. */
   reserveIdleStatusIndicatorSpace?: boolean;
   children?: ReactNode;
 }) {
@@ -153,7 +151,6 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
             bucket={workspace.statusBucket}
             workspaceKind={workspace.workspaceKind}
             loading={isLoading}
-            reserveIdleSpace={reserveIdleStatusIndicatorSpace}
           />
         )}
         <View style={styles.workspaceContentColumn}>
@@ -182,16 +179,15 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   );
 });
 
-function WorkspaceStatusIndicator({
+// 작업공간과 최근 세션의 상태를 같은 링·체크·경고 슬롯으로 표시한다.
+export function WorkspaceStatusIndicator({
   bucket,
   workspaceKind,
   loading = false,
-  reserveIdleSpace = true,
 }: {
   bucket: SidebarWorkspaceEntry["statusBucket"];
   workspaceKind: SidebarWorkspaceEntry["workspaceKind"];
   loading?: boolean;
-  reserveIdleSpace?: boolean;
 }) {
   // Busy is the only status that moves, and it is the ring rather than a dot for the same
   // reason it is a dot elsewhere: every status in the sidebar sits in this one slot, so busy
@@ -224,21 +220,22 @@ function WorkspaceStatusIndicator({
   if (bucket === "attention") {
     return (
       <View style={styles.workspaceStatusDot} testID="workspace-status-indicator-attention">
-        <View style={styles.standaloneStatusDot} />
+        <Text style={styles.statusAttentionCheck} accessible={false}>
+          ✓
+        </Text>
       </View>
     );
   }
 
   if (bucket === "done") {
-    // An idle row still gets a dot rather than an empty slot. Nested rows are marked as
-    // workspaces by indentation alone, and with nothing in the leading slot the rail has no
-    // edge to read against — a workspace carrying its own glyph starts looking like a project
-    // header. The dot is muted to half opacity so it holds the rail without reporting status.
-    return reserveIdleSpace ? (
+    // 완료는 색이 아니라 체크 모양으로 구분하며 고정·최근·상태별 목록에 같은 슬롯을 쓴다.
+    return (
       <View style={styles.workspaceStatusDot} testID="workspace-status-indicator-done">
-        <View style={styles.idleStatusDot} />
+        <Text style={styles.statusDoneCheck} accessible={false}>
+          ✓
+        </Text>
       </View>
-    ) : null;
+    );
   }
 
   let KindIcon: typeof ThemedMonitor;
@@ -498,18 +495,17 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.borderRadius.full,
     borderWidth: 1,
   },
-  standaloneStatusDot: {
-    width: STATUS_INDICATOR_FILLED_DOT_SIZE,
-    height: STATUS_INDICATOR_FILLED_DOT_SIZE,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: getStatusDotColor({ theme, bucket: "attention" }) ?? undefined,
+  statusAttentionCheck: {
+    color: theme.colors.statusSuccess,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "700",
   },
-  idleStatusDot: {
-    width: STATUS_INDICATOR_FILLED_DOT_SIZE,
-    height: STATUS_INDICATOR_FILLED_DOT_SIZE,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.foregroundExtraMuted,
-    opacity: 0.3,
+  statusDoneCheck: {
+    color: theme.colors.foregroundMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "500",
   },
   // The title owns the first line outright now that the host, change request and CI moved
   // to the meta row, so it takes the full width the trailing slot leaves behind.

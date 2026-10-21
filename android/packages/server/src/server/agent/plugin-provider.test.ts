@@ -291,21 +291,21 @@ describe("PluginAgentClientRegistry", () => {
     const logger = createTestLogger();
     const harness = createProviderHarness();
     const plugins = new PluginAgentClientRegistry(logger);
-    plugins.replace([harness.registration]);
+    plugins.replace([{ ...harness.registration, id: "paseodog" }]);
     const registry = buildProviderRegistry(logger, {
       pluginProviders: plugins.definitions(),
       providerOverrides: {
-        "plugin-direct": { options: { nested: { base: true, replace: "config" } } },
+        paseodog: { enabled: true, options: { nested: { base: true, replace: "config" } } },
       },
     });
     const manager = new AgentManager({
       logger,
-      clients: { "plugin-direct": registry["plugin-direct"].createClient(logger) },
-      providerDefinitions: { "plugin-direct": registry["plugin-direct"] },
+      clients: { paseodog: registry.paseodog.createClient(logger) },
+      providerDefinitions: { paseodog: registry.paseodog },
     });
     const own = { nested: { replace: "agent" } };
     const agent = await manager.createAgent(
-      { provider: "plugin-direct", cwd: "/tmp", providerOptions: own },
+      { provider: "paseodog", cwd: "/tmp", providerOptions: own },
       undefined,
       { workspaceId: undefined },
     );
@@ -1152,7 +1152,7 @@ test("config-required plugin membership is independent of enablement and other p
     expect(before["plugin-direct"]).toBeUndefined();
     expect({ probes, connections }).toEqual({ probes: 0, connections: 0 });
     const added = build({ "plugin-direct": {} });
-    expect(added["plugin-direct"].enabled).toBe(true);
+    expect(added["plugin-direct"].enabled).toBe(false);
     const client = added["plugin-direct"].createClient(logger);
     expect(await client.isAvailable()).toBe(true);
     const catalog = await client.fetchCatalog({ scope: "global" });

@@ -426,12 +426,14 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
     function callbacksFor(session, turn) {
         const live = () => !closed && !session.closed && !session.closing && !session.broken && !turn.canceled && !turn.finished;
         let segment = 0, text = '', segmentClosed = false, lastCommitted = '', committedText = '';
+        let phase, nativeMessageId, phaseStart = 0;
         let reasoning = '';
-        const push = () => recordItem(session, { type: 'assistant_message', id: `assistant:${turn.id}:${segment}`, text });
+        const push = () => recordItem(session, { type: 'assistant_message', id: `assistant:${turn.id}:${segment}`,
+            text: text.slice(phaseStart), ...(phase ? { phase } : {}) });
         function setText(value, append = false) {
             if (!live()) return;
             if (!value) return;
-            if (segmentClosed) { segment++; text = ''; segmentClosed = false; }
+            if (segmentClosed) { segment++; text = ''; phaseStart = 0; segmentClosed = false; }
             const next = append ? text + value : value;
             if (next.length > 1024 * 1024) throw new Error('Assistant output exceeds bridge safety limit');
             if (!append && text && !next.startsWith(text)) {
@@ -439,6 +441,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                 // 같은 ID는 append-only이므로 기존 문장을 덮어쓰지 않는다.
                 if (text.startsWith(next)) return;
                 segment++;
+                phaseStart = 0;
             }
             if (next === text) return;
             text = next; push();
@@ -454,6 +457,23 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         }
         return {
             onIdentity: (info) => identity(session, info),
+            // 본문 합계는 기존 확정 콜백과 대조하고, 표시 항목만 명시된 단계 경계에서 나눈다.
+            onStreamItemStart: (detail) => {
+                if (!live() || detail?.kind !== 'text') return;
+                const nextPhase = ['commentary', 'final_answer'].includes(detail.phase) ? detail.phase : undefined;
+                const nextId = typeof detail.messageId === 'string' ? detail.messageId : undefined;
+                const newMessage = nextId && nextId !== nativeMessageId;
+                if (!newMessage && (!nextPhase || phase === nextPhase)) return;
+                if ((newMessage || (phase && nextPhase !== phase)) && text.length > phaseStart && !segmentClosed) {
+                    segment++;
+                    phaseStart = text.length;
+                }
+                if (newMessage) phase = nextPhase;
+                else if (nextPhase) phase = nextPhase;
+                nativeMessageId = nextId ?? nativeMessageId;
+                // 단계가 item-done에만 실리는 공급자도 같은 ID의 메타데이터로 보존한다.
+                if (text.length > phaseStart && !segmentClosed) push();
+            },
             onTextDelta: (chunk) => setText(String(chunk || ''), true),
             // The upstream snapshot-to-delta adapter cannot express text deletion.
             // Never acknowledge a reset that clients cannot actually apply.
@@ -474,6 +494,8 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                 if ((calls || []).some((call) => !call?.childSessionId)) {
                     segmentClosed = true; lastCommitted = text; committedText = '';
                     flushToolItems(session, turn);
+                    phase = undefined;
+                    nativeMessageId = undefined;
                 }
                 for (const call of calls || []) toolStart(call);
             },

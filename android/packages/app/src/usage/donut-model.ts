@@ -5,6 +5,14 @@
 export const DONUT_SIZE = 30;
 export const DONUT_STROKE = 3;
 
+// 공급자 아이콘만 브랜드색으로 칠하고 사용률 링의 경고·위험 색은 바꾸지 않는다.
+export function usageIconSvg(icon: string | null, sourceId: string): string | null {
+  let color: string | null = null;
+  if (sourceId === "codex") color = "#3B82F6";
+  else if (sourceId === "claude") color = "#D97757";
+  return icon && color ? icon.replaceAll("currentColor", color) : icon;
+}
+
 // 초기화까지 남은 시간 (하루 이상 -> "6D", 미만 -> "0:53", 모름 -> "--:--")
 export function usageCountdownText(resetsAt: string | null, now: number): string {
   const at = resetsAt ? Date.parse(resetsAt) : Number.NaN;

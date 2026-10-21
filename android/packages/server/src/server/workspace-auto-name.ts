@@ -1,7 +1,6 @@
 import type pino from "pino";
 import type { FirstAgentContext } from "@getpaseo/protocol/messages";
 
-import { resolveFirstAgentPromptTitle } from "./agent/create-agent-title.js";
 import type { AgentManager } from "./agent/agent-manager.js";
 import type { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import type { StructuredGenerationDaemonConfig } from "./agent/structured-generation-providers.js";
@@ -47,7 +46,6 @@ export class WorkspaceAutoName {
   private readonly readDaemonConfig: () => StructuredGenerationDaemonConfig;
   private readonly gitMutation: Pick<GitMutationService, "notifyGitMutation">;
   private readonly emitWorkspaceUpdateForCwd: (cwd: string) => Promise<void>;
-  private readonly emitWorkspaceUpdateForWorkspaceId: (workspaceId: string) => Promise<void>;
   private readonly logger: pino.Logger;
   private readonly generateWorkspaceName: WorkspaceNameGenerator;
 
@@ -59,7 +57,6 @@ export class WorkspaceAutoName {
     this.readDaemonConfig = options.readDaemonConfig;
     this.gitMutation = options.gitMutation;
     this.emitWorkspaceUpdateForCwd = options.emitWorkspaceUpdateForCwd;
-    this.emitWorkspaceUpdateForWorkspaceId = options.emitWorkspaceUpdateForWorkspaceId;
     this.logger = options.logger;
     this.generateWorkspaceName =
       options.generateWorkspaceName ?? generateBranchNameFromFirstAgentContext;
@@ -93,14 +90,9 @@ export class WorkspaceAutoName {
     },
     context: ScheduleContext = {},
   ): void {
-    this.schedule(
-      () =>
-        this.maybeAutoNameDirectoryWorkspaceTitle({
-          ...input,
-          currentSelection: context.currentSelection ?? null,
-        }),
-      { cwd: input.cwd, message: "Failed to auto-name directory workspace title" },
-    );
+    // 첫 프롬프트만으로 제목을 확정하지 않고 완료된 대화 관찰자에 맡긴다.
+    void input;
+    void context;
   }
 
   private async maybeAutoNameWorkspaceBranchForFirstAgent(input: {
@@ -109,7 +101,6 @@ export class WorkspaceAutoName {
     currentSelection: CurrentSelection;
   }): Promise<void> {
     const worktreeRoot = input.workspace.worktreeRoot ?? input.workspace.cwd;
-    let generated: GeneratedWorkspaceName | null = null;
     const result: AttemptFirstAgentBranchAutoNameResult = await attemptFirstAgentBranchAutoName({
       cwd: worktreeRoot,
       firstAgentContext: input.firstAgentContext,
@@ -118,76 +109,25 @@ export class WorkspaceAutoName {
           cwd: input.workspace.cwd,
           firstAgentContext,
           currentSelection: input.currentSelection,
-        }).then((nextGenerated) => {
-          generated = nextGenerated;
-          return nextGenerated?.branch ?? null;
-        });
+        }).then((nextGenerated) => nextGenerated?.branch ?? null);
       },
     });
 
-    if (!generated) {
-      generated = await this.generateFromContext({
-        cwd: input.workspace.cwd,
-        firstAgentContext: input.firstAgentContext,
-        currentSelection: input.currentSelection,
-      });
-    }
-    const generatedTitle = generated?.title ?? null;
-    if (!generatedTitle) {
-      return;
-    }
-
-    // K4: re-read from the registry before writing so any concurrent upsert
-    // that happened between workspace creation and this async path is not clobbered.
-    // When the first-agent rename changed the git branch too, persist that branch
-    // alongside the title — both are this path's own fields.
+    if (!result.renamed) return;
     await this.applyGeneratedWorkspaceTitle(input.workspace.workspaceId, {
-      title: generatedTitle,
-      ...(result.renamed ? { branch: result.branchName } : {}),
-      promptTitle: resolveFirstAgentPromptTitle(input.firstAgentContext),
+      branch: result.branchName,
     });
-    if (result.renamed) {
-      await this.gitMutation.notifyGitMutation(worktreeRoot, "rename-branch");
-    }
+    await this.gitMutation.notifyGitMutation(worktreeRoot, "rename-branch");
     await this.emitWorkspaceUpdateForCwd(input.workspace.cwd);
-  }
-
-  private async maybeAutoNameDirectoryWorkspaceTitle(input: {
-    workspaceId: string;
-    cwd: string;
-    firstAgentContext: FirstAgentContext;
-    currentSelection: CurrentSelection;
-  }): Promise<void> {
-    const generated = await this.generateFromContext({
-      cwd: input.cwd,
-      firstAgentContext: input.firstAgentContext,
-      currentSelection: input.currentSelection,
-    });
-    const title = generated?.title ?? null;
-    if (!title) {
-      return;
-    }
-    // K4: applyGeneratedWorkspaceTitle re-reads from the registry before writing.
-    // Directory workspaces have no branch — write only the title.
-    await this.applyGeneratedWorkspaceTitle(input.workspaceId, {
-      title,
-      promptTitle: resolveFirstAgentPromptTitle(input.firstAgentContext),
-    });
-    await this.emitWorkspaceUpdateForWorkspaceId(input.workspaceId);
   }
 
   private async applyGeneratedWorkspaceTitle(
     workspaceId: string,
-    input: { title: string; branch?: string | null; promptTitle?: string | null },
+    input: { branch: string | null },
   ): Promise<void> {
     await this.workspaceRegistry.update(workspaceId, (current) => {
-      let title = current.title;
-      if (!title || (input.promptTitle && title === input.promptTitle)) {
-        title = input.title;
-      }
       return {
         ...current,
-        title,
         ...(input.branch ? { branch: input.branch } : {}),
         updatedAt: new Date().toISOString(),
       };

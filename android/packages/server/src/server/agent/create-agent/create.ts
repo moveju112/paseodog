@@ -360,6 +360,7 @@ async function resolveMcpCreateAgent(
     createOptions: {
       ...(Object.keys(intent.labels).length > 0 ? { labels: intent.labels } : {}),
       workspaceId: intent.workspaceId,
+      initialTitle: resolveCreateAgentTitles({ initialPrompt: trimmedPrompt }).provisionalTitle,
       owner: input.owner,
       env: input.env,
     },
@@ -414,7 +415,7 @@ function buildMcpSessionConfig(params: {
   resolvedFeatures?: Record<string, unknown>;
 }): AgentSessionConfig {
   const passthroughConfig = params.input.config;
-  const { provisionalTitle } = resolveCreateAgentTitles({
+  const { explicitTitle } = resolveCreateAgentTitles({
     configTitle: passthroughConfig?.title ?? params.input.title,
     initialPrompt: params.trimmedPrompt,
   });
@@ -428,8 +429,8 @@ function buildMcpSessionConfig(params: {
     thinkingOptionId: params.input.thinking ?? passthroughConfig?.thinkingOptionId,
     internal: params.input.internal ?? passthroughConfig?.internal,
   };
-  if (provisionalTitle) {
-    config.title = provisionalTitle;
+  if (explicitTitle) {
+    config.title = explicitTitle;
   }
   if (featureValues) {
     config.featureValues = featureValues;

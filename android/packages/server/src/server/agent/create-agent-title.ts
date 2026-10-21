@@ -38,9 +38,7 @@ export function resolveCreateAgentTitles(options: {
 }
 
 export function resolveFirstAgentPromptTitle(firstAgentContext?: FirstAgentContext): string | null {
-  return (
-    resolveCreateAgentTitles({
-      initialPrompt: firstAgentContext?.prompt,
-    }).provisionalTitle ?? null
-  );
+  // 작업공간은 프로젝트명을 임시로 쓰고 완료된 대화에서 목표 기반 제목을 만든다.
+  void firstAgentContext;
+  return null;
 }

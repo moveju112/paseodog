@@ -52,6 +52,7 @@ const STORED_AGENT_SCHEMA = z.object({
   lastActivityAt: z.string().optional(),
   lastUserMessageAt: z.string().nullable().optional(),
   title: z.string().nullable().optional(),
+  titleOrigin: z.enum(["provisional", "generated", "user"]).optional(),
   labels: z.record(z.string(), z.string()).default({}),
   lastStatus: AgentStatusSchema.default("closed"),
   lastModeId: z.string().nullable().optional(),
@@ -161,7 +162,7 @@ export class AgentStorage {
 
   private queueRecordMutation(
     agentId: string,
-    mutate: (existing: StoredAgentRecord | null) => StoredAgentRecord,
+    mutate: (existing: StoredAgentRecord | null) => StoredAgentRecord | null,
   ): Promise<void> {
     const prev = this.pendingWrites.get(agentId) ?? Promise.resolve();
     const next = prev.then(async () => {
@@ -170,7 +171,7 @@ export class AgentStorage {
       }
 
       const record = mutate(this.cache.get(agentId) ?? null);
-      await this.writeRecord(record);
+      if (record) await this.writeRecord(record);
       return undefined;
     });
 
@@ -239,7 +240,7 @@ export class AgentStorage {
 
   async applySnapshot(
     agent: ManagedAgent,
-    options?: { title?: string | null; internal?: boolean },
+    options?: { title?: string | null; internal?: boolean; titleOrigin?: "user" },
   ): Promise<void> {
     await this.load();
     const hasTitleOverride =
@@ -259,6 +260,10 @@ export class AgentStorage {
       if (existing && existing.archivedAt !== undefined) {
         record.archivedAt = existing.archivedAt;
       }
+      record.titleOrigin = options?.titleOrigin ?? existing?.titleOrigin;
+      if (!existing && !record.titleOrigin) {
+        record.titleOrigin = agent.config.title?.trim() ? "user" : "provisional";
+      }
       return record;
     });
   }
@@ -270,7 +275,31 @@ export class AgentStorage {
     if (!record) {
       throw new Error(`Agent ${agentId} not found`);
     }
-    await this.upsert({ ...record, title });
+    await this.upsert({ ...record, title, titleOrigin: "user" });
+  }
+
+  // 저장 큐 안에서 출처와 이전 제목을 함께 검사해 수동 변경·보관과 경합하지 않는다.
+  async setGeneratedTitle(
+    agentId: string,
+    title: string,
+    expectedTitle: string | null,
+    isCurrent: () => boolean = () => true,
+  ): Promise<boolean> {
+    await this.load();
+    let applied = false;
+    await this.queueRecordMutation(agentId, (existing) => {
+      if (
+        !isCurrent() ||
+        !existing ||
+        existing.archivedAt ||
+        existing.title !== expectedTitle ||
+        !["provisional", "generated"].includes(existing.titleOrigin ?? "")
+      )
+        return existing;
+      applied = true;
+      return { ...existing, title, titleOrigin: "generated" };
+    });
+    return applied;
   }
 
   async flush(): Promise<void> {

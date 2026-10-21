@@ -13,6 +13,15 @@ export const AGENT_PATCHES = [
     ...EFFORT_USAGE_PATCHES,
     ...DEFAULT_OUTPUT_STYLE_PATCHES,
     {
+        // local: 단계가 늦게 오는 응답도 원래 메시지 경계와 함께 보존한다.
+        file: 'src/runtime/agent/orchestrator/providers/lib/send-callbacks.mjs',
+        blob: '5c218137f88094953ff5199172b1f9479c5ead9b',
+        edits: [[
+            "  if (type === 'message' && ASSISTANT_PHASES.has(item.phase)) return { kind: 'text', phase: item.phase };",
+            "  if (type === 'message') return { kind: 'text', ...(item.id ? { messageId: item.id } : {}),\n    ...(ASSISTANT_PHASES.has(item.phase) ? { phase: item.phase } : {}) };",
+        ]],
+    },
+    {
         // local: 같은 모델의 컨텍스트 변경도 네이티브 세션·영속 기록에 즉시 반영한다.
         file: 'src/session-runtime/model-route/set-route.mjs',
         blob: 'a36ce4b5bfec0a62715fa70c6e8deed6126537ca',

@@ -1,4 +1,5 @@
-import { ActivityIndicator, View, type ViewStyle } from "react-native";
+import { ActivityIndicator, Text, View, type ViewStyle } from "react-native";
+import type { ReactNode } from "react";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, CircleAlert } from "lucide-react-native";
@@ -105,8 +106,7 @@ export function ProjectLeadingVisual({
 // The project icon (the lettered box) is what marks a row as a *project* rather than a
 // workspace, so it always stays and status annotates it instead of replacing it. Every
 // surfaced bucket lands in the identical corner badge — an amber alert glyph for needs_input,
-// a colored disc for the rest, nothing for done — so the badge reads as one fixed shell and
-// only its contents change.
+// 완료는 체크로 구분하되 프로젝트 아이콘과 기존 코너 슬롯은 그대로 보존한다.
 export function ProjectStatusIndicator({
   iconDataUri,
   displayName,
@@ -187,6 +187,23 @@ function ProjectStatusBadge({
       </View>
     );
   }
+  let glyph: ReactNode;
+  if (content.kind === "alert") {
+    glyph = (
+      <ThemedCircleAlert size={STATUS_INDICATOR_ALERT_SIZE} uniProps={needsInputColorMapping} />
+    );
+  } else if (content.kind === "check") {
+    glyph = (
+      <Text
+        style={content.bucket === "done" ? styles.statusDoneCheck : styles.statusCheck}
+        accessible={false}
+      >
+        ✓
+      </Text>
+    );
+  } else {
+    glyph = <ProjectStatusDot bucket={content.bucket} />;
+  }
   return (
     <View
       role="status"
@@ -194,11 +211,7 @@ function ProjectStatusBadge({
       style={[styles.statusBadge, getStatusBadgeBackdropStyle(backdrop)]}
       testID="project-status-badge"
     >
-      {content.kind === "alert" ? (
-        <ThemedCircleAlert size={STATUS_INDICATOR_ALERT_SIZE} uniProps={needsInputColorMapping} />
-      ) : (
-        <ProjectStatusDot bucket={content.bucket} />
-      )}
+      {glyph}
     </View>
   );
 }
@@ -289,6 +302,18 @@ const styles = StyleSheet.create((theme) => {
     },
     projectIconFallbackText: {
       fontSize: 9,
+    },
+    statusCheck: {
+      color: theme.colors.statusSuccess,
+      fontSize: 10,
+      lineHeight: 12,
+      fontWeight: "700",
+    },
+    statusDoneCheck: {
+      color: theme.colors.foregroundMuted,
+      fontSize: 10,
+      lineHeight: 12,
+      fontWeight: "500",
     },
     // The shell the alert and dot statuses share. It straddles the icon's bottom-right corner
     // (half in, half out) so the lettered project box stays readable. The shell is a knockout:

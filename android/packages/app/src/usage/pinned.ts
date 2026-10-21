@@ -22,6 +22,7 @@ export interface PinnedUsageWindow {
 /** One account's summary windows, under its source's icon. */
 export interface PinnedUsageSource {
   key: string;
+  sourceId: string;
   /** PaseoDog: the source and account name, for the donut summary's hover text. */
   label: string;
   icon: string | null;
@@ -127,6 +128,14 @@ export function resolvePinnedUsage(
         };
       });
     if (windows.length === 0) return [];
-    return [{ key: entry.id, label: sourceName(entry), icon: entry.icon ?? null, windows }];
+    return [
+      {
+        key: entry.id,
+        sourceId: entry.sourceId,
+        label: sourceName(entry),
+        icon: entry.icon ?? null,
+        windows,
+      },
+    ];
   });
 }

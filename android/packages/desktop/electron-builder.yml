@@ -22,6 +22,7 @@ files:
   # Workspace packages are symlinked, so anything a dev generates inside them
   # lands in the asar. CI never has these; a local .debug run adds gigabytes.
   - "!node_modules/@getpaseo/*/.debug/**"
+  - "!node_modules/@getpaseo/*/.cache/paseodog-build/**"
   - "!node_modules/@getpaseo/*/.tasks/**"
   - "!node_modules/@getpaseo/*/conversations/**"
   - "!node_modules/@getpaseo/*/test-results/**"

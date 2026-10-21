@@ -398,6 +398,16 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
   trailingRowHidden: {
     opacity: 0,
   },
+  trailingRowFloating: {
+    position: "absolute",
+    top: -theme.spacing[3],
+    right: theme.spacing[2],
+    marginTop: 0,
+    paddingHorizontal: theme.spacing[1],
+    borderRadius: theme.borderRadius.sm,
+    backgroundColor: theme.colors.surface1,
+    zIndex: 1,
+  },
   trailingRowVisible: {
     opacity: 1,
   },
@@ -502,8 +512,11 @@ export const UserMessage = memo(function UserMessage({
       showTrailingRow
         ? userMessageStylesheet.trailingRowVisible
         : userMessageStylesheet.trailingRowHidden,
+      isWeb && !isCompact && resolvedDisableOuterSpacing
+        ? userMessageStylesheet.trailingRowFloating
+        : undefined,
     ],
-    [showTrailingRow],
+    [showTrailingRow, isCompact, resolvedDisableOuterSpacing],
   );
 
   return (

@@ -14,15 +14,15 @@ describe("getProjectStatusBadgeContent", () => {
     expect(getProjectStatusBadgeContent("failed")).toEqual({ kind: "dot", bucket: "failed" });
   });
 
-  it("shows an attention dot when a workspace awaits review", () => {
+  it("shows a check when a completed response awaits review", () => {
     expect(getProjectStatusBadgeContent("attention")).toEqual({
-      kind: "dot",
+      kind: "check",
       bucket: "attention",
     });
   });
 
-  it("shows nothing when the project is done", () => {
-    expect(getProjectStatusBadgeContent("done")).toBeNull();
+  it("shows a check when the project is done", () => {
+    expect(getProjectStatusBadgeContent("done")).toEqual({ kind: "check", bucket: "done" });
   });
 
   it("shows nothing when there is no aggregate bucket to surface", () => {

@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { Script } from 'node:vm';
+import { fileURLToPath } from 'node:url';
+import { createClaudeUsageSource } from '../plugin/server/usage.ts';
+import { readPluginProviderIcon } from '../android/packages/server/src/server/plugins/provider-icon.ts';
 import { COMPOSER_FILE, DESKTOP_COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { usageDonutEdits, createUsageSummaryTrigger, donutArcRotations, usageCountdownText, usageTooltipText, withUsageDonut,
+import { usageDonutEdits, createUsageSummaryTrigger, donutArcRotations, usageCountdownText, usageTooltipText, usageIconSvg, withUsageDonut,
     withoutUsageDonut } from '../patches/paseo-usage-donut.mjs';
 
 const { z } = createRequire(new URL('../tools/package.json', import.meta.url))('zod');
@@ -31,7 +34,7 @@ function loadBundleModule(source, marker) {
 function loadAndroidDonutModel() {
     const code = stripTypeScriptTypes(readFileSync(new URL('../android/packages/app/src/usage/donut-model.ts', import.meta.url), 'utf8'))
         .replace(/^export /gm, '');
-    return new Function(`${code}\nreturn { usageCountdownText, usageTooltipText, donutArcRotations, DONUT_SIZE, DONUT_STROKE };`)();
+    return new Function(`${code}\nreturn { usageCountdownText, usageTooltipText, usageIconSvg, donutArcRotations, DONUT_SIZE, DONUT_STROKE };`)();
 }
 
 test('sidebar usage donut patch is hash gated, idempotent and reversible', () => {
@@ -101,10 +104,10 @@ test('summary trigger draws donuts with countdowns and falls back to the bar tri
         StyleSheet: { create: (factory) => factory(theme) }, BarTrigger: 'bar',
         Tooltip: 'tooltip', TooltipTrigger: 'tooltip-trigger', TooltipContent: 'tooltip-content',
         describe: (label, sources) => `${label}: ${sources.length}`, countdown: usageCountdownText, rotations: donutArcRotations,
-        tooltipText: usageTooltipText,
+        tooltipText: usageTooltipText, iconSvg: usageIconSvg,
     });
     const resetsAt = new Date(Date.now() + (53 * 60 + 30) * 1000).toISOString();
-    const sources = [{ key: 'claude', label: 'Claude', icon: '<svg/>', windows: [
+    const sources = [{ key: 'claude', sourceId: 'claude', label: 'Claude', icon: '<svg fill="currentColor"/>', windows: [
         { key: 'claude/5h', shortLabel: '5H', percent: 80, percentText: '80%', tone: 'warning', resetsAt },
         { key: 'claude/7d', shortLabel: '7D', percent: 95, percentText: '95%', tone: 'danger', resetsAt: null },
     ] }];
@@ -125,11 +128,33 @@ test('summary trigger draws donuts with countdowns and falls back to the bar tri
     assert.deepEqual(arcs.map((node) => [node.props.style[2].borderLeftColor, node.props.style[3].transform[0].rotate]),
         [['warning', '225deg'], ['warning', '-27deg'], ['danger', '225deg'], ['danger', '27deg']]);
     assert.equal(trigger.props.accessibilityLabel, 'Usage: 1');
+    assert.deepEqual(tree.root.findAllByType('icon').map((node) => node.props.svg),
+        ['<svg fill="#D97757"/>', '<svg fill="#D97757"/>']);
     style = 'bar';
     await act(async () => tree.update(jsx(Trigger, { label: 'Usage', sources, onPress() {} })));
     assert.equal(tree.root.findAllByType('bar').length, 1);
     await act(async () => tree.unmount());
     delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+});
+
+test('provider icons use blue Codex and orange Claude without tinting other sources', () => {
+    const android = loadAndroidDonutModel();
+    const svg = '<svg fill="currentColor"><path stroke="currentColor"/></svg>';
+    for (const [sourceId, color] of [['codex', '#3B82F6'], ['claude', '#D97757']]) {
+        const expected = `<svg fill="${color}"><path stroke="${color}"/></svg>`;
+        assert.equal(usageIconSvg(svg, sourceId), expected);
+        assert.equal(android.usageIconSvg(svg, sourceId), expected);
+    }
+    assert.equal(usageIconSvg(null, 'claude'), null);
+    assert.equal(usageIconSvg(svg, 'other'), svg);
+});
+
+// 실제 SDK의 경로·SVG 검사를 통과한 Claude 로고만 카탈로그와 도넛에 전달한다.
+test('Claude catalog icon is a readable plugin-relative SVG accepted by the real SDK loader', async () => {
+    const source = createClaudeUsageSource({ usage: async () => { throw new Error('Usage must not be queried by icon validation'); } });
+    const svg = await readPluginProviderIcon(fileURLToPath(new URL('../plugin/', import.meta.url)), source.icon);
+    assert.equal(svg, readFileSync(new URL('../plugin/shared/claude-usage-icon.svg', import.meta.url), 'utf8'));
+    assert.ok(usageIconSvg(svg, 'claude').includes('fill="#D97757"'));
 });
 
 test('reviewed desktop bundle accepts the same donut patch', { skip: !existsSync(DESKTOP_COMPOSER_FILE) }, () => {

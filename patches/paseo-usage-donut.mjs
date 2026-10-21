@@ -19,6 +19,14 @@ export function usageTooltipText(sources) {
         .map((window) => `${window.shortLabel} ${window.percentText}`.trim()).join(' / ')}`).join('\n');
 }
 
+// 공급자 아이콘만 브랜드색으로 칠하고 사용률 링의 경고·위험 색은 보존한다.
+export function usageIconSvg(icon, sourceId) {
+    let color = null;
+    if (sourceId === 'codex') color = '#3B82F6';
+    else if (sourceId === 'claude') color = '#D97757';
+    return icon && color ? icon.replaceAll('currentColor', color) : icon;
+}
+
 // 반원 두 개의 호 회전각 (퍼센트 -> 오른쪽·왼쪽 회전각, 보이지 않는 쪽은 null)
 export function donutArcRotations(percent) {
     const angle = (Math.min(100, Math.max(0, Number.isFinite(percent) ? percent : 0)) / 100) * 360;
@@ -31,7 +39,7 @@ export function donutArcRotations(percent) {
 // 번들 사이드바 모듈 안에서 실행할 트리거 생성 (모듈 지역 의존성 -> 설정에 따라 도넛 또는 원래 막대 트리거)
 export function createUsageSummaryTrigger(deps) {
     const { React, jsx, jsxs, View, Text, SourceIcon, usePreferences, StyleSheet, BarTrigger,
-        Tooltip, TooltipTrigger, TooltipContent, describe, countdown, rotations, tooltipText } = deps;
+        Tooltip, TooltipTrigger, TooltipContent, describe, countdown, rotations, tooltipText, iconSvg } = deps;
     const size = 30, stroke = 3;
     const arcColor = (color) => ({ borderLeftColor: color, borderBottomColor: color, uni__dependencies: [0] });
     const styles = StyleSheet.create((theme) => ({
@@ -90,7 +98,7 @@ export function createUsageSummaryTrigger(deps) {
             jsx(TooltipTrigger, {
                 onPress, accessibilityRole: 'button', accessibilityLabel: describe(label, sources), testID: 'sidebar-usage',
                 style: ({ hovered }) => hovered ? [styles.trigger, styles.triggerHovered] : styles.trigger,
-                children: sources.flatMap((source) => source.windows.map((window) => donut(source.icon, window, now))),
+                children: sources.flatMap((source) => source.windows.map((window) => donut(iconSvg(source.icon, source.sourceId), window, now))),
             }),
             jsx(TooltipContent, { side: 'top', align: 'center', offset: 8, maxWidth: 560,
                 children: jsx(Text, { style: styles.tooltipText, children: tooltipText(sources) }) }),
@@ -106,7 +114,7 @@ const SIDEBAR_STYLE_OPTIONS = 'pdSidebarStyles=[{value:"bar",label:C.usageCopy.s
 const SIDEBAR_STYLE_ROW = '(0,D.jsx)(s.View,{style:b.settingsStyles.rowBorder,children:(0,D.jsx)(y.SettingsRow,{label:C.usageCopy.sidebarStyle,children:(0,D.jsx)(h.SegmentedControl,{options:pdSidebarStyles,value:pdUsage.preferences.sidebarStyle??"bar",onValueChange:pdUsage.setSidebarStyle,size:"sm",testID:"usage-sidebar-style"})})})';
 // 사이드바 모듈에 넣을 트리거 정의 (툴팁 모듈 id -> 모듈 지역 의존성으로 만든 트리거)
 function triggerSource(tooltipId) {
-    return `const pdUsageTrigger=(${createUsageSummaryTrigger})({React:l,jsx:S.jsx,jsxs:S.jsxs,View:n.View,Text:t.Text,SourceIcon:y.UsageSourceIcon,usePreferences:b.useUsagePreferences,StyleSheet:u.StyleSheet,BarTrigger:P,Tooltip:r(${tooltipId}).Tooltip,TooltipTrigger:r(${tooltipId}).TooltipTrigger,TooltipContent:r(${tooltipId}).TooltipContent,describe:U,countdown:${usageCountdownText},rotations:${donutArcRotations},tooltipText:${usageTooltipText}});`;
+    return `const pdUsageTrigger=(${createUsageSummaryTrigger})({React:l,jsx:S.jsx,jsxs:S.jsxs,View:n.View,Text:t.Text,SourceIcon:y.UsageSourceIcon,usePreferences:b.useUsagePreferences,StyleSheet:u.StyleSheet,BarTrigger:P,Tooltip:r(${tooltipId}).Tooltip,TooltipTrigger:r(${tooltipId}).TooltipTrigger,TooltipContent:r(${tooltipId}).TooltipContent,describe:U,countdown:${usageCountdownText},rotations:${donutArcRotations},tooltipText:${usageTooltipText},iconSvg:${usageIconSvg}});`;
 }
 
 // 번들의 유일한 툴팁 모듈 id (TooltipContent 정의 모듈 -> Metro 모듈 번호)
@@ -147,7 +155,7 @@ const USAGE_DONUT_FIXED_EDITS = [
     ['testID:"usage-display-remaining"}],j=', `testID:"usage-display-remaining"}],${SIDEBAR_STYLE_OPTIONS}j=`],
     // 요약 창에 초기화 시각을 싣고 사이드바 항목은 설정을 읽는 트리거로 그린다.
     ['percentText:f,tone:(0,o.windowTone)(s)}', 'percentText:f,tone:(0,o.windowTone)(s),resetsAt:s.resetsAt??null}'],
-    ['[{key:l.id,icon:l.icon??null,windows:s}]', '[{key:l.id,label:l.sourceLabel+(l.account.label?" ("+l.account.label+")":""),icon:l.icon??null,windows:s}]'],
+    ['[{key:l.id,icon:l.icon??null,windows:s}]', '[{key:l.id,sourceId:l.sourceId,label:l.sourceLabel+(l.account.label?" ("+l.account.label+")":""),icon:l.icon??null,windows:s}]'],
     ['h=(0,S.jsx)(P,{label:l,sources:b,onPress:u})', 'h=(0,S.jsx)(pdUsageTrigger,{label:l,sources:b,onPress:u})'],
 ];
 // 이전 버전 패치에 없던 공급자 이름 편집의 위치
@@ -161,6 +169,8 @@ function occurrences(source, text) {
 // 패치 지점이 모두 하나씩 있을 때만 원래 앵커로 되돌려 원본 해시 검증을 유지한다(중복·일부 적용은 실패).
 // 이전 버전 패치(공급자 이름 없음·다른 트리거 본문)도 같은 원래 앵커로 되돌린다.
 export function withoutUsageDonut(source) {
+    source = source.replace('[{key:l.id,label:l.sourceLabel+(l.account.label?" ("+l.account.label+")":""),icon:l.icon??null,windows:s}]',
+        '[{key:l.id,icon:l.icon??null,windows:s}]');
     const start = source.indexOf(TRIGGER_PREFIX);
     if (start >= 0) {
         const end = source.indexOf(TRIGGER_ANCHOR, start);
