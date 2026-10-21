@@ -44,6 +44,8 @@ node scripts/patch-paseo-workspace-name.mjs
 node scripts/patch-paseo-workspace-name.mjs --check
 node scripts/patch-paseo-session-titles.mjs
 node scripts/patch-paseo-session-titles.mjs --check
+node scripts/patch-paseo-local-stt.mjs
+node scripts/patch-paseo-local-stt.mjs --check
 node scripts/patch-paseo-composer.mjs
 node scripts/patch-paseo-composer.mjs --check
 npm run check

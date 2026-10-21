@@ -85,13 +85,20 @@ function getSttEngine(
   const modelDir = getLocalSpeechModelDir(config.modelsDir, modelId);
   const created = new SherpaOfflineRecognizerEngine(
     {
-      model: {
-        kind: "nemo_transducer",
-        encoder: `${modelDir}/encoder.int8.onnx`,
-        decoder: `${modelDir}/decoder.int8.onnx`,
-        joiner: `${modelDir}/joiner.int8.onnx`,
-        tokens: `${modelDir}/tokens.txt`,
-      },
+      model:
+        modelId === "sense-voice-zh-en-ja-ko-yue-int8"
+          ? {
+              kind: "sense_voice",
+              model: `${modelDir}/model.int8.onnx`,
+              tokens: `${modelDir}/tokens.txt`,
+            }
+          : {
+              kind: "nemo_transducer",
+              encoder: `${modelDir}/encoder.int8.onnx`,
+              decoder: `${modelDir}/decoder.int8.onnx`,
+              joiner: `${modelDir}/joiner.int8.onnx`,
+              tokens: `${modelDir}/tokens.txt`,
+            },
       numThreads: 2,
       debug: 0,
     },

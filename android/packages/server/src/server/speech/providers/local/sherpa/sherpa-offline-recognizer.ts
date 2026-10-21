@@ -9,13 +9,19 @@ function assertFileExists(filePath: string, label: string): void {
   }
 }
 
-export interface SherpaOfflineRecognizerModel {
-  kind: "nemo_transducer";
-  encoder: string;
-  decoder: string;
-  joiner: string;
-  tokens: string;
-}
+export type SherpaOfflineRecognizerModel =
+  | {
+      kind: "nemo_transducer";
+      encoder: string;
+      decoder: string;
+      joiner: string;
+      tokens: string;
+    }
+  | {
+      kind: "sense_voice";
+      model: string;
+      tokens: string;
+    };
 
 export interface SherpaOfflineRecognizerConfig {
   model: SherpaOfflineRecognizerModel;
@@ -54,9 +60,13 @@ export class SherpaOfflineRecognizerEngine {
       component: "offline-recognizer",
     });
 
-    assertFileExists(config.model.encoder, "offline encoder");
-    assertFileExists(config.model.decoder, "offline decoder");
-    assertFileExists(config.model.joiner, "offline joiner");
+    if (config.model.kind === "sense_voice") {
+      assertFileExists(config.model.model, "SenseVoice model");
+    } else {
+      assertFileExists(config.model.encoder, "offline encoder");
+      assertFileExists(config.model.decoder, "offline decoder");
+      assertFileExists(config.model.joiner, "offline joiner");
+    }
     assertFileExists(config.model.tokens, "tokens");
 
     const sherpa = loadSherpaOnnxNode();
@@ -67,13 +77,23 @@ export class SherpaOfflineRecognizerEngine {
         featureDim: config.featureDim ?? 80,
       },
       modelConfig: {
-        transducer: {
-          encoder: config.model.encoder,
-          decoder: config.model.decoder,
-          joiner: config.model.joiner,
-        },
+        ...(config.model.kind === "sense_voice"
+          ? {
+              senseVoice: {
+                model: config.model.model,
+                language: "auto",
+                useInverseTextNormalization: 1,
+              },
+            }
+          : {
+              transducer: {
+                encoder: config.model.encoder,
+                decoder: config.model.decoder,
+                joiner: config.model.joiner,
+              },
+              modelType: "nemo_transducer",
+            }),
         tokens: config.model.tokens,
-        modelType: "nemo_transducer",
         numThreads: config.numThreads ?? 1,
         provider: config.provider ?? "cpu",
         debug: config.debug ?? 0,
