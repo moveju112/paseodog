@@ -1,98 +1,46 @@
 # Architecture
 
-PaseoDog integrates two upstreams: **Paseo** (daemon, desktop/web/
-mobile/SSH clients, plugin SDK) and **Mixdog** (inference, context, native sessions). PaseoDog
-owns the adapter, hash-gated patches on installed npm upstreams, and the integrated
-Paseo client/daemon source checkout in `android/`. Inference remains in Mixdog.
+PaseoDog = Paseo (daemon, desktop/mobile/web/SSH clients) + Mixdog (inference, native sessions), joined through a Paseo provider plugin.
 
-Project reference: `docs/ARCHITECTURE.md` (boundary, transport, journal). This file is the agent map.
-
-## Ownership boundary
-
-| Layer | Owner | Lives in |
-|---|---|---|
-| Integrated mobile/web/desktop clients and their daemon stack | Paseo source with PaseoDog integration changes | `android/packages/` |
-| Pinned CLI, plugin host and SDK used by the wrapper/adapter | Paseo (npm `@getpaseo/cli`, `@getpaseo/plugin`) | `tools/node_modules`, `plugin/node_modules` |
-| Inference, model history, prompt cache, native sessions | Mixdog (npm `mixdog`) | `engine/node_modules/mixdog` |
-| Lifecycle, approvals, journal, wire mapping | PaseoDog adapter | `plugin/server/`, `engine/src/` |
-| Upstream patches (exact-blob gated) | PaseoDog | `scripts/patch-*.mjs`, `patches/` |
-
-- **MUST** add a feature on the side that owns it; the adapter only translates and gates.
-  - why: copied upstream logic cannot be re-merged when upstream ships the next fix.
-  - ✅ `evidence: docs/UPSTREAM.md` § "Upgrade procedure" — "Keep inference features in Mixdog and client/daemon features in Paseo."
-
-## Same name, different thing
-
-"Paseo" or "Mixdog" in a request, path or file name does not mean "edit the upstream copy".
-
-| Name you see | What it is | PaseoDog-owned? | Change it through |
-|---|---|---|---|
-| `scripts/patch-paseo-*.mjs`, `patch-mixdog.mjs`, `patches/paseo-*`, `tests/paseo-*` | PaseoDog patches/tests that target upstream | yes | edit directly |
-| `tools/node_modules/@getpaseo/*`, `engine/node_modules/mixdog` | installed upstream, rewritten by `npm ci` | no | a `scripts/patch-*.mjs` patch or a pin bump |
-| `android/packages/{app,desktop,server,...}` | integrated Paseo source for clients and their daemon stack | yes (integration checkout) | edit owned source, follow `android/CLAUDE.md`, build agreed targets under [tasks/RELEASE.md](tasks/RELEASE.md) |
-| installed PaseoDog desktop app bundle | generated installation, rewritten by each update | no (generated artifact) | rebuild/install from `android/`; `paseodog desktop-update` is only for legacy installations |
-| `~/project/mixdog`, `~/project/mixdog-fork-dist` | separate Mixdog fork checkouts, not referenced here | no | not a PaseoDog input; npm pin is `evidence: engine/package.json` |
-| `~/.paseo`, `~/.mixdog` | personal stock Paseo / Mixdog profiles | no | never edit for PaseoDog work |
-| `~/.local/share/paseodog/{paseo,mixdog,sessions}` | PaseoDog dedicated state | yes (runtime state) | `paseodog` wrapper / `scripts/configure.mjs` |
-
-- **MUST** resolve "fix it in Paseo/Mixdog" to the owned `android/` source when that is the build input, or a gated patch/pin for installed npm upstreams; never edit an upstream copy elsewhere.
-  - why: edits to installed or sibling upstream code never reach the PaseoDog build and bypass the reviewed-hash gate.
-  - ✅ [tasks/MERGE_UPSTREAM.md](tasks/MERGE_UPSTREAM.md) step 8 (backport) or steps 4-7 (base upgrade).
-
-## Directory map
+## Directories
 
 | Path | Role |
 |---|---|
-| `android/packages/app`, `android/packages/desktop`, `android/packages/server` | integrated client and daemon sources; not Android-only despite the parent directory name |
-| `bin/paseodog.mjs` | CLI wrapper: sets the dedicated `PASEO_HOME`, passes other args to pinned Paseo CLI |
-| `plugin/index.server.ts`, `plugin/server/provider.ts` | Paseo provider registration (`id: 'paseodog'`) |
-| `plugin/server/connection.mjs` | provider connection, advertised `CAPABILITIES`, turn lifecycle |
-| `plugin/server/process-engine.mjs`, `json-lines.mjs` | one engine child per session over JSONL stdio |
-| `plugin/server/process-scope.mjs` | `systemd-run --user --scope` per session |
-| `plugin/server/journal.mjs` | fsynced bridge journal, receipts, owner locks |
-| `plugin/server/question.mjs` | Mixdog `ask_user` question <-> Paseo question UI |
-| `plugin/server/controls.mjs`, `engine/src/controls.mjs` | resident control process: model/route selection without credentials |
-| `plugin/server/native-config.mjs` | read-only viewer of Claude Code / Codex config; never writes |
-| `plugin/server/usage.ts`, `engine/src/usage.mjs` | usage/quota from the dedicated Mixdog runtime, no direct auth-file reads |
-| `plugin/client/*.tsx` | Paseo UI panels (live status, usage, native config) |
-| `plugin/shared/release.json` | product version + upstream base versions read by the plugin |
-| `engine/bin/paseodog-engine.mjs` | worker entry; `--check` / `--version` used by provider status |
-| `engine/src/native-engine.mjs` | imports Mixdog runtime, installs `beforeSessionAsk` host policy |
-| `engine/src/orchestration.mjs`, `policy.mjs` | child-agent ownership, tool approval policy |
-| `engine/src/worker.mjs` | engine process loop; only UI-safe projections cross the wire |
-| `scripts/patch-mixdog.mjs`, `patch-paseo-*.mjs` | exact-hash upstream patches applied after install |
-| `scripts/check-upstream.mjs` | read-only pinned-vs-latest npm comparison |
-| `scripts/configure.mjs`, `install.sh`, `service.mjs` | dedicated profile, install, systemd unit |
-| `scripts/desktop-release.mjs` | gated update path for legacy installed desktop bundles |
-| `tests/*.test.mjs` | `node --test`; fixtures in `tests/fixtures/`, helpers in `tests/helpers.mjs` |
+| `bin/paseodog.mjs` | `paseodog` wrapper injecting the dedicated home (`start`→`daemon start`, `serve`→`daemon run`, `desktop-update`) |
+| `plugin/` | Paseo provider plugin. `plugin/server/` (connection, journal, engine process), `plugin/client/` (settings, usage UI), `plugin/shared/release.json` (product + base versions) |
+| `engine/` | Mixdog native engine worker (`engine/src/*.mjs`), `engine/bin/paseodog-engine.mjs` |
+| `scripts/patch-*.mjs` | patch installers that modify installed upstream files after hash verification |
+| `patches/*.mjs` | pure string transforms (`withX`/`withoutX`) used by the installers |
+| `tools/` | pinned `@getpaseo/cli` install; tests read its real bundles |
+| `android/` | vendored Paseo monorepo source. Shared app source for Android APK, Linux .deb and web bundle (`packages/app`), desktop (`packages/desktop`), server, protocol |
+| `tests/` | root `node --test` tests, `tests/fixtures/`, `tests/contracts/`, `*-smoke.mjs` (device/billable smokes) |
+| `config/` | `model-routes.example.json`, Git-ignored `rules.local.md` |
 
-## Stack
+## Version sources
 
-Node `^22.19 || >=24` ESM (.mjs files), TypeScript only at the SDK boundary (`plugin/*.ts`,
-`plugin/client/*.tsx`), shell for install, one Python packager (`scripts/package.py`).
-Three adapter/runtime npm packages, each with its own lockfile: `engine/`, `plugin/`, `tools/`.
-The `android/` source checkout is a separate npm workspace monorepo with its own tooling.
-Keep command working directories and test scopes distinct.
+- Product version: `package.json` `version` = `plugin/shared/release.json`. `evidence: tests/version.test.mjs:9`
+- Base versions: `package.json` `paseodogUpstream` (Paseo, Mixdog). Pinned in three places — `engine` (`mixdog`), `tools` (`@getpaseo/cli`), `plugin` (`@getpaseo/plugin`) — plus `scripts/patch-mixdog.mjs` `PIN`. `evidence: scripts/check-upstream.mjs:10`
+- Android `versionCode` = `androidVersionCode` (derived from the Paseo base version) + release offset `+N`. `evidence: android/packages/app/app.config.js:134`
+- Desktop version = `<제품 버전>.<versionCode>` (e.g. `1.0.0-rc.7.11036`).
+
+## Runtime
+
+| Target | Location |
+|---|---|
+| Dedicated home | `${PASEODOG_HOME:-~/.local/share/paseodog}` → paseo/ (PASEO_HOME), mixdog/ (MIXDOG_HOME). `evidence: scripts/paths.mjs:6` |
+| Dedicated daemon port | `listen` in the dedicated home's paseo/config.json (this PC: `127.0.0.1:6768`). 6767 is stock Paseo |
+| Installed PC app | /opt/PaseoDog, log `~/.config/PaseoDog/logs/main.log` |
+| Plugin registration | the source checkout's `plugin/` is registered directly. `evidence: scripts/install.sh:64` |
 
 ## Data flow
 
-```
-Paseo app / web / SSH  ->  Paseo daemon (dedicated PASEO_HOME)
-  -> plugin paseodog-provider (plugin/server/connection.mjs, journal.mjs)
-  -> engine child per session: node engine/bin/paseodog-engine.mjs (JSONL stdio)
-  -> engine/src/native-engine.mjs -> patched Mixdog runtime -> model provider + tools
-```
+1. Client → Paseo daemon → `plugin/server/connection.mjs` writes the turn receipt to the journal first.
+2. `plugin/server/process-engine.mjs` spawns the engine child (`engine/bin/paseodog-engine.mjs`) over JSON Lines.
+3. Engine `engine/src/native-engine.mjs` runs the Mixdog native session; tool calls get ask/deny from host policy in `engine/src/policy.mjs`.
+4. UI features ship two ways: APK/.deb built from shared app source (`android/packages/app/src`), and `patches/` applied to the pinned Paseo web bundle.
 
-Approvals flow back the same way: Mixdog `beforeToolHook` -> host policy -> Paseo permission
-request -> allow-once/deny. Usage and context numbers come from Mixdog, never from UI snapshots.
+## Ownership boundaries
 
-## Version sources of truth
-
-| Question | Source | Check |
-|---|---|---|
-| Product version | `package.json` `version` (mirrored in `plugin/shared/release.json`, 3 sub-packages + locks) | `tests/version.test.mjs` |
-| Accepted upstream base versions | `package.json` `paseodogUpstream` | `paseodog --version` |
-| Pinned npm versions | `engine/package.json`, `tools/package.json`, `plugin/package.json` | `npm run upstream:check` |
-| Upstream fixes and local patches beyond the base | `docs/UPSTREAM.md` + `scripts/patch-*.mjs` | inventory in [UPSTREAM_INTAKE.md](UPSTREAM_INTAKE.md) |
-
-Runtime layout (daemon homes, ports, reload) is in [RUNTIME_DAEMON.md](RUNTIME_DAEMON.md).
+- Paseo: clients, daemon. Mixdog: inference, model history. Adapter (`plugin/`, `engine/`): lifecycle, approval, journal, wire mapping.
+- `engine/src` imports `plugin/server/{json-lines,util,agent-message}.mjs` directly. `evidence: engine/src/controls.mjs:5`
+- A daemon keeps the plugin code and `release.json` it loaded; only new engine children read current disk code.

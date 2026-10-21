@@ -1,49 +1,48 @@
 # Pitfalls
 
-Each entry: verbatim symptom (grep it) -> cause -> fix.
+Each entry: verbatim symptom (grep it) → cause → fix.
 
-## Runtime / daemon
+## Daemon / provider
 
-- **Symptom:** `Provider 'paseodog' is not available. Available providers: none. Use one of those providers, or install/configure 'paseodog'.`
-  - **Cause:** the running plugin still holds the `VERSION` it loaded, while `paseodog-engine --check` on disk reports a newer version after a version bump or upstream intake (`evidence: plugin/server/provider.ts`). Also seen when the client is attached to a daemon whose plugin was not reloaded.
-  - **Fix:** reload the plugin on the authorized local dedicated daemon at a safe point, then confirm `provider ls` shows `available`. Other hosts require their own authorization — [RUNTIME_DAEMON.md](RUNTIME_DAEMON.md) "Live plugin vs source tree".
-
+- **Symptom:** `Provider 'paseodog' is not available. Available providers: none.`
+  - **Cause:** the running plugin holds the `VERSION` it loaded while the on-disk engine `--check` reports a newer one. `evidence: plugin/server/provider.ts:29`
+  - **Fix:** reload the plugin immediately — [RUNTIME_DAEMON.md](RUNTIME_DAEMON.md) "How to apply".
 - **Symptom:** `provider diagnostic paseodog` shows `PaseoDog engine version mismatch`.
   - **Cause:** same as above, seen from the diagnostic side.
-  - **Fix:** same reload; do not edit `release.json` back to the old value.
-
-- **Symptom:** desktop app works but changes/reloads made with `paseodog ...` have no effect (or the reverse).
-  - **Cause:** the desktop was launched without `PASEO_HOME` and attached to `~/.paseo` (port `6767`), while `paseodog` targets the dedicated home. Check `~/.config/PaseoDog/logs/main.log` -> `desktop daemon ... listen`.
-  - **Fix:** launch the desktop with the dedicated `PASEO_HOME`; do not automatically edit or reload the stock profile — [RUNTIME_DAEMON.md](RUNTIME_DAEMON.md) "Which daemon".
-
-- **Symptom:** daemon log warning `Provider override matches no registered provider` right before `[paseo] Stopping plugin`.
-  - **Cause:** expected transient while `paseodog-provider` reloads; the provider is unregistered between stop and ready.
-  - **Fix:** none if `Plugin ready` follows; otherwise read `paseodog plugin logs paseodog-provider`.
-
+  - **Fix:** reload. NEVER revert `release.json` to the old value.
+- **Symptom:** PC app works but `paseodog ...` reloads/changes do not reach it (or the reverse).
+  - **Cause:** the app started without the dedicated `PASEO_HOME` and attached to the `~/.paseo` (6767) daemon. Check `desktop daemon ... listen` in `~/.config/PaseoDog/logs/main.log`.
+  - **Fix:** launch the app with the dedicated `PASEO_HOME` — [RUNTIME_DAEMON.md](RUNTIME_DAEMON.md) "Which daemon".
 - **Symptom:** `Session already owned by another live connection` / `Session already owned`.
-  - **Cause:** two connections or two daemons share one journal dir (`evidence: plugin/server/journal.mjs` owner lock); the lock fails closed by design.
-  - **Fix:** identify the owning daemon/connection and coordinate a safe release of ownership. Do not stop another active session without interruption approval or delete a live lock (`evidence: docs/OPERATIONS.md` § "6. 진단").
+  - **Cause:** two connections/daemons share one journal dir; the lock fails closed by design. `evidence: plugin/server/journal.mjs:79`
+  - **Fix:** reduce to one owning daemon. NEVER delete a live lock file.
+- **Symptom:** `doctor` passes / Provider Ready, but the feature fails in the app.
+  - **Cause:** `doctor` makes no inference request. `evidence: scripts/doctor.mjs:28`
+  - **Fix:** verify on the actually connected host/session; report test doubles and real use separately.
 
-- **Symptom:** doctor passes / provider shows Ready, but the feature fails in the app.
-  - **Cause:** `doctor` makes no inference request; Ready only proves `--check` (`evidence: scripts/doctor.mjs` `warning`).
-  - **Fix:** verify the actual connected host/session capability; follow `docs/ACCEPTANCE.md` for real model/UI acceptance.
+## Upstream patches
 
-## Upstream intake
+- **Symptom:** during install `hash mismatch`, `anchor mismatch`, `Partial ... patch`, `patch drift`.
+  - **Cause:** the installed upstream file differs from the reviewed original (new upstream version, fix already upstream, or another patch missing from the order).
+  - **Fix:** re-review the new original, then re-port or delete the patch. NEVER change only the hash — [CODING_RULES.md](CODING_RULES.md) "Upstream patches".
+- **Symptom:** `npm run upstream:check` fails with `Mixdog patch pin mismatch` / `Paseo CLI/SDK pins differ` / `Lockfile mismatch` / `Exact version required`.
+  - **Cause:** only part of the pin records was updated. `evidence: scripts/check-upstream.mjs:39`
+  - **Fix:** update the three packages, lockfiles and `PIN` in one change.
+- **Symptom:** `npm test` fails `independent product version and upstream provenance stay consistent`.
+  - **Cause:** product version / `paseodogUpstream` changed in only some of `package.json`, `plugin/shared/release.json`, sub-packages. `evidence: tests/version.test.mjs:9`
+  - **Fix:** bump all together, then reload the plugin.
 
-- **Symptom:** `Paseo terminal source drift; expected audited SHA-256 ...` (or another `patch-*.mjs` drift/hash error) during install.
-  - **Cause:** the installed upstream file differs from the reviewed original — a new upstream version or a fix already merged upstream.
-  - **Fix:** re-review the new source, port or delete the patch — [tasks/MERGE_UPSTREAM.md](tasks/MERGE_UPSTREAM.md). Never change only the hash.
+## Release package
 
-- **Symptom:** `npm run upstream:check` fails with `Mixdog patch pin mismatch`, `Paseo CLI/SDK pins differ`, `Lockfile mismatch: <name>` or `Exact version required: <name>`.
-  - **Cause:** partial intake — one of `scripts/patch-mixdog.mjs` `PIN`, the two Paseo pins, or a lockfile was not updated together (`evidence: scripts/check-upstream.mjs`).
-  - **Fix:** update every record listed in [UPSTREAM_INTAKE.md](UPSTREAM_INTAKE.md) in one change.
-
-- **Symptom:** `npm test` fails in `independent product version and upstream provenance stay consistent`.
-  - **Cause:** product version or `paseodogUpstream` changed in some of `package.json`, `plugin/shared/release.json`, the three sub-packages or their lockfiles (`evidence: tests/version.test.mjs`).
-  - **Fix:** bump all of them together, then reload the live plugin.
-
-## Documentation drift
-
-- **Symptom:** `docs/ARCHITECTURE.md` says images, steering and live settings are "Not advertised".
-  - **Cause:** that section predates the image/steer/configure work; code now advertises `prompt.image`, `prompt.steer`, `session.configure` (`evidence: plugin/server/connection.mjs`).
-  - **Fix:** treat `CAPABILITIES` as truth; update `docs/ARCHITECTURE.md` § "Capability contract" when touching capabilities.
+- **Symptom:** `python3 scripts/package.py` fails `Reviewed release source missing: <경로>`.
+  - **Cause:** a path in `MANIFEST.sha256` is missing from the working tree (including deleted/moved docs). `evidence: scripts/package.py:59`
+  - **Fix:** restore the file, or remove its line from `MANIFEST.sha256` and keep the `tests/package.test.mjs` required list in sync.
+- **Symptom:** a new module works in dev but import fails in the release ZIP.
+  - **Cause:** not added to `MANIFEST.sha256` (and `ROOT_FILES` for `android/` files), so the ZIP dropped it. `evidence: scripts/package.py:44`
+  - **Fix:** add it and confirm the package test via `npm test`.
+- **Symptom:** PC app Settings update check shows no new version.
+  - **Cause:** latest release lacks .deb/`latest-linux.yml` (Android-only publish) or the desktop version is not higher. The updater reads only `releases/latest`.
+  - **Fix:** publish all five assets in one release and bump `versionCode` — [tasks/RELEASE.md](tasks/RELEASE.md) C.
+- **Symptom:** during Android bundling `hermesc` runs for minutes or uses several GB of memory.
+  - **Cause:** huge generated code (e.g. a single `ws-outbound.aot`-family function) re-entered the bundle.
+  - **Fix:** NEVER raise the memory limit; stop, inspect bundle inputs and report.

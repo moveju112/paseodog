@@ -1,0 +1,50 @@
+{
+  "runId": "paseodog-20261021-2",
+  "lang": "en",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "recall",
+      "question": "When changing a Paseo UI feature, which two places must change together, and how is their equivalence checked?",
+      "expected": "Shared app source android/packages/app/src AND patches/paseo-<feature>.mjs with the same meaning; a root test (e.g. tests/usage-donut.test.mjs) compares them",
+      "answer": "Change the shared app source (android/packages/app/src/...) AND the web-bundle patch (patches/paseo-<feature>.mjs) with the same meaning. A root test checks that both sides match, e.g. tests/usage-donut.test.mjs runs donut-model.ts with types stripped and compares it to the patch output. Also wire into unwrap and apply order of scripts/patch-paseo-composer.mjs.",
+      "correct": true
+    },
+    {
+      "id": "q2",
+      "type": "recall",
+      "question": "scripts/package.py fails with 'Reviewed release source missing: docs/UPSTREAM.md'. Cause and fix?",
+      "expected": "A MANIFEST.sha256 path is missing from the working tree; restore it or remove the line and sync tests/package.test.mjs",
+      "answer": "Cause: a path listed in MANIFEST.sha256 is missing from the working tree, including deleted/moved docs such as docs/UPSTREAM.md. Fix: restore the file, or remove its line from MANIFEST.sha256 and keep the required list in tests/package.test.mjs in sync.",
+      "correct": true
+    },
+    {
+      "id": "q3",
+      "type": "recall",
+      "question": "How is the Android versionCode composed, and what must the new value be compared against?",
+      "expected": "androidVersionCode (from Paseo base version) + offset +N; above every existing release/install (dpkg -s paseodog, gh release list)",
+      "answer": "androidVersionCode, derived from the Paseo base version, plus a release offset +N. Raise N so the value is above every existing release and install, checked with dpkg -s paseodog and gh release list.",
+      "correct": true
+    },
+    {
+      "id": "q4",
+      "type": "judgment",
+      "question": "Another session is mid-turn; may you postpone installing the new .deb until it ends? May you also install the APK on the user's phone?",
+      "expected": "No postponement: apply immediately (sudo dpkg -i, relaunch), report interrupted sessions. Phone install needs separate approval",
+      "answer": "No to the postponement: PC apply including sudo dpkg -i of the verified .deb and relaunch runs immediately, not deferred for other sessions; list interrupted sessions. No to the phone install: not covered by PC-apply approval, needs separate approval stating target and impact.",
+      "correct": true
+    },
+    {
+      "id": "q5",
+      "type": "negative",
+      "question": "What is the default HTTP request timeout the plugin uses when calling the Mixdog engine?",
+      "expected": "Not in the rules, check the source",
+      "answer": "Not in the rules, check the source",
+      "correct": true
+    }
+  ],
+  "correct": 5,
+  "total": 5,
+  "negativePassed": true,
+  "passed": true
+}

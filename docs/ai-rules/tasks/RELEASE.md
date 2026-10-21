@@ -1,93 +1,48 @@
-# 빌드·릴리즈·서버 적용 규칙
+# Task: build and release
 
-## 승인과 범위
+Proceed immediately regardless of other sessions — [RUNTIME_DAEMON.md](../RUNTIME_DAEMON.md) "Immediate apply".
+Read Git-ignored `config/rules.local.md` for default targets (S25 arm64-v8a APK + Linux .deb) and signing-key location. If absent, build only the targets in the current request.
 
-- 코드 수정 요청은 검증 후 이 PC의 전용 PaseoDog 데몬·설치된 PC 앱에 필요한 가역적 로컬 빌드·설치·플러그인 리로드·안전한 재시작까지 상시 승인한다. 관련 실행 코드가 바뀌지 않은 문서 수정 등에는 불필요한 빌드·재시작을 하지 않는다.
-- 개발 중 관례적인 “커밋할까?”, “배포할까?” 질문은 하지 않는다. 코드 수정만 요청받았으면 Git stage·commit·push와 GitHub 게시는 하지 않고, 승인된 로컬 반영까지 완료한다.
-- “커밋·푸시해”라는 요청은 해당 변경의 선별 stage·commit·현재 확인된 대상 branch/remote로의 push와 빌드·기존 키 서명·메타데이터 생성·태그·GitHub 릴리즈 게시·검증을 포함한다. “커밋만”, “릴리즈 제외” 등 명시적인 범위 축소가 우선한다. 새 branch/remote나 upstream 저장소를 임의로 대상으로 삼지 않는다.
-- 릴리즈만 요청받았다면 빌드·기존 키 서명·메타데이터 생성·태그·GitHub 게시·검증을 수행하되 별도 Git commit·branch push까지 추정하지 않는다. 이미 승인된 같은 범위는 단계마다 다시 묻지 않는다.
-- 적용 대상·실행 방식을 확인하고 영향만 알린 뒤 로컬 반영한다. 다른 활성 세션·모델 turn·저장하지 않은 앱 작업을 끊어야 하면 강행하지 않고 안전한 시점까지 보류한다. 현재 대화도 같은 보호 대상이다. 강제 중단이 꼭 필요하거나 대상·승인 범위가 불명확할 때만 구체적인 영향과 함께 한 번 확인한다.
-- 이 상시 승인은 이 PC의 전용 PaseoDog 환경에만 해당한다. 원격 서버·운영 배포·휴대폰 설치, 새 공개 리스너, 권한 상승, 유료 모델 호출, 인증정보 가져오기, 서명키 교체, 대화·계정 데이터 삭제, 강제 push·이력 재작성, 개인 프로필 덮어쓰기는 포함하지 않는다. 제품의 ask/deny/block 권한 검사를 우회하지 않는다.
-- UI·동작 변경마다 지원하는 Android·iOS·데스크톱·web의 공통 적용 여부를 AI가 판단하고 필요한 플랫폼은 함께 수정한다. 동등한 의미의 공통 기능은 공유 소스로 반영하며, 네이티브·모바일 전용 제스처 등 예외 사유는 보고한다.
-- 공통 소스 적용 범위와 산출물 범위는 별개다. 빌드·게시는 현재 요청, 없으면 Git에서 제외된 `config/rules.local.md`의 합의된 대상을 따른다. 둘 다 없고 게시 대상을 정할 수 없을 때만 한 번 확인한다. 합의 밖 OS의 빌드까지 자동 확대하지 않는다. 필요한 대상의 도구 체인이 없으면 차단 항목으로 보고하고, 예전 파일의 이름만 바꿔 새 빌드라고 하지 않는다.
-- 개인 기기명·기본 ABI·서명키 절대경로 등 환경별 값은 `config/rules.local.md`에만 둔다. 이 파일은 stage·commit·소스 ZIP·공개 릴리즈 노트에 포함하지 않는다.
+## Scope
 
-## 동시 세션과 최종 전달
+- Code-change request: up to local build + PC apply. No Git commit/push or GitHub publish.
+- "커밋·푸시" request: selective commit/push of your own changes + this whole release (build, sign, publish, PC apply). An explicit narrowing such as "커밋만" wins.
+- "릴리즈" request: build, sign, publish, PC apply. Do not infer a separate commit/push.
+- New branch/remote, force push, signing-key replacement need separate approval.
 
-- 작업 시작과 커밋 전 Git diff·index와 같은 저장소의 관련 세션 상태·인계를 확인한다. 다른 세션 변경을 되돌리거나 임의로 stage하지 않는다. 같은 파일도 자기 변경 hunk만 선별 커밋하며, 변경이 섞여 구분되지 않으면 관련 세션과 소유 범위를 먼저 정리한다.
-- 커밋 승인이 있는 겹치는 세션은 각자 자기 변경만 커밋하고 push·태그·릴리즈는 보류한다. 마지막으로 구현·검증을 끝내고 다른 관련 세션의 완료·인계를 확인한 한 세션이 최종 전달을 맡는다. 단순 종료 시각이나 idle 상태만으로 담당을 추정하지 않는다.
-- 최종 담당은 관련 세션의 전달 범위와 commit 목록, 기존 push·게시 여부를 확인한다. 전체 전달 범위의 승인이 확인된 변경만 통합 검사하고 한 번 push·릴리즈한다. 이미 성공한 동일 입력의 검사는 재사용한다. 다른 세션의 승인되지 않은 변경이나 미완료 변경을 섞어 게시하지 않는다.
-- 담당·완료 여부를 확인할 수 없으면 자기 구현·검사·승인된 커밋까지 끝내고 push·릴리즈 보류 상태를 보고한다. 중복 배포를 피하려고 임의의 최종 담당을 선언하거나 다른 세션을 종료하지 않는다.
-- 겹치는 로컬 빌드·앱 적용·데몬 리로드도 조정한다. 활성 작업을 끊는 반영은 최종 담당에게 인계하거나 안전한 시점까지 보류하고 완료·예약·보류를 구분한다.
+## A. Version
 
-## 변경 소스와 빌드 입력
+1. Checks: root `npm run check && npm test` (`npm run typecheck` for plugin TS), plus typecheck/lint/related Vitest for changed `android/` paths.
+   `evidence: package.json:12`
+2. Raise the `versionCode` offset `+N` above every existing release/install (`dpkg -s paseodog`, `gh release list`).
+   `evidence: android/packages/app/app.config.js:134`
+3. Write user-facing changes in the current version section of `CHANGELOG.md`. Add new required files to `MANIFEST.sha256` (and `scripts/package.py` `ROOT_FILES` for `android/`).
+   `evidence: scripts/package.py:15`
 
-- 원본 작업 폴더와 다른 사람의 변경을 보존한다. 임시 빌드 공간·스크립트·로그는 `mktemp -d /data/tmp/ubuntu/<작업>-XXXXXX`로 고유하게 만든다(systemd-tmpfiles 3일 TTL). 서명 키·init script처럼 다음 배포에 다시 필요한 입력은 이 TTL 폴더에 두지 않는다.
-- `deliverables/` 등 프로젝트 안에 APK·설치 파일·배포 압축본·버전별 서명 산출물을 누적 보관하지 않는다. 새 산출물은 고유 임시 작업 공간에 만들고, 게시 파일의 원격 바이트·해시 검증과 적용 검증이 끝나면 이번 작업에서 만든 불필요한 임시 산출물을 정리한다. 사용자가 요청한 보관본·복구 백업·미게시 산출물은 별도 승인 없이 삭제하지 않는다. 기존 `deliverables/` 내용도 삭제 승인 전에는 보존한다.
-- 기존 빌드 공간을 재사용할 때는 변경 파일의 복사 여부가 아니라 **최종 빌드 입력과 현재 소스의 바이트 일치**를 확인한다. Metro 설정·생성된 네이티브 파일처럼 의도적인 차이는 항목별로 구분한다.
-- 같은 작업 트리·Metro 산출물을 사용하는 Linux·Android 빌드는 동시에 실행하지 않는다. 동시에 실행하는 빌드는 캐시·산출물 충돌을 막되, 매 빌드마다 빈 캐시를 만드는 방식으로 격리하지 않는다.
-- 모델명·상태 표시 변경은 실제 모델 ID, 인증 경로, 저장 키와 분리한다. 사용자 화면에 내부 JSON·메시지 ID 목록·비밀 경로를 그대로 출력하지 않는다.
-- 빌드 후 소스가 바뀌면 영향받는 산출물만 다시 만든다. 이전 빌드 파일의 이름만 바꿔 새 수정이 포함됐다고 주장하지 않는다.
-- 공통 UI·동작 변경은 각 합의된 빌드 대상의 실제 배포 번들·소스맵에서 변경 소스 포함과 플랫폼 분기 적용을 확인하고 관련 동작 테스트를 수행한다. 빌드하지 않는 지원 플랫폼도 공유 소스·플랫폼 분기·관련 테스트를 검토하되 빌드·실기기 검증 완료로 표현하지 않는다. 중요한 개별 수정도 소스맵의 원본 바이트나 해당 기능의 번들 포함 증거를 확인한다. 파일 크기가 같거나 소스 테스트만 통과했다는 이유로 배포본 반영을 판단하지 않는다.
+## B. Build (resource limits)
 
-## 빌드 자원·캐시·측정
+4. Temp workspace: `mktemp -d /data/tmp/ubuntu/paseodog-release-XXXXXX` (systemd-tmpfiles 3-day TTL). NEVER accumulate artifacts inside the project (deliverables/ etc.).
+5. Build inside `systemd-run --user --scope -p MemoryHigh=8G -p MemorySwapMax=2G`, explicitly limiting Gradle/Metro parallelism to 1. NEVER run Android and Linux builds concurrently in the same checkout (run sequentially).
+6. APK: in `android/packages/app/android/`, with the signing init script, `./gradlew assembleRelease --max-workers=1 -Porg.gradle.parallel=false`. Confirm `reactNativeArchitectures=arm64-v8a` in `gradle.properties`.
+   `evidence: android/packages/app/plugins/with-android-architectures.js:5`
+7. Confirm the signing key file matches the init script's `signingConfigs.debug.storeFile`. If the key is missing, stop and report; NEVER create a new key. Per APK: `zipalign`, `apksigner verify`, package ID, version, ABI.
+8. .deb: in `android/`, the `npm run build:desktop` order (`build:desktop-deps` → `expo export --platform web` → `build:package`), version `-c.extraMetadata.version=<제품 버전>.<versionCode>`.
+   `evidence: android/package.json:96`
+9. If source changes after a build, rebuild only affected artifacts. NEVER rename an old file and call it a new build.
 
-- 공유 서버에서는 기존 작업의 응답성을 우선하고 CPU 포화를 목표로 하지 않는다. 실행 전 Gradle·Metro·컴파일러 각각의 병렬도를 확인하고 명시적으로 제한한다. 작업자 수 제한만으로 전체 CPU가 제한된다고 간주하지 말고, 빌드 프로세스 트리 전체의 CPU 상한도 설정한다. 권한이 없으면 권한 상승으로 우회하지 말고 적용 가능한 제한과 한계를 보고한다.
-- Gradle의 `--max-workers=1`과 `org.gradle.parallel=false`는 Metro 작업자·JVM GC/JIT·컴파일러 내부 스레드까지 제한하지 않는다. Gradle만 직렬화한 채 다른 빌드 도구는 기본 병렬도로 방치하지 않는다.
-- 빌드 scope 메모리는 CPU와 별도로 정한다. `systemd-run --user --scope`에 `-p MemoryHigh=8G -p MemorySwapMax=2G`를 기준으로 둔다. Android 번들은 Metro가 약 2.3GB를, `hermesc -O`가 약 1.4GB를 쓰고 hermesc는 약 13초 걸린다(2026-10-21, zod-aot 대체 적용 후 측정). hermesc가 몇 분 넘게 돌거나 수 GB를 넘으면 메모리 제한을 올리지 말고 중단한다. 그다음 번들에 거대한 단일 함수(생성 코드)가 다시 들어왔는지 확인하고 보고한다. 대체 적용 전에는 함수 하나가 약 8.7만 줄인 `ws-outbound.aot.js` 때문에 RSS+swap 약 17GB, 25분 이상이 걸렸고 시스템 swap도 바닥났다. 실행 중 `memory.pressure` full이 계속 높거나 시스템 swap이 바닥나면 기다리지 말고 중단·보고한다.
-- Android APK는 합의된 ABI만 대상으로 `android/packages/app/android/`에서 `./gradlew assembleRelease --max-workers=1 -Porg.gradle.parallel=false`로 빌드한다. 생성된 `gradle.properties`의 `reactNativeArchitectures`가 선택한 ABI와 일치해야 하며, 필요하면 `-PreactNativeArchitectures=...`로 명시한다. `app.config.js`의 expo-build-properties와 같은 `android.enableMinifyInReleaseBuilds`·`android.enableShrinkResourcesInReleaseBuilds`·`android.enableBundleCompression`=`true`도 확인한다. 이 폴더는 gitignore 대상인 prebuild 결과물이다. `expo prebuild`는 ABI 값을 `plugins/with-android-architectures.js`로, 나머지 세 값을 expo-build-properties로 쓴다. 생성 폴더가 오래됐다고 의심되면 `npx expo config --type introspect`의 `gradleProperties`와 비교한다. ABI를 4개로 두면 APK split은 출력만 줄일 뿐 네이티브 C++는 4개 ABI 전부 컴파일된다. `modules/paseo-diff-prototype`도 같은 속성으로 `ndk.abiFilters`를 정한다. R8과 번들 압축을 빼면 dex가 약 13MB에서 42MB로, APK가 73MB에서 122MB로 커진다. 2026-10-21 측정(CPU 2코어): 캐시가 빈 첫 빌드 7분 9초(R8 꺼짐), 설정 변경 뒤 빌드 2분 20초(R8 1분 32초, app CMake 29초), 변경 없는 재빌드 40초. Metro `--reset-cache`는 번들링을 약 11초에서 약 114초로 늘리니 원인이 있을 때만 쓴다.
-- 기존 의존성 설치와 호환되는 Gradle·Metro 캐시를 안전하게 재사용한다. 소스 격리가 필요하다는 이유만으로 대용량 `node_modules`를 통째로 복사하거나 `GRADLE_USER_HOME`·Metro 캐시를 매번 새로 만들지 않는다. 새 캐시·전체 복사가 실제로 필요하면 이유를 먼저 밝히고, 원본 소스·기존 캐시를 훼손하지 않는다.
-- 준비·복사·빌드·검증·업로드·정리 시간을 구분해 측정한다. 겹치는 작업 시간은 합산하지 않으며 전체 배포 시간을 순수 컴파일 시간이라고 보고하지 않는다. CPU 측정은 프로세스/시스템 전체, 코어 기준, 표본/시계열 여부를 구분하고 기록 없는 과거 포화·병목은 단정하지 않는다.
-- 핵심 빌드 로그와 단계별 시간·실행 옵션은 삭제할 빌드 작업 공간 밖에 남기고 위치를 대화에 기록한다. 로그는 비밀정보를 제외하고 최소 3일 보존하며 보존 경로의 정리 정책도 명시한다. 배포 직후 임시 산출물을 정리하더라도 조사에 필요한 로그까지 함께 삭제하지 않는다.
+## C. Publish
 
-## 검사와 버전
+10. Update JSON: `python3 scripts/android-update-manifest.py --version-code <vc> --version-name <name> --tag <tag> --target-abi arm64-v8a --output paseodog-android-update.json <apk>`.
+    `evidence: scripts/android-update-manifest.py:59`
+11. Match `latest-linux.yml` `version`/`path`/`sha512`/`size` against the real .deb; create `SHA256SUMS`.
+12. Tag `android-v<Paseo 기반 버전>-<n>` (check duplicates), title `PaseoDog <vc> · Galaxy S25 · Linux`. Upload all five files — APK, `paseodog-android-update.json`, .deb, `latest-linux.yml`, `SHA256SUMS` — to ONE draft release.
+    `evidence: android/packages/desktop/electron-builder.yml:48`
+13. Compare remote names/bytes/SHA-256 with local, then publish and mark latest. Afterwards confirm tag/assets via `gh api repos/moveju112/paseodog/releases/latest`.
+    `evidence: android/packages/app/src/components/paseodog-update-row.tsx:44`
+14. Release notes: source commit, checks run, APK signed with the public debug key, .deb has no code signature; state if uncommitted changes were included.
 
-- PaseoDog 저장소 루트에서 모든 변경에 `npm run check`, `npm test`를 실행한다. 이 `npm test`는 `tests/*.test.mjs`이며 `android/` 모노레포 전체 테스트가 아니다. 플러그인 TS 변경은 루트의 `npm run typecheck`를 추가한다.
-- `android/` 코드 변경은 해당 패키지 타입 검사와 `android/` 기준 `npm run lint -- <변경 경로>`, 관련 Vitest 파일을 추가한다. 전체 모노레포 테스트를 자동 실행하지 않는다. 문서만 바뀌었으면 Android 타입 검사·lint·앱 빌드를 실행하지 않는다. 포맷은 `android/`의 npm 스크립트로 자기 변경 파일만 대상으로 한다.
-- 성공한 검사는 다른 세션의 결과도 입력·실행 범위·성공 증거가 같으면 재사용한다. 실패하거나 소스·설정·의존성·fixture 변경으로 무효화된 검사만 다시 실행한다. 다른 세션이 검사 중이면 같은 검사를 중복 실행하지 않는다.
-- 테스트 수와 실행 명령은 실제 결과에서 기록한다. 테스트 수집(`--list`), 대역 테스트, 브라우저 실행, 실기기 검증을 구분한다.
-- 화면 문제를 대역 테스트만으로 해결 확정하지 않는다. 합의된 대상 기기에서 확인하지 않았다면 실기기 미검증으로 보고한다.
-- 새 Android `versionCode`는 확인 가능한 기존 릴리즈·설치본보다 높게 정한다. 앱 설정, 생성된 Gradle 설정, APK 실제 버전, 파일명과 업데이트 JSON을 대조한다.
-- 제품 버전과 Paseo·Mixdog 기반 버전을 혼동하지 않는다. 새 태그 중복을 확인하고, 최신 여부는 목록 순서가 아닌 GitHub `releases/latest` 응답으로 검증한다.
+## D. PC apply and wrap-up
 
-## 서명과 배포 파일
-
-- 합의된 ABI별 APK를 제공하고, 업데이터가 ABI에 맞는 파일을 선택하는지 확인한다. 통합 APK는 필요한 구버전 호환 경로로만 취급한다.
-- APK별로 패키지 ID·버전·ABI, `zipalign`, `apksigner` 검증을 수행한다. 기존 설치본과 인증서가 일치하지 않으면 덮어쓰기 가능한 업데이트라고 말하지 않는다.
-- 기존 키를 찾지 못했다고 임의의 새 키로 서명하지 않는다. 비밀번호·개인키는 출력하거나 배포하지 않는다.
-- Android 서명키는 승인된 로컬 설정을 따르고, 빌드 전에 실제 키와 init script의 `signingConfigs.debug.storeFile` 일치를 확인한다. 해당 키가 없으면 빌드를 멈추고 보고한다. 개인 키 경로는 공개 규칙이나 릴리즈 노트에 기록하지 않는다.
-- 공개 디버그 키를 사용한 호환 빌드는 그 사실과 보안 한계를 명시한다. 정식 배포용 보안 서명으로 표현하지 않는다. 키 교체·이전은 별도 승인 대상이다.
-- 다운로드 크기는 실제 파일 바이트에서 얻는다. Linux 코드서명이 없으면 체크섬을 코드서명처럼 설명하지 않는다.
-- `scripts/package.py`는 `MANIFEST.sha256`에 열거된 경로만 포장한다. 새 필수 모듈·패치·실행 스크립트를 추가하면 허용 목록과 누락 회귀 테스트도 갱신한다.
-- ZIP의 필수 import 대상 존재, 소스 바이트·내부 체크섬·CRC를 검증한다. `node_modules`, 사용자 상태, 인증정보, `.local.` 파일, 임시 빌드 산출물을 포함하지 않는다.
-- 통합 ZIP의 대상 범위를 명시한다. 서버 통합 소스만 들어 있는 ZIP을 Android·PC 전체 재현 소스라고 부르지 않는다.
-- 업데이트 JSON의 버전·태그·URL·ABI·바이트·SHA-256을 실제 파일과 대조하고, `SHA256SUMS`도 검증한다.
-
-## Linux 데스크톱 앱 (앱 내 업데이트)
-
-- PC 앱은 `android/` 소스로 빌드한 `.deb`를 GitHub 릴리스로 배포하고, 설정 화면의 업데이트(electron-updater, `moveju112/paseodog`의 `releases/latest`)로 설치한다. 설치본에 패치를 덮어쓰는 `paseodog desktop-update --apply`는 이 방식으로 옮기기 전 설치본에만 쓰는 이전 경로다.
-- 빌드 순서는 `build:desktop`과 같다: `build:app-deps:clean` → `PASEO_WEB_PLATFORM=electron expo export --platform web` → `build:server:clean` → desktop `build:main` → `electron-builder --linux deb --publish never -c.extraMetadata.version=<버전>`. 빌드 scope 자원 제한은 Android와 같다.
-- 데스크톱 버전은 `<package.json version>.<Android versionCode>` 형식이다(예: `1.0.0-rc.7.11032`). 업데이터는 semver 크기만 비교하므로 배포할 때마다 versionCode가 커져야 하고, 같은 버전을 다시 쓰지 않는다.
-- 업데이터는 최신 릴리스 하나만 보기 때문에, Android와 PC를 함께 배포할 때는 한 릴리스에 APK·`paseodog-android-update.json`·`.deb`·`latest-linux.yml`·`SHA256SUMS`를 모두 올린다. Android만 배포하는 릴리스가 최신이 되면 PC 업데이트 확인에서 새 버전이 보이지 않는다.
-- `latest-linux.yml`의 `version`·`path`·`sha512`·`size`를 실제 `.deb`와 대조한다. 이 PC의 검증된 설치본 반영은 가능한 무권한 상승 경로로 바로 수행한다. 첫 설치 등에 `sudo dpkg -i`가 꼭 필요하면 권한 상승 대상·영향을 별도 승인받고, 그 뒤부터는 설정에서 업데이트한다.
-
-## 게시와 실행 환경 적용
-
-- 먼저 초안 릴리즈를 만들고 검증한 파일만 업로드한다. 원격 파일명 집합·바이트·SHA-256을 로컬과 비교한 뒤 공개하고 최신 릴리즈로 지정한다.
-- 공개 후에도 `releases/latest`의 태그와 자산 목록·해시를 확인한다. 실패 시 부분 성공을 숨기거나 검증되지 않은 파일로 바꿔 게시하지 않는다.
-- 커밋·푸시 요청에 따른 릴리즈는 승인된 최종 commit 집합으로 재현되는 입력을 사용한다. 릴리즈만 요청받아 자기 미커밋 변경을 포함했다면 기준 커밋만으로 재현되지 않음을 릴리즈 노트에 명시한다. 다른 세션의 미완료 변경은 포함하지 않으며 승인 없이 commit·branch push를 추가하지 않는다.
-- 서버 적용은 [RUNTIME_DAEMON](../RUNTIME_DAEMON.md)을 따른다. 전용 홈·서버 ID·실행 방식·플러그인 등록 경로를 먼저 확인하고, stock Paseo나 개인 프로필은 건드리지 않는다.
-- 승인된 서버 적용 후 서버 ID 유지, 필요한 경우 워커 PID 변경, 공급자 사용 가능, 플러그인 실행 경로·상태를 실제로 확인한다. 필요한 기능 검증 없이 `available`만으로 전체 수정 완료라고 말하지 않는다.
-- 현재 대화 연결을 끊는 재시작은 응답 전달 뒤 실행되게 예약할 수 있다. 단, 예약 등록과 재시작 완료를 구분하고 실행 결과를 별도로 확인한다.
-- 소스 수정, 플랫폼별 빌드 산출물, 게시, 설치본, 실행 중인 클라이언트·서버는 별개 상태다. APK·데스크톱 파일·web 번들 게시만으로 설치본이나 실행 호스트가 새 코드를 읽는다고 판단하지 않는다. 실제 설치·실행 버전과 호스트·세션을 식별하고 해당 기능 동작을 확인한다. 이 PC는 상시 승인 범위에서 즉시 반영하고, 활성 작업 때문에 보류했거나 범위 밖 대상의 적용 승인이 없으면 미적용·미검증으로 남긴다. 서버와 앱은 각각 구분한다.
-
-## 완료 보고
-
-다음을 짧게 구분해서 전달한다.
-
-- 실제 게시된 릴리즈 링크, 사용자 기기에 맞는 다운로드 링크와 크기.
-- 핵심 변경, 실행한 검사와 통과 결과.
-- 플랫폼별 소스 반영·빌드·게시·설치·실행 검증 상태, 서버 적용·재시작·리로드의 완료/예약/미진행 상태와 필요한 승인.
-- 미검증 실기기·E2E·OS, 서명 보안 한계, 재현성 제한.
-
-프로젝트·로컬 규칙의 명시된 상시 승인은 그 대상·작업 범위 안에서 다음 세션에도 적용한다. 일회성 승인, 키·임시 경로의 실재, 파일·프로세스·릴리즈 상태는 다시 확인하되 이미 성공한 검사를 이유 없이 반복하지 않는다.
+15. Install the same .deb on this PC with `sudo dpkg -i`, relaunch the app, and reload plugin / restart daemon as needed — [RUNTIME_DAEMON.md](../RUNTIME_DAEMON.md) "How to apply".
+16. Commit title in Korean: `<변경 요약> 및 <vc> 릴리즈`.
+17. Delete this task's temporary artifacts after publish/verification; keep the build log path in the result report.

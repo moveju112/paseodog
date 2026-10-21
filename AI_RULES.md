@@ -1,60 +1,46 @@
 # PaseoDog development rules
 
-PaseoDog joins Paseo (daemon, desktop/mobile/web/SSH clients) and Mixdog (inference, native
-sessions) through a Paseo provider plugin. Upstream features/fixes are taken one-way, occasionally, as pins or hash-gated patches.
+PaseoDog joins Paseo (daemon, desktop/mobile/web/SSH clients) and Mixdog (inference, native sessions) through a Paseo provider plugin. Upstream enters only via pinned versions and hash-gated patches.
 
 ## Core Rules
 
-- Preserve the integration boundary: Paseo owns clients/daemon, Mixdog owns inference and model history, the adapter owns lifecycle/authorization/journal/wire mapping. Take upstream fixes by pin or patch, never by copying code or editing `node_modules`, sibling checkouts (`~/project/mixdog*`) or personal profiles (`~/.paseo`, `~/.mixdog`) — [UPSTREAM_INTAKE](docs/ai-rules/UPSTREAM_INTAKE.md), [name map](docs/ai-rules/ARCHITECTURE.md).
-- Do not replace native model context with UI snapshots. Never replay an uncertain mutating request automatically or infer that interruption undoes side effects.
-- Default product sessions to ask mode; ask/review tools require explicit approval through the reviewed beforeSessionAsk patch. Only an explicitly selected session bypass mode skips asks. Preserve upstream deny/block and host restrictions in every mode; check rewritten calls and deny missing/stale approvals wherever approval is required. Development workflow authorization does not disable these runtime gates.
-- Never advertise provider capabilities that are unimplemented. Reject unsupported settings, attachments, ephemeral persistence and exact MCP preapproval. Steering must use the owned native pending-message path, preserve the active turn, persist admission before forwarding, and never automatically replay uncertain delivery. Image support must preserve native Mixdog content parts across the full transport; reject malformed/oversized inputs before accepting a turn, never silently drop them.
-- Do not seed personal custom agents or fixed agent models. Keep inherited routes blank, default built-in agents off, and preserve explicit user enable/model choices across configuration, refresh and restart.
-- For every UI/behavior change, map applicability across supported mobile, desktop and web clients, including Android and iOS; apply common changes to every applicable platform through shared source for equivalent semantics. Assess mobile when changing desktop and desktop when changing mobile; implement applicable changes without another prompt. State platform exception reasons. Source compatibility does not require building every platform: build/publish only the agreed targets — see [RELEASE](docs/ai-rules/tasks/RELEASE.md).
-- No automatic public listener, credential import, cost-incurring test, privilege escalation or global profile overwrite. Development and delivery authorization, including Git operations, is defined only in [RELEASE](docs/ai-rules/tasks/RELEASE.md); never turn it into a blanket tool-policy bypass.
-- Keep direct versions and upstream blob gate explicit. No hash-bypass option. Every accepted upstream version, backport or local patch is recorded in `docs/UPSTREAM.md`.
-- Follow the path-scoped checks and resource limits in [RELEASE](docs/ai-rules/tasks/RELEASE.md). Preserve shared-server responsiveness; do not target CPU saturation. Compile with the actual installed SDK and perform live acceptance separately; mocks cannot establish those results. Provider Ready or Desktop "up to date" does not prove a feature works: verify the actual connected host/session capability and distinguish transport tests from real model/UI acceptance. Production acceptance requires the checklist in docs/ACCEPTANCE.md on target hardware.
-- Update reports only from commands actually executed. Do not fabricate token savings, tests, account support, native binaries, Android builds or hosted CI success. Keep .local. reports, dependencies, credentials and user state out of release ZIPs.
-- For builds, signing, publication and server rollout, follow [RELEASE](docs/ai-rules/tasks/RELEASE.md). Source edits, built artifacts, GitHub publication, installed apps and running server code are separate states; never call one proof of another.
-- Run PaseoDog on the dedicated daemon (`paseodog` wrapper). Apply verified runtime changes to the local dedicated daemon and installed PaseoDog desktop app promptly, without asking again; defer operations that would interrupt active work — [RUNTIME_DAEMON](docs/ai-rules/RUNTIME_DAEMON.md).
-
-## Development workflow
-
-- A code-change request includes the necessary reversible local build, installation and safe reload/restart of this PC's dedicated PaseoDog daemon and desktop app. Do not routinely ask whether to commit or deploy; report results, blockers and deferred disruptive work.
-- A commit-and-push request includes release delivery for the same changes. An explicit narrower request takes precedence. Each concurrent session commits only its own changes; the final delivery owner verifies the combined result, pushes and releases once. Exact boundaries and handoff rules: [RELEASE](docs/ai-rules/tasks/RELEASE.md).
-- Read `config/rules.local.md` when present for machine-specific targets and paths. It is an untracked, Git-ignored supplement, never a release input. Keep personal device names, signing-key locations and machine-specific defaults there, not in shared rules. Local settings do not override runtime deny/block, protected profiles or destructive-action boundaries.
-- These rules govern this integration checkout. Within `android/`, follow its source conventions and subject docs, but use PaseoDog's delivery, daemon and authorization rules rather than upstream publication/profile defaults.
+- Build, deploy, release and PC apply (plugin reload, daemon restart, PC app install) proceed immediately; NEVER defer for other sessions or active turns. In Git, stage/commit only your own changes and preserve others' — [RUNTIME_DAEMON](docs/ai-rules/RUNTIME_DAEMON.md).
+- A code-change request includes, after verification, applying to this PC's dedicated daemon and installed PC app. "커밋·푸시" includes the full release; "릴리즈" does not imply commit/push — [RELEASE](docs/ai-rules/tasks/RELEASE.md).
+- Modify upstream code only via version + blob-hash gated `scripts/patch-*.mjs` + `patches/*.mjs`. NEVER edit `node_modules`, `~/.paseo`, `~/.mixdog` or sibling checkouts directly; NEVER add a hash bypass.
+- Change Paseo UI in shared app source (`android/packages/app/src`) AND the web-bundle patch with the same meaning; decide Android/iOS/desktop/web applicability every time — [CODING_RULES](docs/ai-rules/CODING_RULES.md).
+- Sessions default to ask mode. Keep upstream deny/block in every mode, NEVER auto-resend uncertain mutating requests, NEVER advertise unimplemented capabilities.
+- Target only the dedicated daemon (`paseodog` wrapper, dedicated `PASEO_HOME`). Stock Paseo/personal profiles, phone install, remote servers, signing-key replacement and billable tests need separate approval.
+- Report only results of commands actually run. Source, build, published release, installed app and running daemon are distinct states; none proves another.
+- Read `config/rules.local.md` (Git-ignored) when present. Machine-specific values (default build targets, signing-key location) live only there; NEVER put them in commits, release ZIP or notes.
 
 ## Run commands
 
 ```bash
-npm run check && npm test          # from the PaseoDog root, every change
-npm run typecheck                  # plugin/*.ts(x), Paseo SDK
-npm run upstream:check             # pinned vs npm latest (read-only)
+npm run check && npm test          # 루트, 모든 변경
+npm run typecheck                  # plugin/ TS 변경
+npm run upstream:check             # 고정 버전 vs npm 최신 (읽기 전용)
 node scripts/patch-mixdog.mjs --check && npm run test:native
-paseodog doctor                    # install only, no inference
+paseodog doctor                    # 설치 점검, 추론 없음
 paseodog plugin reload paseodog-provider && paseodog provider ls
-paseodog live-test --confirm-api-use   # billable, operator approval only
-npm run package                    # release ZIP
+(cd android && npm run build:desktop)  # Linux .deb
+npm run package                    # 소스 ZIP
 ```
 
 ## Routing
 
 | Trigger (situation/task) | File |
 |---|---|
-| locating code, ownership questions, which file holds a version | [docs/ai-rules/ARCHITECTURE.md](docs/ai-rules/ARCHITECTURE.md) |
-| writing or reviewing code in `plugin/`, `engine/src/`, `scripts/patch-*`, `tests/` | [docs/ai-rules/CODING_RULES.md](docs/ai-rules/CODING_RULES.md) |
-| an error message, provider unavailable, hash drift, failing version test | [docs/ai-rules/PITFALLS.md](docs/ai-rules/PITFALLS.md) |
-| choosing/starting a daemon, ports, desktop app, plugin reload, systemd | [docs/ai-rules/RUNTIME_DAEMON.md](docs/ai-rules/RUNTIME_DAEMON.md) |
-| building/signing installers, publishing a release, updating an installed app or applying server changes | [docs/ai-rules/tasks/RELEASE.md](docs/ai-rules/tasks/RELEASE.md) |
-| asking which Paseo/Mixdog version or fix is already accepted | [docs/ai-rules/UPSTREAM_INTAKE.md](docs/ai-rules/UPSTREAM_INTAKE.md) |
-| merging an upstream release, backporting one fix/feature, or patching upstream code locally | [docs/ai-rules/tasks/MERGE_UPSTREAM.md](docs/ai-rules/tasks/MERGE_UPSTREAM.md) |
+| finding code location, ownership boundaries, which file holds a version | [docs/ai-rules/ARCHITECTURE.md](docs/ai-rules/ARCHITECTURE.md) |
+| writing/reviewing code in `plugin/`, `engine/src/`, `scripts/`, `patches/`, `tests/`, `android/` | [docs/ai-rules/CODING_RULES.md](docs/ai-rules/CODING_RULES.md) |
+| error message, provider unavailable, hash drift, version/package test failure | [docs/ai-rules/PITFALLS.md](docs/ai-rules/PITFALLS.md) |
+| choosing/restarting a daemon, plugin reload, PC app install/apply | [docs/ai-rules/RUNTIME_DAEMON.md](docs/ai-rules/RUNTIME_DAEMON.md) |
+| building APK/.deb, signing, bumping versionCode, publishing a GitHub release | [docs/ai-rules/tasks/RELEASE.md](docs/ai-rules/tasks/RELEASE.md) |
 
 ## File Layout
 
-- Tests: `tests/*.test.mjs` (`node --test`), fixtures `tests/fixtures/`, live/native smokes `tests/*-smoke.mjs`.
+- Tests: `tests/*.test.mjs` (`node --test`), pinned originals `tests/fixtures/`, device/billable smokes `tests/*-smoke.mjs`.
 - Scripts: `scripts/`; upstream patches `scripts/patch-*.mjs` + `patches/`.
-- Docs: UPPERCASE .md under `docs/` = project ops/architecture/upstream records, written by the agent in the same change as the code; UPPERCASE .md under `docs/ai-rules/` = agent rules; `docs/ai-rules/tasks/` = playbooks.
-- Reports: `reports/`; `*.local.*` files are never shipped.
+- Docs: UPPERCASE.md under `docs/ai-rules/` = AI rules; `docs/ai-rules/tasks/` = playbooks. Analysis/reference docs are lowercase.md.
+- Reports: `reports/`; `*.local.*` never ships. Temporary output goes in a unique dir under `/data/tmp/ubuntu`.
 
 <!-- generated by rule-architect -->

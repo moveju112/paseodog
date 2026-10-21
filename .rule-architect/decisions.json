@@ -2,7 +2,7 @@
   "schema": "rule-architect/decisions@1",
   "root": "/home/ubuntu/project/paseodog",
   "scanSchema": "rule-architect/scan@3",
-  "gitHead": "170fe0c0b563248fc0dac2e36bb3f2aaa051bbf4",
+  "gitHead": "22565d09b9b3bd8ab9aac930eddc83efd90c0b34",
   "truncated": {
     "bytes": false,
     "commits": false,
@@ -11,33 +11,43 @@
   "decisions": [
     {
       "id": "controller",
-      "observed": "not_met",
+      "observed": "met",
       "condition": "dedicated controller/handler layer directory exists",
-      "evidence": [],
+      "evidence": [
+        "android/packages/app/src/i18n/resources"
+      ],
       "defaultDoc": "CONTROLLER_RULES.md",
       "selectedDoc": null,
-      "resolution": null,
-      "reason": null
+      "resolution": "not_met",
+      "reason": "scan matched android/packages/app/src/i18n/resources, a translation-resource directory inside the vendored Paseo monorepo; PaseoDog has no controller/handler layer of its own (plugin/server is a provider adapter covered by CODING_RULES.md)."
     },
     {
       "id": "api",
-      "observed": "not_met",
+      "observed": "met",
       "condition": "api/routes source layer or explicit /api or /vN routes exist",
-      "evidence": [],
+      "evidence": [
+        "android/packages/website/src/routes"
+      ],
       "defaultDoc": "API_RULES.md",
       "selectedDoc": null,
-      "resolution": null,
-      "reason": null
+      "resolution": "not_met",
+      "reason": "only android/packages/website/src/routes matched: the upstream Paseo marketing website, never modified by PaseoDog (no PaseoDog commit touches android/packages/website). The provider wire contract lives in plugin/server/connection.mjs CAPABILITIES and is covered by CODING_RULES.md."
     },
     {
       "id": "enum-codes",
-      "observed": "not_met",
+      "observed": "met",
       "condition": ">=3 files define enum/status-code value sets",
-      "evidence": [],
+      "evidence": [
+        "android/packages/app/e2e/browser/diff-performance-baseline.ts",
+        "android/packages/app/e2e/browser/provider-removal.spec.ts",
+        "android/packages/app/e2e/support/helpers/command-center-file-search.ts",
+        "android/packages/app/e2e/support/helpers/settings.ts",
+        "android/packages/app/e2e/support/helpers/sidebar-nav-settings.ts"
+      ],
       "defaultDoc": "ENUM_CODES.md",
       "selectedDoc": null,
-      "resolution": null,
-      "reason": null
+      "resolution": "not_met",
+      "reason": "all matches are upstream e2e helpers under android/packages/app/e2e; PaseoDog's own status values (ask/review/bypass, receipt states) are few and covered inline in CODING_RULES.md."
     },
     {
       "id": "response-keys",
@@ -51,38 +61,49 @@
     },
     {
       "id": "database",
-      "observed": "not_met",
+      "observed": "met",
       "condition": "ORM, SQL access layer, or migrations exist",
-      "evidence": [],
+      "evidence": [
+        "android/packages/app/src/agent-profiles/migration",
+        "android/packages/server/src/server/migrations"
+      ],
       "defaultDoc": "DB_RULES.md",
       "selectedDoc": null,
-      "resolution": null,
-      "reason": null
+      "resolution": "not_met",
+      "reason": "matches are upstream Paseo migrations (android/packages/server/src/server/migrations, agent-profiles/migration) last touched only by the bulk Android import commit 02dc12a; PaseoDog persists state through its JSON journal (plugin/server/journal.mjs), documented in ARCHITECTURE/PITFALLS."
     },
     {
       "id": "deploy",
-      "observed": "not_met",
+      "observed": "met",
       "condition": "deploy scripts, deployment workflows, unit files, or container files exist",
-      "evidence": [],
+      "evidence": [
+        "android/docker/base/Dockerfile"
+      ],
       "defaultDoc": "DEPLOY.md",
       "selectedDoc": "docs/ai-rules/RUNTIME_DAEMON.md",
       "resolution": "met",
-      "reason": "scan finds no deploy workflow/unit file in the tree, but scripts/service.mjs:10 generates a systemd user unit, scripts/install.sh:44-56 registers the plugin and starts the dedicated daemon, and scripts/desktop-release.mjs applies desktop updates; the user explicitly asked which daemon to use. Renamed to RUNTIME_DAEMON.md because the doc covers daemon homes/ports/plugin reload, not a release pipeline."
+      "reason": "the scanned Dockerfile is upstream and unused, but PaseoDog's real deployment is the dedicated daemon (scripts/service.mjs, bin/paseodog.mjs) plus local .deb install of the PC app; renamed RUNTIME_DAEMON.md because it covers daemon choice, plugin reload and PC apply, while the release pipeline is the recurring-task playbook."
     },
     {
       "id": "recurring-task",
-      "observed": "not_met",
+      "observed": "met",
       "condition": "a file set changed together >=3 times",
-      "evidence": [],
+      "evidence": [
+        "CHANGELOG.md + MANIFEST.sha256",
+        "CHANGELOG.md + android/packages/app/app.config.js",
+        "CHANGELOG.md + android/packages/app/src/usage/donut.tsx",
+        "CHANGELOG.md + patches/paseo-usage-donut.mjs",
+        "CHANGELOG.md + tests/usage-donut.test.mjs"
+      ],
       "defaultDoc": "tasks/ADD_<TASK>.md",
-      "selectedDoc": "docs/ai-rules/tasks/MERGE_UPSTREAM.md",
+      "selectedDoc": "docs/ai-rules/tasks/RELEASE.md",
       "resolution": "met",
-      "reason": "git co-change history is only 13 commits, but the user stated that Paseo and Mixdog bug fixes will keep being merged; docs/UPSTREAM.md already records selected Paseo backports and pinned blobs, so upstream intake is a declared recurring task."
+      "reason": "co-change groups CHANGELOG.md + MANIFEST.sha256 + android/packages/app/app.config.js recur in every '... 및 <vc> 릴리즈' commit (22565d0, 0b8c437, 31b85a0, 69fdd02): the recurring task is a release (versionCode bump, APK/.deb build, GitHub publish). The UI source+patch+test coupling in the same groups is recorded as a CODING_RULES.md rule instead of a second playbook."
     }
   ],
-  "sourceFingerprint": "1c4430943e054208984a943cb912ecc1cd97200abeb493d864037d24f524459f",
+  "sourceFingerprint": "f8fdff7c0fb6a158ad7650989ae1aa89c7855d13267af61776c820f4eeb23eb1",
   "scanLimits": {
-    "maxBytes": 2000000000,
+    "maxBytes": 209715200,
     "maxCommits": 500,
     "maxFiles": 20000
   },
@@ -92,6 +113,35 @@
       "CLAUDE.md",
       "AGENTS.md"
     ],
-    "excludedDirs": []
+    "excludedDirs": [
+      "android/node_modules",
+      "android/packages/app/.expo",
+      "android/packages/app/android",
+      "android/packages/app/dist",
+      "android/packages/app/modules/paseo-diff-prototype/android/.cxx",
+      "android/packages/app/modules/paseo-diff-prototype/android/build",
+      "android/packages/app/modules/paseo-native-trace/android/build",
+      "android/packages/app/modules/paseo-scroll/android/build",
+      "android/packages/app/modules/paseodog-updater/android/build",
+      "android/packages/cli/dist",
+      "android/packages/client/.cache",
+      "android/packages/client/.cache/paseodog-build",
+      "android/packages/client/dist",
+      "android/packages/desktop/build",
+      "android/packages/desktop/dist",
+      "android/packages/desktop/release",
+      "android/packages/expo-two-way-audio/android/build",
+      "android/packages/expo-two-way-audio/build",
+      "android/packages/highlight/dist",
+      "android/packages/plugin/dist",
+      "android/packages/protocol/.cache",
+      "android/packages/protocol/.cache/paseodog-build",
+      "android/packages/protocol/dist",
+      "android/packages/relay/.cache",
+      "android/packages/relay/.cache/paseodog-build",
+      "android/packages/relay/dist",
+      "android/packages/server/dist",
+      "scripts/__pycache__"
+    ]
   }
 }

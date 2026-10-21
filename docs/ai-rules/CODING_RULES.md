@@ -1,71 +1,70 @@
-# Coding Rules
+# Coding rules
 
-Layout and ownership: [ARCHITECTURE.md](ARCHITECTURE.md). Upstream patches: [UPSTREAM_INTAKE.md](UPSTREAM_INTAKE.md).
+Scope: `plugin/`, `engine/src/`, `scripts/`, `patches/`, `tests/`. Inside `android/` follow that tree's TS/oxfmt/oxlint conventions, but still add Korean flow comments to files PaseoDog adds.
 
 ## Style
 
-- **MUST** write a short Korean flow comment above every new function in adapter/runtime scripts; identifiers stay English camelCase, 4-space indent, ESM .mjs files. In `android/`, preserve that source tree's language, TypeScript and formatter conventions instead of reformatting upstream-style code to adapter style.
-  - why: existing scripts/tests document intent this way; an English-only or comment-less function stands out in review.
-  - ✅ `evidence: scripts/check-upstream.mjs` — `// 고정 버전·lockfile·패치 대상의 일치를 검사한 뒤 최신 배포와 비교한다.`
-  - ✅ `evidence: scripts/patch-paseo-terminal.mjs` — `// 전체 원본 해시 확인 -> 뷰포트·스크롤백의 연속 셀만 보존.`
+- **MUST** write root code as ESM .mjs, 4-space indent, English camelCase identifiers, and a one-line Korean flow comment above each new function.
+  - why: the whole repo uses this shape; review checks intent via the comment.
+  - ✅ `evidence: scripts/patch-paseo-composer.mjs:43` — `// 기존 첨부파일·대기열 저장 및 배출 로직을 유지하면서 ...`
+- **MUST** run CLI scripts directly only behind the `process.argv[1] === fileURLToPath(import.meta.url)` guard; end failures by printing `error.message` + `process.exitCode = 1`.
+  - why: tests import the same module and check it per function.
+  - ✅ `evidence: scripts/check-upstream.mjs:46`
+- **NEVER** import anything beyond `node:` built-ins and local modules in `plugin/server/*.mjs`. Use the Paseo SDK only in `plugin/server/provider.ts` / `plugin/index.server.ts`.
+  - why: the engine child process imports the same files directly.
+  - ✅ `evidence: plugin/server/provider.ts:8` — `import { VERSION } from './util.mjs';`
 
-- **MUST** keep `plugin/server/*.mjs` dependency-light: only `node:` built-ins and local modules; the Paseo SDK is imported only from `provider.ts` / `index.server.ts`.
-  - why: lifecycle/transport tests run without installed SDK or live credentials.
-  - ✅ `evidence: plugin/server/journal.mjs` (node built-ins + local `plugin/server/util.mjs` only); SDK import at `evidence: plugin/server/provider.ts`.
+## Upstream patches
 
-## Capability and input contract
+- **MUST** modify upstream files only via `scripts/patch-*.mjs` + `patches/*.mjs`: verify the exact base version and original git blob hash before writing, leave already-patched bytes unchanged, and make `--check` fail without writing.
+  - why: never silently overwrite upstream changes; catch drift at install time.
+  - ❌ editing `node_modules`, `~/.paseo`, `~/.mixdog` or sibling checkouts directly; changing only the hash to pass.
+  - ✅ `evidence: scripts/patch-paseo-usage.mjs:9` — `if (manifest.version !== '0.11.4') throw ...`, `evidence: scripts/patch-paseo-usage.mjs:23` blob constant.
+- **NEVER** add a hash-bypass option or a "continue on mismatch" branch.
+  - why: a patch is only meaningful against the reviewed original.
+  - ✅ drift throws `throw new Error('... hash mismatch' | 'anchor mismatch' | 'Partial ... patch')`. `evidence: patches/paseo-usage-donut.mjs:168`
+- **MUST** wire a web-bundle UI patch into BOTH the unwrap order and the apply order of `scripts/patch-paseo-composer.mjs`.
+  - why: the composer patch checks one whole-bundle hash: it strips every patch to the original, checks, then reapplies in reverse.
+  - ✅ `evidence: scripts/patch-paseo-composer.mjs:45` (unwrap) · `evidence: scripts/patch-paseo-composer.mjs:47` (apply)
+- **MUST** on an upstream base-version change, update in ONE change: `engine`/`tools`/`plugin` pins and lockfiles, `PIN`, `paseodogUpstream`, `release.json`, and each patch's version/blob/fixture. One change carries only Paseo or only Mixdog.
+  - why: `npm run upstream:check` and `tests/version.test.mjs` fail partial updates.
+  - ✅ `evidence: scripts/check-upstream.mjs:39` — `Mixdog patch pin mismatch`
 
-- **NEVER** add a capability to `CAPABILITIES` before it is implemented end to end; unsupported input throws.
-  - why: Paseo enables UI from the advertised list; a fake capability produces turns that silently do nothing.
-  - ✅ `evidence: plugin/server/connection.mjs` (`CAPABILITIES`), and its router's `default: throw new Error(\`Unsupported provider input: ...\`)`.
+## UI/behavior changes
 
-- **MUST** validate and reject malformed or oversized input before accepting a turn; never drop parts silently.
-  - why: an accepted turn is fsynced as a receipt; dropping content after that point is unrecoverable.
-  - ✅ `evidence: plugin/server/util.mjs` — empty or >512 KiB prompt throws.
+- **MUST** change Paseo UI in shared app source (`android/packages/app/src/...`) AND the web-bundle patch (`patches/paseo-<기능>.mjs`) with the same meaning, and check both sides match with a root test.
+  - why: APK/.deb ship from source, the pinned web bundle ships via the patch; changing one side makes platforms diverge.
+  - ✅ `evidence: tests/usage-donut.test.mjs:34` — runs `donut-model.ts` with types stripped and compares it to the patch output.
+- **MUST** for every UI/behavior change, decide Android/iOS/desktop/web applicability and apply common semantics to every applicable platform through shared source. Report platform-exception reasons.
+  - why: one shared source builds into several clients.
+  - ✅ `evidence: android/packages/app/plugins/with-android-architectures.js:7` — platform-only differences are isolated in branches/plugins.
 
-- **NEVER** auto-replay an uncertain mutating request or claim an interrupt undid side effects.
-  - why: a tool may have run before its ack was lost; replay can apply it twice.
-  - ✅ `evidence: plugin/server/connection.mjs` — journal failure reports "execution outcome is uncertain".
+## Runtime safety
 
-## Approval policy
+- **NEVER** change the default session mode away from `ask`, or ignore upstream deny/block in any mode. `bypass` skips asks only when explicitly selected.
+  - why: development-work approval and the product's runtime approval gate are separate.
+  - ✅ `evidence: engine/src/policy.mjs:22` — `mode = 'ask'`
+- **NEVER** auto-resend an uncertain mutating request. Persist the receipt before inference; leave interrupted turns as `uncertain`.
+  - why: interruption does not undo side effects.
+  - ✅ `evidence: plugin/server/connection.mjs:246` — marks a running receipt `uncertain`.
+- **NEVER** advertise an unimplemented provider capability in `CAPABILITIES`. Reject unsupported inputs/settings before accepting a turn.
+  - why: clients trust advertised capabilities and open UI for them.
+  - ✅ `evidence: plugin/server/connection.mjs:9`
+- **NEVER** seed personal custom agents or fixed agent models as defaults. Preserve the user's explicit choices across config refresh and restart.
+  - why: the release would force one user's environment on everyone.
+  - ✅ built-in agents default off; inherited routes stay blank.
 
-- **MUST** default sessions to `ask`; only an explicitly selected session `bypass` skips asks, and upstream deny/block stays deny in every mode.
-  - why: the host policy is the only gate between the model and shell/file tools.
-  - ✅ `evidence: engine/src/policy.mjs` — `attachHostPolicy(session, { mode = 'ask', ... })`; modes validated right below it.
-  - Development standing authorization in [tasks/RELEASE.md](tasks/RELEASE.md) controls task scope, not the runtime tool permission implementation. Never remove asks/denials from the product to avoid development approval prompts.
+## Release source list
 
-- **NEVER** seed personal custom agents, fixed agent models, or default-on built-in agents; keep user enable/model choices across configure, refresh and restart.
-  - why: settings are user state; configure/refresh must not replace explicit choices with boot defaults.
-  - ✅ `evidence: tests/configure.test.mjs` — "agent defaults contain no seeded routes or custom definitions and preserve enabled choices".
+- **MUST** add each new required file to `MANIFEST.sha256`; files under `android/` also go into `scripts/package.py` `ROOT_FILES`.
+  - why: `package.py` packs only manifest paths, and `android` is not in `ROOT_FOLDERS`.
+  - ✅ `evidence: scripts/package.py:16` — `ROOT_FILES.add("android/packages/server/src/server/conversation-titles.ts")`
 
-## Upstream patch scripts
+## Checks
 
-- **MUST** make each `scripts/patch-*.mjs` check the upstream package version and the exact original hash/blob before any write, accept already-patched bytes unchanged, and support a `--check` mode; state its origin (upstream PR or local) in the header comment.
-  - why: install re-runs every patch, so it must be idempotent, fail closed on drift, and be traceable in the intake ledger.
-  - ✅ `evidence: scripts/patch-paseo-terminal.mjs` — header names PR #6452; `patchTerminalSource()`: original hash -> patch, patched -> unchanged, else "source drift"; `patchInstalledTerminal()` refuses a different `SERVER_VERSION`.
-
-- **NEVER** hand-edit files under `tools/node_modules/`, `engine/node_modules/`, `plugin/node_modules/` or the installed desktop app bundle, even when the running process executes them.
-  - why: `npm ci` or the next desktop update restores the originals, the next patch run reports source drift, and the change never passes the hash review.
-  - ✅ ship the change as a gated patch wired into install (`evidence: tools/package.json`).
-
-- **NEVER** search heuristically for a different anchor when the original hash does not match.
-  - why: a moved anchor means unreviewed upstream code; see `evidence: docs/ARCHITECTURE.md` § "Native integration".
-  - ✅ `evidence: scripts/patch-paseo-terminal.mjs` — `patchTerminalSource()` throws "source drift" instead.
-
-## Tests and checks
-
-- **MUST** use the path-scoped checks in [tasks/RELEASE.md](tasks/RELEASE.md): root `npm run check` and `npm test` for every change, root `npm run typecheck` for plugin TS, plus affected package checks for `android/` code. Reuse still-valid observed results; do not run the Android monorepo full suite automatically.
-  - why: `check` is syntax/JSON only; `test` is behavior; neither compiles the TS SDK boundary.
-  - ✅ `evidence: package.json` scripts `test`, `check`, `typecheck`.
-
-- **NEVER** report a mock/fixture test as live, model, Android or desktop acceptance.
-  - why: tests use a fake engine; only `test:live`/`docs/ACCEPTANCE.md` on target hardware prove those.
-  - ✅ `evidence: docs/DEVELOPMENT.md` § "What each test proves" — integration "the LLM is still a fixture".
-
-- **MUST** preserve shared-server responsiveness during tests and builds; do not maximize worker counts or target CPU saturation. Never skip required checks for speed.
-  - why: task-worker limits do not necessarily constrain subprocesses or whole-process-tree CPU usage.
-  - Build resource limits, cache reuse and log retention: [tasks/RELEASE.md](tasks/RELEASE.md).
-
-- **NEVER** put costed or credentialed calls in default tests; real model calls require `--confirm-api-use`.
-  - why: accidental billing and credential exposure.
-  - ✅ `evidence: docs/DEVELOPMENT.md` § "Live smoke" — `node scripts/live-smoke.mjs --confirm-api-use`.
+- **MUST** run `npm run check && npm test` at the root after every change, plus `npm run typecheck` for plugin TS changes. For `android/` changes add only that package's typecheck, `npm run lint -- <변경 경로>` in `android/`, and related Vitest.
+  - why: root `npm test` runs only `tests/*.test.mjs`, not the `android/` monorepo tests.
+  - ✅ `evidence: package.json:12` — `"test": "node --test tests/*.test.mjs"`
+- **MUST** write tests with `node:test` + `node:assert/strict`; keep pinned upstream originals in `tests/fixtures/`. NEVER run billable smokes (`*-smoke.mjs`, `paseodog live-test --confirm-api-use`) without user approval.
+  - why: root tests must be free and deterministic to run in CI.
+  - ✅ `evidence: tests/version.test.mjs:1`
