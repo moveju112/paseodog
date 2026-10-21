@@ -4,7 +4,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EFFORT_USAGE_PATCHES } from '../patches/effort-usage.mjs';
 import { DEFAULT_OUTPUT_STYLE_PATCHES } from '../patches/default-output-style.mjs';
-export const PIN = '1.2.6';
+export const PIN = '1.3.1';
 export const ORIGINAL_BLOB = '6de5147ccdce6c9b3aa5f48dc740af439834b7b1';
 export const ANCHOR = '      const turnContext = await dispatchPromptSubmit(turn, session0, prompt, options);';
 export const ADDITION = '\n      // PaseoDog host-policy boundary v1 (local Apache-2.0 modification).\n      if (typeof options.beforeSessionAsk === \'function\') {\n        await options.beforeSessionAsk(session0);\n      }';
@@ -24,7 +24,7 @@ export const AGENT_PATCHES = [
     {
         // local: 같은 모델의 컨텍스트 변경도 네이티브 세션·영속 기록에 즉시 반영한다.
         file: 'src/session-runtime/model-route/set-route.mjs',
-        blob: 'a36ce4b5bfec0a62715fa70c6e8deed6126537ca',
+        blob: '5120d6ab5f338d9f8f1fcc94f654fe0d6a6971fb',
         edits: [[
             '      persist.applySessionTuning();\n      return getRoute();',
             '      persist.applySessionTuning();\n      // 컨텍스트 선택도 기존 네이티브 경로 갱신·저장 함수를 사용한다.\n      if (session && (route.contextPercent !== session.contextPercent\n        || (route.contextTokens || null) !== (session.contextTokens || null)\n        || route.selectedContextWindow !== session.selectedContextWindow)) {\n        updateSessionInPlace(deps, session);\n      }\n      return getRoute();',
@@ -81,7 +81,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/runtime-core/workflow/context.mjs',
-        blob: '7dedb1f4c6be474317aaae5421dce240090597ba',
+        blob: '032015d764d4e519adae99861805f3204adeda02',
         edits: [[
             "    if (!pack) return '';",
             "    if (!pack || pack.id === 'none' || !String(pack.body || '').trim()) return '';",
@@ -89,8 +89,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/workflow-agents-api/workflow-packs.mjs',
-        blob: '4e729773be14a7d4f1573f24feb1db591a035ab7',
-        previousEditCounts: [1, 2],
+        blob: '6989100f04ec9f52726b6f0d5e3e54cbf804e785',
         edits: [[
             "    const body = String(payload.body || '').trim();\n    if (!body) throw new Error('WORKFLOW.md body must not be empty');",
             "    if (id === 'none') throw new Error('none is reserved for disabled workflow instructions');\n    const body = String(payload.body || '').trim();",
@@ -98,8 +97,8 @@ export const AGENT_PATCHES = [
             '    return getWorkflowPack(id);',
             "    // 활성 워크플로우를 비우면 파일을 읽지 않는 사용 안 함 상태로 전환한다.\n    if (!body && activeWorkflowId(getConfig()) === id) saveActiveWorkflow('none');\n    return getWorkflowPack(id);",
         ], [
-            '  async function setWorkflow(workflowId) {',
-            '  async function setWorkflow(workflowId, { persist = true } = {}) {',
+            '  async function setWorkflow(workflowId, options = {}) {',
+            '  async function setWorkflow(workflowId, options = {}) {\n    // 호스트의 턴 전 갱신은 설정 파일을 다시 쓰지 않는다.\n    const persist = options?.persist !== false;',
         ], [
             '    saveActiveWorkflow(id);\n    const applied = await deps.refreshEmptySessionToolPolicy?.();',
             "    if (persist) saveActiveWorkflow(id);\n    else getConfig().workflow = { ...(getConfig().workflow || {}), active: id };\n    const applied = await deps.refreshEmptySessionToolPolicy?.({ workflowOnly: true });",
@@ -107,13 +106,8 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/tool-policy-refresh.mjs',
-        blob: 'e11dc6ab42170cfb840d07d6a6eb4720b8c57c09',
-        previousEditCount: 6,
+        blob: '0e716329b756f5ab4d812a961ab3be0735e8368f',
         edits: [
-            [
-                "  const env = session.bp3EnvironmentContext || '';",
-                "  session.bp3CoreContext = nextCore || '';\n  const env = session.bp3EnvironmentContext || '';",
-            ],
             [
                 '  function admitsRefresh(session) {',
                 '  function admitsRefresh(session, workflowOnly = false) {',
@@ -121,6 +115,14 @@ export const AGENT_PATCHES = [
             [
                 '      !sessionHasConversationMessages(session) &&\n      !sessionHasConversationMessages({ messages: session.liveTurnMessages })',
                 '      (workflowOnly || (!sessionHasConversationMessages(session) &&\n      !sessionHasConversationMessages({ messages: session.liveTurnMessages })))',
+            ],
+            [
+                '  async function stagePolicy(session, identity, config, { conversation = false } = {}) {',
+                '  async function stagePolicy(session, identity, config, { conversation = false, workflowOnly = false } = {}) {',
+            ],
+            [
+                "    const coreMemoryContext = conversation ? '' : await leadCoreMemoryContext();",
+                "    // 워크플로 갱신은 메모리 읽기 실패를 전파해 기존 기억을 지우지 않는다.\n    const coreMemoryContext = conversation ? '' : workflowOnly ? await loadCoreMemoryContext() : await leadCoreMemoryContext();",
             ],
             [
                 '  async function refreshEmptySessionToolPolicy() {',
@@ -131,25 +133,17 @@ export const AGENT_PATCHES = [
                 '    if (!admitsRefresh(session, workflowOnly)) return { appliedToCurrentSession: false, reason: \'turn-in-flight\' };\n    // Older records',
             ],
             [
-                '    // Apply: re-check admission after the await, then mutate synchronously.',
-                "    // Preserve schemas and the entire conversation when only workflow instructions change.\n    if (workflowOnly) {\n      if (!admitsRefresh(session, true)) return { appliedToCurrentSession: false, reason: 'turn-in-flight' };\n      const core = session.messages?.find((m) => m?.role === 'system' &&\n        (m.cacheTier === 'tier3' || (typeof m.content === 'string' && m.content.startsWith('# Active Workflow:'))));\n      if (!core) return { appliedToCurrentSession: false, reason: 'missing-workflow-context' };\n      const previousCore = session.bp3CoreContext;\n      rewriteBp3Core(session, sessionMarkerCore);\n      session.workflow = toSessionWorkflowMeta(workflow);\n      session.orchestrationMode = orchestrationMode;\n      if (previousCore !== session.bp3CoreContext) {\n        session.providerState = undefined;\n        delete session._providerPrefixGuardState;\n      }\n      session.updatedAt = Date.now();\n      return { appliedToCurrentSession: true };\n    }\n    // Apply: re-check admission after the await, then mutate synchronously.",
-            ],
-            [
-                '    const coreMemoryContext = await leadCoreMemoryContext();',
-                '    const coreMemoryContext = workflowOnly ? await loadCoreMemoryContext() : await leadCoreMemoryContext();',
+                '    const staged = await stagePolicy(session, identity, getConfig());\n    // Apply: re-check admission after the await, then mutate synchronously.',
+                "    const staged = await stagePolicy(session, identity, getConfig(), { workflowOnly });\n    // Preserve schemas and the entire conversation when only workflow instructions change.\n    if (workflowOnly) {\n      if (!admitsRefresh(session, true)) return { appliedToCurrentSession: false, reason: 'turn-in-flight' };\n      if (!bp3Message(session)) return { appliedToCurrentSession: false, reason: 'missing-workflow-context' };\n      session.workflow = toSessionWorkflowMeta(staged.workflow);\n      session.orchestrationMode = staged.orchestrationMode;\n      session.updatedAt = Date.now();\n      if (staged.core !== presentedBp3Core(session)) {\n        rewriteBp3Core(session, staged.core);\n        markToolSurfaceMigrated(session, 'workflow_switch');\n      }\n      return { appliedToCurrentSession: true };\n    }\n    // Apply: re-check admission after the await, then mutate synchronously.",
             ],
         ],
     },
     {
         file: 'src/session-runtime/boot/providers.mjs',
-        blob: '34fc9fec9d09ac3b21d9a88b8e5468f3927992f3',
-        previousEdits: [[
-            '    getRoute: () => rt.route,\n    cfgMod,\n    sharedCfgMod,',
-            '    getRoute: () => rt.route,\n    cfgMod: boot.params.initialConfig ? { ...cfgMod, loadConfig: () => boot.params.initialConfig } : cfgMod,\n    sharedCfgMod,',
-        ]],
+        blob: 'e1aafa3afa5c110637a11acf561c2b9c07a23df6',
         edits: [[
-            '    getRoute: () => rt.route,\n    cfgMod,\n    sharedCfgMod,',
-            '    getRoute: () => rt.route,\n    // 최신 사용자 설정을 읽되 호스트가 지정한 MCP·업데이트 제한만 유지한다.\n    cfgMod: boot.params.initialConfig ? { ...cfgMod, loadConfig: (...args) => { const latest = cfgMod.loadConfig(...args); return { ...latest, mcpServers: boot.params.initialConfig.mcpServers, update: { ...latest.update, auto: false } }; } } : cfgMod,\n    sharedCfgMod,',
+            '    resolveRoute,\n    cfgMod,\n    sharedCfgMod,',
+            '    resolveRoute,\n    // 최신 사용자 설정을 읽되 호스트가 지정한 MCP·업데이트 제한만 유지한다.\n    cfgMod: boot.params.initialConfig ? { ...cfgMod, loadConfig: (...args) => { const latest = cfgMod.loadConfig(...args); return { ...latest, mcpServers: boot.params.initialConfig.mcpServers, update: { ...latest.update, auto: false } }; } } : cfgMod,\n    sharedCfgMod,',
         ]],
     },
     {
@@ -165,11 +159,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/turn/turn-run/ask-callbacks.mjs',
-        blob: '05b64099a27c0aae0e86be27ee493407661e3361',
-        previousEdits: [[
-            '      beforeToolExecution: () => turn.snapshot.promise || Promise.resolve(),',
-            '      hostManagedCompletions: options.hostManagedCompletions === true,\n      beforeToolExecution: () => turn.snapshot.promise || Promise.resolve(),',
-        ]],
+        blob: '8cfc5ed66535e233581861995d93d9776b608036',
         edits: [[
             '      beforeToolExecution: () => turn.snapshot.promise || Promise.resolve(),',
             '      hostManagedCompletions: options.hostManagedCompletions === true,\n      hostSteering: options.hostSteering === true,\n      beforeToolExecution: () => turn.snapshot.promise || Promise.resolve(),',
@@ -193,8 +183,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/boot/tools.mjs',
-        blob: '704c7bcc84c8d6a52b0d13ea7412ba287d40b9fd',
-        previousEditCount: 1,
+        blob: '701f371268c9b6f3e3a44fcb8b2ef4634f552fd1',
         edits: [[
             '    // SubagentStart/SubagentStop: bridge internal worker spawn/finish to the',
             '    sessionSurface: params.agentSessionSurface?.({ mgr, getAgentTool: () => boot.routedAgentTool }),\n    // SubagentStart/SubagentStop: bridge internal worker spawn/finish to the',
@@ -239,7 +228,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/session/manager/session-prompt-composition.mjs',
-        blob: 'd8aa8eef85f5890127dbaa367f472ce5dd019a1e',
+        blob: '7ac9cf88be850663b6a1cacf33e5aff7c635418e',
         edits: [
             [
                 '        : loadInstructionFilesContext({ mode: configuredInstructionFilesMode(), cwd }),',
@@ -253,7 +242,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/boot/apis.mjs',
-        blob: 'a2529d9d10d0ec872b14702c447337898c4512ba',
+        blob: 'c022883e889a6b2e74c018590f259140e20ee417',
         edits: [[
             '        : loadInstructionFilesContext({ mode: rt.config?.instructionFiles, cwd: session.cwd }),',
             '        : loadInstructionFilesContext({ mode: rt.config?.instructionFiles, cwd: session.cwd, provider: rt.route?.provider || session?.provider, model: rt.route?.model || session?.model }),',
@@ -269,7 +258,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/workflow-agents-api/agent-route.mjs',
-        blob: '00e9f43c500d2511917323b1cc1ed4fc5d00d739',
+        blob: '09e7ecb35fed095c1297a1e2acf45ba8b24b73b3',
         edits: [
             [
                 '    const inherited = normalizeWorkflowRoute(resolveRoute(getConfig(), {}));\n    return { ...(inherited || {}), inherited: true };',
@@ -297,7 +286,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/context/skill-catalog.mjs',
-        blob: 'ddd555ffa17392836a496eba62a7642aedaa0758',
+        blob: '7abd98fd470adc5915f61dc0b1f86c67524c14d6',
         edits: [
             [
                 'function followsBuiltinFeature(skill) {\n  return skill?.source === \'builtin\' && Array.isArray(skill.requires) && skill.requires.length > 0;\n}',

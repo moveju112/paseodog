@@ -24,7 +24,7 @@ function setup() {
             if (memoryFailure) throw new Error('Memory unavailable');
             return 'Remember this fact';
         },
-        activeWorkflowContext: () => ({ summary: { id: context ? 'custom' : 'none' }, context, packContext: context, orchestrationMode: 'swarm' }),
+        activeWorkflowContext: () => ({ summary: { id: context ? 'custom' : 'none' }, leadPromptParts: () => ({}), packContext: context, orchestrationMode: 'swarm' }),
     });
     return { policy, session, conversation, busy: (value) => { active = value; },
         context: (value) => { context = value; }, failMemory: () => { memoryFailure = true; } };

@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { attachHostPolicy } from '../engine/src/policy.mjs';
 
 // 실제 네이티브 도구와 엔진을 임시 프로필·로컬 고정 응답만으로 검증한다.
-test('embedded 1.2.6 approval, cancellation and background lifetime', { timeout: 120000 }, async (t) => {
+test('embedded 1.3.1 approval, cancellation and background lifetime', { timeout: 120000 }, async (t) => {
     const directory = mkdtempSync(join(tmpdir(), 'paseodog-upgrade-test-'));
     process.once('exit', () => rmSync(directory, { recursive: true, force: true }));
     const work = join(directory, 'work');

@@ -65,7 +65,7 @@ export function noteRequestEffort(value) {
         '  return { mode, initialEffort: seed.initialEffort, effort: current, updates };',
         '  noteRequestEffort(current);\n  return { mode, initialEffort: seed.initialEffort, effort: current, updates };',
     ]]),
-    spec('runtime/shared/llm/usage-accounting.mjs', '9557c28a4f067977a06848499834cd4a08613174', [[
+    spec('runtime/shared/llm/usage-accounting.mjs', '50788661666d0690dfc675d93b8013669caffd0e', [[
         "import { isNotedUsage, withUsageContext } from './usage-context.mjs';",
         "import { isNotedUsage, withUsageContext, noteRequestEffort } from './usage-context.mjs';",
     ], [

@@ -13,8 +13,8 @@ import { withEffectiveDisabledAgents } from '../engine/node_modules/mixdog/src/r
 import { STANDALONE_ROOT } from '../engine/node_modules/mixdog/src/session-runtime/runtime-paths.mjs';
 
 // 설치한 npm 원본의 모든 패치 게이트와 새 콜백 전달을 함께 검증한다.
-test('installed 1.2.6 preserves full-source gates and stream/completion callbacks', async () => {
-    assert.equal(PIN, '1.2.6');
+test('installed 1.3.1 preserves full-source gates and stream/completion callbacks', async () => {
+    assert.equal(PIN, '1.3.1');
     const root = new URL('../engine/node_modules/mixdog/', import.meta.url);
     assert.equal(patch(root.pathname, { check: true }).version, PIN);
     for (const spec of AGENT_PATCHES) {
