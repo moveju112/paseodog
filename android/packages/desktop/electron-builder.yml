@@ -1,5 +1,5 @@
 npmRebuild: false
-compression: maximum
+compression: normal
 appId: sh.paseodog.desktop
 productName: PaseoDog
 executableName: PaseoDog
