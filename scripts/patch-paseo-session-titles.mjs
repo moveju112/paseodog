@@ -27,12 +27,21 @@ const managerMethod = `    // 자동 제목은 활동 시각을 바꾸지 않고
     }
 `;
 const bootstrap = `    const stopConversationTitles = startConversationTitles({
+        agentManager, agentStorage,
+        generateTitle: (input) => pluginRuntime.invokePluginRpc("paseodog-provider", "engine-title", input),
+        logger,
+    });
+`;
+// 작업공간 이름까지 자동 제목으로 바꾸던 이전 패치 (원래 앵커로 되돌리기 전에 현재 패치로 맞춘다)
+const legacyBootstrap = `    const stopConversationTitles = startConversationTitles({
         agentManager, agentStorage, workspaceRegistry,
         generateTitle: (input) => pluginRuntime.invokePluginRpc("paseodog-provider", "engine-title", input),
         emitWorkspaceUpdate: (workspaceId) => emitWorkspaceUpdatesExternal([workspaceId]),
         logger,
     });
 `;
+// 이전 패치가 설치한 관찰자 원본(작업공간 이름 갱신 포함)만 새 원본으로 교체를 허용한다.
+const LEGACY_OBSERVER_BLOBS = new Set(['5c05520a947d33340fc068fa55f74ff6922c7604']);
 
 export const SESSION_TITLE_PATCHES = [
     { file: 'agent/create-agent/create.js', blob: '1af258a082e337413e3cd4e713c8afe8f8fb3c61', edits: [
@@ -69,7 +78,7 @@ export const SESSION_TITLE_PATCHES = [
         ['                title: nextTitle,\n                updatedAt,',
             '                title: nextTitle,\n                titleOrigin: "user",\n                updatedAt,'],
     ] },
-    { file: 'bootstrap.js', blob: 'd8fb50959b05740a3a5ec250036867f982b5ff18', edits: [
+    { file: 'bootstrap.js', blob: 'd8fb50959b05740a3a5ec250036867f982b5ff18', legacy: [[legacyBootstrap, bootstrap]], edits: [
         ['import { WorkspaceAutoName } from "./workspace-auto-name.js";',
             'import { WorkspaceAutoName } from "./workspace-auto-name.js";\nimport { startConversationTitles } from "./conversation-titles.js";'],
         ['    setupAutoArchiveOnMerge({', bootstrap + '    setupAutoArchiveOnMerge({'],
@@ -79,6 +88,10 @@ export const SESSION_TITLE_PATCHES = [
 
 // 원본·완성된 패치만 받으며 모든 파일의 정확한 blob과 유일한 앵커를 검증한다.
 export function patchedSessionTitleSource(source, spec) {
+    for (const [legacy, current] of spec.legacy ?? []) {
+        if (source.split(legacy).length > 2) throw new Error(`Paseo session-title patch drift: ${spec.file}`);
+        source = source.replace(legacy, () => current);
+    }
     let original = source;
     for (const [before, after] of [...spec.edits].reverse()) original = original.replace(after, before);
     if (gitBlob(original) !== spec.blob) throw new Error(`Paseo session-title source hash mismatch: ${spec.file}`);
@@ -102,9 +115,10 @@ export function patchPaseoSessionTitles(root, { check = false } = {}) {
     });
     const observer = resolve(base, 'conversation-titles.js');
     const content = stripTypeScriptTypes(readFileSync(new URL('../android/packages/server/src/server/conversation-titles.ts', import.meta.url), 'utf8'));
-    if (existsSync(observer) && readFileSync(observer, 'utf8') !== content)
+    const installedObserver = existsSync(observer) ? readFileSync(observer, 'utf8') : null;
+    if (installedObserver !== null && installedObserver !== content && !LEGACY_OBSERVER_BLOBS.has(gitBlob(installedObserver)))
         throw new Error('Paseo conversation-title observer source drift');
-    if (check && (!existsSync(observer) || changes.some(({ before, after }) => before !== after)))
+    if (check && (installedObserver !== content || changes.some(({ before, after }) => before !== after)))
         throw new Error('Paseo session-title patch is missing');
     if (!check) {
         writeFileSync(observer, content);

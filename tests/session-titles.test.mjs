@@ -48,13 +48,11 @@ function harness({ origin = 'provisional', workspaceOrigin = origin, generate = 
         agent, items, calls, updates, warnings, stop,
         event(type, agentId = 'agent') { listener?.({ type: 'agent_stream', agentId, event: { type } }); },
         manualSession(title) { session = { ...session, title, titleOrigin: 'user' }; },
-        manualWorkspace(title) { workspace = { ...workspace, title, titleOrigin: 'user' }; },
-        archiveWorkspace() { workspace = { ...workspace, archivedAt: '2026-01-01' }; },
         get session() { return session; }, get workspace() { return workspace; },
     };
 }
 
-test('completed conversation updates session and sidebar, using the final answer rather than tool chatter', async () => {
+test('completed conversation updates the session title only, using the final answer rather than tool chatter', async () => {
     const h = harness();
     h.event('turn_started');
     assert.equal(h.calls.length, 0);
@@ -65,8 +63,9 @@ test('completed conversation updates session and sidebar, using the final answer
     assert.match(h.calls[0].conversation, /자동 갱신과 도넛/);
     assert.doesNotMatch(h.calls[0].conversation, /secret output|코드를 확인/);
     assert.equal(h.session.title, '사용량 자동 갱신·도넛 개선');
-    assert.equal(h.workspace.title, h.session.title);
-    assert.equal(h.workspace.titleOrigin, 'generated');
+    // 작업공간 이름은 프로젝트 이름(임시 출처 포함)을 그대로 유지한다.
+    assert.deepEqual(h.workspace, { workspaceId: 'workspace', title: 'PaseoDog', titleOrigin: 'provisional' });
+    assert.equal(h.updates.length, 0);
     h.stop();
 });
 
@@ -78,11 +77,13 @@ test('manual, unknown legacy, and independently renamed titles are protected', a
         assert.equal(h.calls.length, 0);
         h.stop();
     }
+    // 세션 제목을 직접 정했으면 임시 출처의 작업공간 이름 때문에 제목을 생성하지 않는다.
     const h = harness({ origin: 'user', workspaceOrigin: 'provisional' });
     h.event('turn_completed');
     await setImmediate();
+    assert.equal(h.calls.length, 0);
     assert.equal(h.session.title, 'https://github.com/example/widget');
-    assert.equal(h.workspace.title, '사용량 자동 갱신·도넛 개선');
+    assert.equal(h.workspace.title, 'PaseoDog');
     h.stop();
 });
 
@@ -92,16 +93,14 @@ test('manual renames, including the same visible title, win over pending generat
     h.event('turn_completed');
     await setImmediate();
     h.manualSession(h.session.title);
-    h.manualWorkspace(h.workspace.title);
     resolve({ title: '오래된 자동 제목' });
     await setImmediate();
     assert.equal(h.session.titleOrigin, 'user');
-    assert.equal(h.workspace.title, 'PaseoDog');
-    assert.equal(h.updates.length, 0);
+    assert.equal(h.session.title, 'https://github.com/example/widget');
     h.stop();
 });
 
-test('new turns, cancellation, shutdown and archival reject late title results', async () => {
+test('new turns, cancellation and shutdown reject late title results', async () => {
     for (const invalidate of [
         (h) => h.event('turn_started'), (h) => h.event('turn_canceled'), (h) => h.stop(),
     ]) {
@@ -112,23 +111,13 @@ test('new turns, cancellation, shutdown and archival reject late title results',
         invalidate(h);
         resolve({ title: '오래된 자동 제목' });
         await setImmediate();
-        assert.equal(h.workspace.title, 'PaseoDog');
+        assert.equal(h.session.title, 'https://github.com/example/widget');
         assert.equal(h.session.titleOrigin, 'provisional');
         h.stop();
     }
-    let resolve;
-    const h = harness({ generate: () => new Promise((accept) => { resolve = accept; }) });
-    h.event('turn_completed');
-    await setImmediate();
-    h.archiveWorkspace();
-    resolve({ title: '자동 제목' });
-    await setImmediate();
-    assert.equal(h.workspace.title, 'PaseoDog');
-    assert.equal(h.workspace.archivedAt, '2026-01-01');
-    h.stop();
 });
 
-test('unchanged goals keep the title and do not repeatedly publish workspace updates', async () => {
+test('unchanged goals keep the title and confirm it as generated', async () => {
     const h = harness({ generate: async (input) => ({ title: input.provisional ? '사용량 자동 갱신' : input.currentTitle }) });
     h.event('turn_completed');
     await setImmediate();
@@ -136,20 +125,8 @@ test('unchanged goals keep the title and do not repeatedly publish workspace upd
     await setImmediate();
     assert.equal(h.calls[1].provisional, false);
     assert.equal(h.session.title, '사용량 자동 갱신');
-    assert.equal(h.updates.length, 1);
-    h.stop();
-});
-
-test('another session starting in the same workspace prevents an older completion renaming that workspace', async () => {
-    let resolve;
-    const h = harness({ generate: () => new Promise((accept) => { resolve = accept; }) });
-    h.event('turn_completed');
-    h.event('turn_started', 'another-session');
-    await setImmediate();
-    resolve({ title: '이전 세션의 작업 목표' });
-    await setImmediate();
+    assert.equal(h.session.titleOrigin, 'generated');
     assert.equal(h.workspace.title, 'PaseoDog');
-    assert.equal(h.updates.length, 0);
     h.stop();
 });
 
@@ -166,7 +143,7 @@ test('failed, malformed and other-provider results neither rename nor retry', as
         h.event('turn_completed');
         await setImmediate();
         assert.equal(h.calls.length, 1);
-        assert.equal(h.workspace.title, 'PaseoDog');
+        assert.equal(h.session.title, 'https://github.com/example/widget');
         h.stop();
     }
     const h = harness();
@@ -244,6 +221,9 @@ test('session-title daemon patch is exact-blob gated, idempotent and rejects par
             const [before, after] = spec.edits.at(-1);
             assert.throws(() => patchedSessionTitleSource(patched.replace(after, before), spec), /Partial/);
         }
+        // 작업공간 이름까지 바꾸던 이전 패치도 현재 패치로 교체된다.
+        for (const [legacy, current] of spec.legacy ?? [])
+            assert.equal(patchedSessionTitleSource(patched.replace(current, legacy), spec), patched);
     }
 });
 

@@ -1,7 +1,6 @@
 import type { AgentManager } from "./agent/agent-manager.js";
 import type { AgentStorage } from "./agent/agent-storage.js";
 import type { AgentTimelineItem } from "./agent/agent-sdk-types.js";
-import type { WorkspaceRegistry } from "./workspace-registry.js";
 
 interface TitleInput {
   currentTitle: string;
@@ -9,12 +8,11 @@ interface TitleInput {
   conversation: string;
 }
 
+// 작업공간 이름은 프로젝트 이름을 따르므로 관찰자는 세션 제목만 다룬다.
 interface ConversationTitleOptions {
   agentManager: Pick<AgentManager, "subscribe" | "getAgent" | "getTimeline" | "setGeneratedTitle">;
   agentStorage: Pick<AgentStorage, "get">;
-  workspaceRegistry: Pick<WorkspaceRegistry, "get" | "update">;
   generateTitle: (input: TitleInput) => Promise<unknown>;
-  emitWorkspaceUpdate: (workspaceId: string) => Promise<void>;
   logger: { warn: (context: object, message: string) => void };
 }
 
@@ -52,72 +50,41 @@ export function conversationTitleSource(items: readonly AgentTimelineItem[]): st
     .join("\n\n");
 }
 
-// 완료 이벤트만 관찰하고 출처가 확인된 자동 제목을 원자적으로 갱신한다.
+// 완료 이벤트만 관찰하고 출처가 확인된 세션 자동 제목을 원자적으로 갱신한다.
 export function startConversationTitles(options: ConversationTitleOptions): () => void {
-  const { agentManager, agentStorage, workspaceRegistry } = options;
+  const { agentManager, agentStorage } = options;
   const revisions = new Map<string, object>();
-  const workspaceRevisions = new Map<string, object>();
   let stopped = false;
 
-  // 모델 응답을 기다리는 동안 새 턴·수동 이름 변경·보관이 생기면 오래된 결과를 버린다.
+  // 모델 응답을 기다리는 동안 새 턴·수동 이름 변경이 생기면 오래된 결과를 버린다.
   async function update(agentId: string, revision: object): Promise<void> {
     const agent = agentManager.getAgent(agentId);
     if (!agent || agent.internal || agent.provider !== "paseodog") return;
     const stored = automaticTitleRecord(await agentStorage.get(agentId));
-    const workspace = automaticTitleRecord(
-      agent.workspaceId ? await workspaceRegistry.get(agent.workspaceId) : null,
-    );
-    const currentTitleRecord = stored ?? workspace;
-    if (!currentTitleRecord) return;
+    if (!stored) return;
     const conversation = conversationTitleSource(agentManager.getTimeline(agentId));
     if (!conversation) return;
-    const currentTitle = currentTitleRecord.title ?? "";
     const result = await options.generateTitle({
-      currentTitle,
-      provisional: currentTitleRecord.titleOrigin === "provisional",
+      currentTitle: stored.title ?? "",
+      provisional: stored.titleOrigin === "provisional",
       conversation,
     });
     if (stopped || revisions.get(agentId) !== revision) return;
     const normalized = generatedTitleText(result);
     if (!normalized) return;
     // 동일 제목도 출처를 generated로 승격해 확정 상태를 다음 요청에 전달한다.
-    if (stored) {
-      await agentManager.setGeneratedTitle(
-        agentId,
-        normalized,
-        stored.title ?? null,
-        () => !stopped && revisions.get(agentId) === revision,
-      );
-    }
-    if (workspace && workspaceRevisions.get(workspace.workspaceId) === revision) {
-      let applied = false;
-      await workspaceRegistry.update(workspace.workspaceId, (current) => {
-        if (
-          stopped ||
-          revisions.get(agentId) !== revision ||
-          workspaceRevisions.get(workspace.workspaceId) !== revision ||
-          current.title !== workspace.title ||
-          !automaticTitleRecord(current)
-        )
-          return current;
-        if (current.title === normalized && current.titleOrigin === "generated") return current;
-        applied = true;
-        return {
-          ...current,
-          title: normalized,
-          titleOrigin: "generated",
-          updatedAt: new Date().toISOString(),
-        };
-      });
-      if (applied) await options.emitWorkspaceUpdate(workspace.workspaceId);
-    }
+    await agentManager.setGeneratedTitle(
+      agentId,
+      normalized,
+      stored.title ?? null,
+      () => !stopped && revisions.get(agentId) === revision,
+    );
   }
 
   const unsubscribe = agentManager.subscribe(
     (event) => {
       if (event.type === "agent_state" && event.agent.lifecycle === "closed") {
         revisions.delete(event.agent.id);
-        if (event.agent.workspaceId) workspaceRevisions.delete(event.agent.workspaceId);
         return;
       }
       if (event.type !== "agent_stream") return;
@@ -133,7 +100,6 @@ export function startConversationTitles(options: ConversationTitleOptions): () =
       if (!agent || agent.internal || agent.provider !== "paseodog") return;
       const revision = {};
       revisions.set(event.agentId, revision);
-      if (agent.workspaceId) workspaceRevisions.set(agent.workspaceId, revision);
       if (stream.type !== "turn_completed") return;
       void update(event.agentId, revision).catch((error: unknown) => {
         options.logger.warn(
@@ -149,6 +115,5 @@ export function startConversationTitles(options: ConversationTitleOptions): () =
     stopped = true;
     unsubscribe();
     revisions.clear();
-    workspaceRevisions.clear();
   };
 }

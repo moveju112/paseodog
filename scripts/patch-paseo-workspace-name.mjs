@@ -1,4 +1,4 @@
-// 로컬 패치: 프로젝트명을 임시 작업공간 이름으로 쓰고 완료된 대화 관찰자가 자동 제목을 확정한다.
+// 로컬 패치: 새 작업공간 이름은 프로젝트명을 따른다(첫 프롬프트·AI 이름·대화 자동 제목으로 바꾸지 않는다).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';

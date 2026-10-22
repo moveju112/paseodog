@@ -1114,10 +1114,8 @@ export async function createPaseoDaemon(
   const stopConversationTitles = startConversationTitles({
     agentManager,
     agentStorage,
-    workspaceRegistry,
     generateTitle: (input) =>
       pluginRuntime.invokePluginRpc("paseodog-provider", "engine-title", input),
-    emitWorkspaceUpdate: (workspaceId) => emitWorkspaceUpdatesExternal([workspaceId]),
     logger,
   });
 
