@@ -9,6 +9,7 @@ import { normalizeOrchestrationMode } from './orchestration-mode.mjs';
 import { createAuthSession } from './auth-session.mjs';
 import { agentMessageSource, agentMessageContent, pendingAgentMessage } from '../../plugin/server/agent-message.mjs';
 import { nativeSessionAction } from './session-actions.mjs';
+import { migrateCompactionBuffer } from './compaction-buffer.mjs';
 import { turnFailureRecord } from 'mixdog/src/runtime/agent/orchestrator/session/turn-failure.mjs';
 import { RETRY_CONTINUE_INSTRUCTION } from 'mixdog/src/tui/session/quota-resume.mjs';
 
@@ -156,7 +157,7 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
                             throw new Error(`Workflow instructions could not be applied: ${applied.reason || 'unknown reason'}`);
                     }
                     if (latest.compaction && typeof latest.compaction === 'object' && typeof runtime.setCompactionSettings === 'function') {
-                        await runtime.setCompactionSettings(latest.compaction);
+                        await runtime.setCompactionSettings(migrateCompactionBuffer(latest.compaction));
                     }
                     if (latest.autoClear && typeof latest.autoClear === 'object' && typeof runtime.setAutoClear === 'function') {
                         await runtime.setAutoClear(latest.autoClear);

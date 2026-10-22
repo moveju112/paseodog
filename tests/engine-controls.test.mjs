@@ -66,7 +66,7 @@ test('compaction, autoClear, workflow and orchestration changes use native sette
     await controlRuntime(value, { action: 'workflowCreate', name: 'Fast TDD', description: 'Quick', body: '# Fast TDD', activate: false });
     await controlRuntime(value, { action: 'orchestration', mode: 'swarm' });
     assert.deepEqual(calls, [
-        ['compaction', { enabled: false, onModelChange: false, mainBufferPercent: 0.15 }],
+        ['compaction', { enabled: false, onModelChange: false, mainBufferRatio: 0.15 }],
         ['autoClear', { enabled: true, idleMs: 1800000, minContextPercent: 20 }],
         ['workflow', 'default'],
         ['workflowSave', { id: 'default', name: undefined, description: undefined, body: '# Updated' }],

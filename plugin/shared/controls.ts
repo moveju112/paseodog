@@ -131,7 +131,7 @@ export const engineControls = defineRpc({
         }).strict().optional(),
         enabled: z.boolean().optional(),
         onModelChange: z.boolean().optional(),
-        mainBufferPercent: z.number().min(0.05).max(0.5).optional(),
+        mainBufferPercent: z.number().min(0.05).max(0.25).optional(),
         mainBufferTokens: z.number().min(1000).max(500000).optional(),
         summaryModel: z.string().max(256).optional(),
         memoryTimeoutMs: z.number().min(0).max(600000).optional(),

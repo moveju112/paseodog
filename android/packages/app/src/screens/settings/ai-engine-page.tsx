@@ -39,9 +39,9 @@ const modeDescriptions: Record<EngineSnapshot["orchestration"], string> = {
 };
 
 const bufferOptions = [
-  { value: "0.15", label: "15% · 최대 절감" },
+  { value: "0.1", label: "10% · 맥락 최대 유지" },
   { value: "0.2", label: "20% · 균형 (권장)" },
-  { value: "0.3", label: "30% · 여유 확보" },
+  { value: "0.25", label: "25% · 토큰 최대 절감" },
 ] as const;
 
 const idleOptions = [

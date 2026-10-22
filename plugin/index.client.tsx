@@ -448,7 +448,7 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
                 () => void request({ action: 'compaction', enabled: !snapshot.compaction.auto }))}
             {button(`모델 변경 시 자동 압축: ${snapshot.compaction.onModelChange ? '켜짐' : '꺼짐'}`,
                 () => void request({ action: 'compaction', onModelChange: !snapshot.compaction.onModelChange }))}
-            {([0.15, 0.2, 0.3] as const).map((pct) => button(`컨텍스트 버퍼 ${Math.round(pct * 100)}%`,
+            {([0.1, 0.2, 0.25] as const).map((pct) => button(`컨텍스트 버퍼 ${Math.round(pct * 100)}%`,
                 () => void request({ action: 'compaction', mainBufferPercent: pct }),
                 Math.abs((snapshot.compaction.mainBufferPercent ?? 0.2) - pct) < 0.02))}
             {button(`세션 복귀 요약 (Recap): ${(snapshot.recap ?? true) ? '켜짐' : '꺼짐'}`,

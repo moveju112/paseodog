@@ -8,6 +8,7 @@ import { readClaudeUsage, readUsageMetrics } from './usage.mjs';
 import { normalizeOrchestrationMode } from './orchestration-mode.mjs';
 import { flushPendingSessionConfigWrites } from 'mixdog/src/session-runtime/config-lifecycle/config-writers.mjs';
 import { resourceControls } from './resource-controls.mjs';
+import { compactionBufferRatio } from './compaction-buffer.mjs';
 
 // 인증정보·프롬프트·파일 경로 없이 모델 선택에 필요한 필드만 전달한다.
 export function modelProjection(row) {
@@ -159,10 +160,11 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             patch.onModelChange = request.onModelChange;
         }
         if (request.mainBufferPercent !== undefined) {
+            // 앱 계약은 비율(0.2 = 20%)이고 Mixdog mainBufferPercent는 0~100 단위라 비율 키로 저장한다.
             if (typeof request.mainBufferPercent !== 'number' || !Number.isFinite(request.mainBufferPercent)
-                || request.mainBufferPercent < 0.05 || request.mainBufferPercent > 0.5)
+                || request.mainBufferPercent < 0.05 || request.mainBufferPercent > 0.25)
                 throw new Error('Invalid mainBufferPercent');
-            patch.mainBufferPercent = request.mainBufferPercent;
+            patch.mainBufferRatio = request.mainBufferPercent;
         }
         if (request.mainBufferTokens !== undefined) {
             if (typeof request.mainBufferTokens !== 'number' || !Number.isFinite(request.mainBufferTokens)
@@ -343,10 +345,11 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
     await flushPendingSessionConfigWrites();
 
     const rawCompaction = runtime.getCompactionSettings?.() || {};
+    const bufferRatio = compactionBufferRatio(rawCompaction);
     const compaction = {
         auto: rawCompaction.auto,
         ...(typeof rawCompaction.onModelChange === 'boolean' ? { onModelChange: rawCompaction.onModelChange } : {}),
-        ...(typeof rawCompaction.mainBufferPercent === 'number' ? { mainBufferPercent: rawCompaction.mainBufferPercent } : {}),
+        ...(bufferRatio !== undefined ? { mainBufferPercent: bufferRatio } : {}),
         ...(typeof rawCompaction.mainBufferTokens === 'number' ? { mainBufferTokens: rawCompaction.mainBufferTokens } : {}),
         ...(typeof rawCompaction.summaryModel === 'string' ? { summaryModel: rawCompaction.summaryModel } : {}),
         ...(typeof rawCompaction.memoryTimeoutMs === 'number' ? { memoryTimeoutMs: rawCompaction.memoryTimeoutMs } : {}),

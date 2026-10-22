@@ -135,6 +135,33 @@ afterEach(() => {
 });
 
 describe("retained native chat viewport", () => {
+  it("loads older records without a drag after a short page is fully measured", async () => {
+    const strategy = createNativeStreamStrategy();
+    const props = input("short", [message("short-history")]);
+    props.hasOlderHistory = true;
+    props.olderHistoryProgressKey = "epoch:20";
+    props.onNearHistoryStart = vi.fn().mockResolvedValue(true);
+    render(strategy.render(props));
+
+    act(() => {
+      lists.get("short-history")!.onLayout({
+        nativeEvent: { layout: { width: 400, height: 1200 } },
+      });
+      vi.advanceTimersByTime(200);
+    });
+    expect(props.onNearHistoryStart).not.toHaveBeenCalled();
+
+    await act(async () => {
+      lists.get("short-history")!.onContentSizeChange(400, 400);
+    });
+    expect(props.onNearHistoryStart).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      lists.get("short-history")!.onContentSizeChange(400, 400);
+      vi.advanceTimersByTime(200);
+    });
+    expect(props.onNearHistoryStart).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     {
       mode: "sticky",

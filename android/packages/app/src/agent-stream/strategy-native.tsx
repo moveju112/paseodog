@@ -36,6 +36,7 @@ import {
 import {
   abandonHistoryStartPaginationRequest,
   createHistoryStartPaginationState,
+  armHistoryStartForUnscrollableContent,
   evaluateHistoryStartPagination,
   isHistoryStartLoadingOperation,
   rearmHistoryStartPagination,
@@ -167,9 +168,15 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
     },
   );
   const evaluateHistoryStart = useStableEvent(() => {
+    const input = getHistoryStartPaginationInput();
     const transition = evaluateHistoryStartPagination(
-      historyStartPaginationStateRef.current,
-      getHistoryStartPaginationInput(),
+      input.isReady
+        ? armHistoryStartForUnscrollableContent(
+            historyStartPaginationStateRef.current,
+            streamViewportMetricsRef.current,
+          )
+        : historyStartPaginationStateRef.current,
+      input,
     );
     applyHistoryStartPaginationTransition(transition);
   });

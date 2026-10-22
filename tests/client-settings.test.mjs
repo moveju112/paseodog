@@ -490,8 +490,9 @@ test('settings register separate sections without a main model picker and dispat
     assert.deepEqual(calls.at(-1), { action: 'compaction', enabled: false });
     await tokens.press('모델 변경 시 자동 압축: 꺼짐');
     assert.deepEqual(calls.at(-1), { action: 'compaction', onModelChange: true });
-    await tokens.press('컨텍스트 버퍼 30%');
-    assert.deepEqual(calls.at(-1), { action: 'compaction', mainBufferPercent: 0.3 });
+    await tokens.press('컨텍스트 버퍼 25%');
+    assert.deepEqual(calls.at(-1), { action: 'compaction', mainBufferPercent: 0.25 });
+    assert.ok(!tokens.labels().includes('컨텍스트 버퍼 30%'));
     await tokens.press('유휴 컨텍스트 자동 정리: 꺼짐');
     assert.deepEqual(calls.at(-1), { action: 'autoClear', enabled: true });
 

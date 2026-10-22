@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   abandonHistoryStartPaginationRequest,
+  armHistoryStartForUnscrollableContent,
   createHistoryStartPaginationState,
   evaluateHistoryStartPagination,
   isHistoryStartLoadingOperation,
@@ -37,6 +38,30 @@ describe("history start pagination", () => {
       status: "settling",
       loadedProgressKey: "epoch-1:20:local-60",
     });
+  });
+  it("arms loading without a drag only when content cannot scroll", () => {
+    const dormant = createHistoryStartPaginationState();
+    const short = armHistoryStartForUnscrollableContent(dormant, {
+      contentHeight: 400,
+      viewportHeight: 1200,
+    });
+    const tall = armHistoryStartForUnscrollableContent(dormant, {
+      contentHeight: 2400,
+      viewportHeight: 1200,
+    });
+    const unmeasured = armHistoryStartForUnscrollableContent(dormant, {
+      contentHeight: 0,
+      viewportHeight: 0,
+    });
+    const latched = armHistoryStartForUnscrollableContent(
+      { status: "latched" },
+      { contentHeight: 400, viewportHeight: 1200 },
+    );
+
+    expect(evaluateHistoryStartPagination(short, visibleHistoryStart).shouldLoad).toBe(true);
+    expect(tall).toEqual({ status: "dormant" });
+    expect(unmeasured).toEqual({ status: "dormant" });
+    expect(latched).toEqual({ status: "latched" });
   });
   it("waits for user scroll intent before loading", () => {
     const dormant = createHistoryStartPaginationState();

@@ -34,6 +34,16 @@ export function rearmHistoryStartPagination(
   return state.status === "dormant" || state.status === "latched" ? { status: "ready" } : state;
 }
 
+// 내용이 화면을 채우지 못해 끌기 스크롤이 불가능하면 사용자 끌기 없이 이전 기록 로딩을 허용한다.
+// (접힌 진행 기록 때문에 최근 페이지가 짧으면 끌기 이벤트가 없어 이전 기록을 영영 못 불러온다)
+export function armHistoryStartForUnscrollableContent(
+  state: HistoryStartPaginationState,
+  metrics: { contentHeight: number; viewportHeight: number },
+): HistoryStartPaginationState {
+  if (state.status !== "dormant" || metrics.viewportHeight <= 0) return state;
+  return metrics.contentHeight <= metrics.viewportHeight ? { status: "ready" } : state;
+}
+
 export function abandonHistoryStartPaginationRequest(
   state: HistoryStartPaginationState,
   requestedProgressKey: string,
