@@ -22,7 +22,9 @@ export async function runReleaseBuild(run) {
         (async () => {
             await run('web');
             await run('desktop-main');
-            await settleBuilds([run('linux'), run('windows')]);
+            // APK와 PC 두 플랫폼을 한꺼번에 실행하면 메모리 압박으로 Gradle이 종료될 수 있다.
+            await run('linux');
+            await run('windows');
         })(),
     ]);
 }

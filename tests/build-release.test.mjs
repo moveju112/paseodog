@@ -74,6 +74,25 @@ test('desktop packaging starts before a pending APK completes and dependencies r
 });
 
 // 독립 작업 중 실패해도 이미 시작한 빌드를 남기지 않고 모두 종료 후 실패를 알린다.
+// APK와 두 PC 패키징이 겹치지 않게 무거운 작업을 최대 두 개로 제한한다.
+test('release scheduling never overlaps Android with both desktop packagers', async () => {
+    let finishAndroid;
+    const android = new Promise(resolve => { finishAndroid = resolve; });
+    let active = 0;
+    let peak = 0;
+    await runReleaseBuild(async name => {
+        active++;
+        peak = Math.max(peak, active);
+        if (name === 'android') await android;
+        else await new Promise(resolve => setImmediate(resolve));
+        if (name === 'windows') finishAndroid();
+        active--;
+    });
+    assert.equal(peak, 2);
+    assert.equal(active, 0);
+});
+
+// 독립 작업 중 실패해도 이미 시작한 빌드를 남기지 않고 모두 종료 후 실패를 알린다.
 test('failed builds drain their siblings and never start dependent stages', async () => {
     let androidCompleted = false;
     const calls = [];
