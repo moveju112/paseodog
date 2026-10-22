@@ -10,10 +10,9 @@ import {
   type SetStateAction,
 } from "react";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { useSessionRevealFlash } from "@/hooks/use-session-reveal-flash";
 import { matchSessionReveal, useSessionRevealStore } from "@/stores/session-reveal-store";
 
-// 고른 세션 칸 강조 테두리를 보여 주는 시간
-const SESSION_REVEAL_FLASH_MS = 1200;
 import {
   DndContext,
   DragOverlay,
@@ -1266,11 +1265,7 @@ function SplitPaneView({
     shownRevealIdRef.current = id;
     setRevealedId(id);
   }, [activeAgentId, normalizedServerId, revealRequest]);
-  useEffect(() => {
-    if (revealedId === null) return;
-    const timer = setTimeout(() => setRevealedId(null), SESSION_REVEAL_FLASH_MS);
-    return () => clearTimeout(timer);
-  }, [revealedId]);
+  const revealVisible = useSessionRevealFlash(revealedId);
   return (
     <RenderProfile id={`SplitPaneView:${pane.id}`}>
       <View
@@ -1279,7 +1274,7 @@ function SplitPaneView({
         style={styles.pane}
         testID={`workspace-pane-${pane.id}`}
       >
-        {revealedId !== null ? (
+        {revealVisible ? (
           <View
             pointerEvents="none"
             style={styles.paneReveal}
