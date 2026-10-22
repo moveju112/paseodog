@@ -84,7 +84,7 @@ rpm:
 appImage:
   # A nonempty argument list replaces builder's hardcoded --no-sandbox default.
   executableArgs: ["--class=PaseoDog"]
-  artifactName: "PaseoDog-${arch}.${ext}"
+  artifactName: "PaseoDog-${version}-${arch}.${ext}"
 win:
   artifactName: "PaseoDog-Setup-${version}-${arch}.${ext}"
   icon: assets/icon.ico

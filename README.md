@@ -2,11 +2,14 @@
 
 ## [⬇ 최신 릴리즈 다운로드 — Android · Windows · Linux](https://github.com/moveju112/paseodog/releases/latest)
 
+모든 파일은 릴리즈 이름과 같은 하나의 버전(예: `1.0.0-rc.7.11052`)을 씁니다.
+
 | 플랫폼 | 파일 |
 |---|---|
-| Android (arm64) | `PaseoDog-<versionCode>-arm64-v8a.apk` |
+| Android (arm64) | `PaseoDog-<버전>-arm64-v8a.apk` |
 | Windows (x64) | `PaseoDog-Setup-<버전>-x64.exe` |
-| Linux (x64) | `PaseoDog-<버전>-amd64.deb` |
+| Linux (x64, Debian·Ubuntu) | `PaseoDog-<버전>-amd64.deb` |
+| Linux (x64, 기타 배포판) | `PaseoDog-<버전>-x86_64.AppImage` |
 
 Linux 서버(또는 Windows PC)의 데몬이 Mixdog 엔진을 실행하고, 휴대폰·PC 앱·웹에서 같은 세션을 제어합니다. 앱만으로는 동작하지 않으니 먼저 데몬을 설치하세요.
 
@@ -70,7 +73,7 @@ node scripts/install.mjs           # TRUST 입력 → 의존성 설치, 검사, 
 
 - **Android**: `.apk`를 받아 설치합니다. 이후 업데이트는 앱 설정에서 받습니다.
 - **Windows**: `.exe`를 실행해 설치합니다. 코드서명이 없어서 SmartScreen 경고가 뜨면 **추가 정보 → 실행**을 누르세요.
-- **Linux**: `sudo apt install ./PaseoDog-<버전>-amd64.deb`
+- **Linux**: `sudo apt install ./PaseoDog-<버전>-amd64.deb`, 또는 AppImage에 실행 권한을 주고 실행합니다(`chmod +x PaseoDog-<버전>-x86_64.AppImage`).
 
 ## 3. 앱을 데몬에 연결
 
