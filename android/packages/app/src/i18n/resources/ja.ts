@@ -1848,6 +1848,14 @@ export const ja: TranslationResources = {
       generateLink: "リンクを発行",
       passwordLabel: "リレーパスワード（初回発行時に設定）",
       passwordRequired: "リレーパスワードを入力してください。",
+      resetToggle: "パスワードを忘れた場合: パスワードとリンクを再設定",
+      resetPasswordLabel: "新しいリレーパスワード（8文字以上）",
+      resetAndGenerate: "再設定してリンクを発行",
+      cancelReset: "再設定をキャンセル",
+      resetWarning:
+        "以前のリンクとパスワードはすべて無効になり、リレー接続中のデバイスは切断され、ホストが一時的に再起動します。",
+      resetDone:
+        "パスワードとリンクを再設定しました。ほかのデバイスは新しいリンクとパスワードで再接続してください。",
       passwordSecurity:
         "接続にはリンクとリレーパスワードの両方が必要です。別々に共有してください。",
       failedToLoadOffer: "ペアリングオファーの読み込みに失敗しました。",

@@ -155,10 +155,6 @@ function PairLinkModalContent({
         setErrorMessage(t("pairing.link.errors.missingOffer"));
         return;
       }
-      if (!password) {
-        setErrorMessage(t("pairing.device.passwordRequired"));
-        return;
-      }
 
       try {
         setIsSaving(true);

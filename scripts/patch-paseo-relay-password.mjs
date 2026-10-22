@@ -13,13 +13,27 @@ export const RELAY_PASSWORD_PATCHES = [
         blob: '95030cbe6f06c782953a68d5db06c53d8ca3b5c5', source: 'server/src/server/session-admission-auth.ts',
         previous: ['ad35d4a821a7862b783f8c253ec3288dc39aa2d7'] },
     { package: 'server', file: 'dist/server/server/pairing-offer.js',
-        blob: '3c6d163a523a6b0403980557c7b5456e3f83427a', source: 'server/src/server/pairing-offer.ts' },
+        blob: '3c6d163a523a6b0403980557c7b5456e3f83427a', source: 'server/src/server/pairing-offer.ts',
+        previous: ['5c125a60944c228e98c2ea93d08bf9e9716219a4'] },
     { package: 'cli', file: 'dist/commands/daemon/pair.js',
-        blob: '7e31fd5d38bfac62fb97cd63f9c868726652b726', source: 'cli/src/commands/daemon/pair.ts' },
+        blob: '7e31fd5d38bfac62fb97cd63f9c868726652b726', source: 'cli/src/commands/daemon/pair.ts',
+        previous: ['1de64ad714077bef1e1498ff73750664072cb390'] },
+    // legacyEditCounts: 이전 배포본이 적용한 앞쪽 편집 개수. 그 상태에서만 나머지 편집을 이어 붙인다.
     { package: 'server', file: 'dist/server/server/session/daemon/daemon-session.js',
-        blob: 'ea9a4e9c241749a4c5b198a9c83110a7e2f52aa7', edits: [[
+        blob: 'ea9a4e9c241749a4c5b198a9c83110a7e2f52aa7', legacyEditCounts: [1], edits: [[
             '                relayEnabled: relay?.enabled ?? false,\n',
             '                relayEnabled: relay?.enabled ?? false,\n                password: msg.password,\n',
+        ], [
+            '                password: msg.password,\n',
+            '                password: msg.password,\n                reset: msg.reset === true,\n',
+        ], [
+            '                    relayEnabled: pairing.relayEnabled,\n                },\n            });\n        }\n        catch (error) {\n            this.logger.error({ err: error }, "Failed to handle daemon pairing offer request");\n',
+            '                    relayEnabled: pairing.relayEnabled,\n                },\n            });\n'
+                + '            // 재설정한 키는 릴레이 연결에 재시작 후 적용되며 기존 릴레이 세션도 끊는다.\n'
+                + '            if (msg.reset === true && pairing.url) {\n'
+                + '                this.host.emitLifecycleIntent({ type: "restart", clientId: this.clientId, requestId: msg.requestId, reason: "relay_access_reset" });\n'
+                + '            }\n'
+                + '        }\n        catch (error) {\n            this.logger.error({ err: error }, "Failed to handle daemon pairing offer request");\n',
         ]] },
     { package: 'server', file: 'dist/server/server/websocket-server.js',
         blob: 'd2faa2c4fbddfe3264a604a36e5b09802386d69c', edits: [[
@@ -33,17 +47,23 @@ export const RELAY_PASSWORD_PATCHES = [
             '                daemonConfigReload: true,\n                relayPasswordAuth: true,\n',
         ]] },
     { package: 'protocol', file: 'dist/messages.js',
-        blob: '7bd464871d7543be7cb4d352511bb62bd3a1d5a2', edits: [[
+        blob: '7bd464871d7543be7cb4d352511bb62bd3a1d5a2', legacyEditCounts: [2], edits: [[
             '    type: z.literal("daemon.get_pairing_offer.request"),\n    requestId: z.string(),',
             '    type: z.literal("daemon.get_pairing_offer.request"),\n    requestId: z.string(),\n    password: z.string().min(1).max(72).optional(),',
         ], [
             '        daemonStatusRpc: z.boolean().optional(),',
             '        daemonStatusRpc: z.boolean().optional(),\n        relayPasswordAuth: z.boolean().optional(),',
+        ], [
+            '    password: z.string().min(1).max(72).optional(),',
+            '    password: z.string().min(1).max(72).optional(),\n    reset: z.boolean().optional(),',
         ]] },
     { package: 'client', file: 'dist/daemon-client.js',
-        blob: 'bbec9f5e4cad7d6f8a809c8e7222e93b8f900e3c', edits: [[
+        blob: 'bbec9f5e4cad7d6f8a809c8e7222e93b8f900e3c', legacyEditCounts: [1], edits: [[
             '                type: "daemon.get_pairing_offer.request",',
             '                type: "daemon.get_pairing_offer.request",\n                ...(options?.password !== undefined ? { password: options.password } : {}),',
+        ], [
+            '                ...(options?.password !== undefined ? { password: options.password } : {}),',
+            '                ...(options?.password !== undefined ? { password: options.password } : {}),\n                ...(options?.reset ? { reset: true } : {}),',
         ]] },
 ];
 
@@ -64,11 +84,14 @@ export function patchedRelayPasswordSource(source, spec) {
     for (const [before, after] of [...spec.edits].reverse()) original = original.replace(after, () => before);
     if (gitBlob(original) !== spec.blob) throw new Error(`Paseo relay password hash mismatch: ${spec.file}`);
     let result = original;
-    for (const [before, after] of spec.edits) {
+    const legacyResults = [];
+    for (const [index, [before, after]] of spec.edits.entries()) {
+        if (spec.legacyEditCounts?.includes(index)) legacyResults.push(result);
         if (result.split(before).length !== 2) throw new Error(`Paseo relay password anchor mismatch: ${spec.file}`);
         result = result.replace(before, () => after);
     }
-    if (source !== original && source !== result) throw new Error(`Partial Paseo relay password patch: ${spec.file}`);
+    if (source !== original && source !== result && !legacyResults.includes(source))
+        throw new Error(`Partial Paseo relay password patch: ${spec.file}`);
     return result;
 }
 
@@ -85,7 +108,7 @@ export function patchPaseoRelayPassword(base = resolve(root, 'tools/node_modules
     const before = existsSync(helperPath) ? readFileSync(helperPath, 'utf8') : undefined;
     const after = relayPasswordModule();
     // 이전 PaseoDog 헬퍼 결과물만 교체를 허용하고 그 밖의 변경은 거부한다.
-    if (before !== undefined && before !== after && !['9021b6d4d426481e6ca13efdd0dc56721079299e'].includes(gitBlob(before)))
+    if (before !== undefined && before !== after && !['9021b6d4d426481e6ca13efdd0dc56721079299e', 'd83f134f54c11153d3f462c6eb952564751e925d'].includes(gitBlob(before)))
         throw new Error('Paseo relay password helper drift');
     changes.push({ path: helperPath, before, after });
     if (check && changes.some((file) => file.before !== file.after)) throw new Error('Paseo relay password patch is missing');

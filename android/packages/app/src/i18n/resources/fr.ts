@@ -1875,6 +1875,14 @@ export const fr: TranslationResources = {
       generateLink: "Créer un lien",
       passwordLabel: "Mot de passe du relais (défini à la première utilisation)",
       passwordRequired: "Saisissez le mot de passe du relais.",
+      resetToggle: "Mot de passe oublié ? Réinitialiser le mot de passe et le lien",
+      resetPasswordLabel: "Nouveau mot de passe du relais (8 caractères ou plus)",
+      resetAndGenerate: "Réinitialiser et créer un lien",
+      cancelReset: "Annuler la réinitialisation",
+      resetWarning:
+        "Tous les liens et mots de passe précédents cessent de fonctionner, les appareils du relais sont déconnectés et l’hôte redémarre brièvement.",
+      resetDone:
+        "Le mot de passe et le lien ont été réinitialisés. Reconnectez les autres appareils avec le nouveau lien et le nouveau mot de passe.",
       passwordSecurity:
         "La connexion nécessite le lien et le mot de passe du relais. Partagez-les séparément.",
       failedToLoadOffer: "Impossible de charger l’offre d’association.",

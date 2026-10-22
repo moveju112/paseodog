@@ -221,6 +221,7 @@ export class DaemonSession {
         paseoHome: this.paseoHome,
         relayEnabled: relay?.enabled ?? false,
         password: msg.password,
+        reset: msg.reset === true,
         relayEndpoint: relay?.endpoint,
         relayPublicEndpoint: relay?.publicEndpoint,
         relayUseTls: relay?.useTls,
@@ -238,6 +239,15 @@ export class DaemonSession {
           relayEnabled: pairing.relayEnabled,
         },
       });
+      // 재설정한 키는 릴레이 연결에 재시작 후 적용되며 기존 릴레이 세션도 끊는다.
+      if (msg.reset === true && pairing.url) {
+        this.host.emitLifecycleIntent({
+          type: "restart",
+          clientId: this.clientId,
+          requestId: msg.requestId,
+          reason: "relay_access_reset",
+        });
+      }
     } catch (error) {
       this.logger.error({ err: error }, "Failed to handle daemon pairing offer request");
       this.host.emit({

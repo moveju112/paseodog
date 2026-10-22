@@ -54,6 +54,26 @@ test("requires a relay password before generating or reissuing a link", async ({
     await input.fill("relay-e2e-secret");
     await generate.click();
     await expect(link).toHaveValue(/#offer=/);
+    const oldLink = await link.inputValue();
+
+    // 잊은 비밀번호 재설정: 새 주소를 발급하고 이전 비밀번호는 거부한다(호스트 재시작 포함).
+    await closePairDeviceModal(page);
+    await openPairDeviceModal(page);
+    await page.getByTestId("pair-device-reset-toggle").click();
+    await input.fill("relay-e2e-renewed");
+    await generate.click();
+    await expect(link).toHaveValue(/#offer=/, { timeout: 30_000 });
+    expect(await link.inputValue()).not.toBe(oldLink);
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Password and link were reset" }),
+    ).toBeVisible();
+    await closePairDeviceModal(page);
+    await openPairDeviceModal(page);
+    await input.fill("relay-e2e-secret");
+    await generate.click();
+    await expect(page.getByRole("alert")).toContainText("Incorrect relay password", {
+      timeout: 30_000,
+    });
   } finally {
     await daemon.close();
   }

@@ -1879,6 +1879,14 @@ export const es: TranslationResources = {
       generateLink: "Generar enlace",
       passwordLabel: "Contraseña del relé (se establece en el primer uso)",
       passwordRequired: "Introduce la contraseña del relé.",
+      resetToggle: "¿Olvidaste la contraseña? Restablecer contraseña y enlace",
+      resetPasswordLabel: "Nueva contraseña del relé (8 o más caracteres)",
+      resetAndGenerate: "Restablecer y generar enlace",
+      cancelReset: "Cancelar restablecimiento",
+      resetWarning:
+        "Todos los enlaces y contraseñas anteriores dejan de funcionar, los dispositivos del relé se desconectan y el host se reinicia brevemente.",
+      resetDone:
+        "Se restablecieron la contraseña y el enlace. Vuelve a conectar otros dispositivos con el nuevo enlace y la nueva contraseña.",
       passwordSecurity:
         "La conexión requiere el enlace y la contraseña del relé. Compártelos por separado.",
       failedToLoadOffer: "No se pudo cargar la oferta de emparejamiento.",

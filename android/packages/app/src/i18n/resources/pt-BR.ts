@@ -1864,6 +1864,14 @@ export const ptBR: TranslationResources = {
       generateLink: "Gerar link",
       passwordLabel: "Senha do relay (definida no primeiro uso)",
       passwordRequired: "Digite a senha do relay.",
+      resetToggle: "Esqueceu a senha? Redefinir senha e link",
+      resetPasswordLabel: "Nova senha do relay (8 ou mais caracteres)",
+      resetAndGenerate: "Redefinir e gerar link",
+      cancelReset: "Cancelar redefinição",
+      resetWarning:
+        "Todos os links e senhas anteriores deixam de funcionar, os dispositivos do relay são desconectados e o host reinicia rapidamente.",
+      resetDone:
+        "A senha e o link foram redefinidos. Reconecte os outros dispositivos com o novo link e a nova senha.",
       passwordSecurity: "A conexão exige o link e a senha do relay. Compartilhe-os separadamente.",
       failedToLoadOffer: "Falha ao carregar oferta de pareamento.",
       relayDisabled: "Relay não está ativado. Ative o relay para parear um dispositivo.",

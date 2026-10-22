@@ -1839,6 +1839,14 @@ export const ko: TranslationResources = {
       generateLink: "주소 발급",
       passwordLabel: "릴레이 비밀번호 (첫 발급 시 설정)",
       passwordRequired: "릴레이 비밀번호를 입력하세요.",
+      resetToggle: "비밀번호를 잊으셨나요? 비밀번호·주소 재설정",
+      resetPasswordLabel: "새 릴레이 비밀번호 (8자 이상)",
+      resetAndGenerate: "재설정하고 주소 발급",
+      cancelReset: "재설정 취소",
+      resetWarning:
+        "이전 주소와 비밀번호가 모두 무효가 되고, 릴레이로 연결된 기기가 끊기며 호스트가 잠시 재시작돼요.",
+      resetDone:
+        "비밀번호와 주소를 재설정했어요. 다른 기기는 새 주소와 비밀번호로 다시 연결하세요.",
       passwordSecurity:
         "주소와 릴레이 비밀번호가 모두 있어야 연결할 수 있어요. 각각 따로 전달하세요.",
       failedToLoadOffer: "페어링 정보를 불러오지 못했습니다.",

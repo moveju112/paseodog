@@ -1855,6 +1855,14 @@ export const en = {
       generateLink: "Generate link",
       passwordLabel: "Relay password (set on first use)",
       passwordRequired: "Enter the relay password.",
+      resetToggle: "Forgot the password? Reset password and link",
+      resetPasswordLabel: "New relay password (8+ characters)",
+      resetAndGenerate: "Reset and generate link",
+      cancelReset: "Cancel reset",
+      resetWarning:
+        "Every previous link and password stops working, relay devices disconnect, and the host restarts briefly.",
+      resetDone:
+        "Password and link were reset. Reconnect other devices with the new link and password.",
       passwordSecurity:
         "Connecting requires both the link and the relay password. Share them separately.",
       failedToLoadOffer: "Failed to load pairing offer.",

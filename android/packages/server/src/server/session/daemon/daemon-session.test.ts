@@ -342,6 +342,52 @@ describe("DaemonSession", () => {
     expect(pairingResponses[1]?.payload.url).toContain("#offer=");
   });
 
+  // 재설정 성공에만 재시작을 요청해 새 키를 릴레이에 적용하고, 일반 발급·실패는 재시작하지 않는다.
+  test("relay reset restarts the daemon only after a successful reset", async () => {
+    const { subsystem, emitted, restartIntents } = makeSubsystem({
+      daemonRuntimeConfig: {
+        listen: "127.0.0.1:6767",
+        appBaseUrl: "https://app.example.test",
+        getRelayConfig: () => ({
+          enabled: true,
+          endpoint: "relay.example.test:443",
+          publicEndpoint: "relay.example.test:443",
+          useTls: true,
+          publicUseTls: true,
+        }),
+      },
+    });
+
+    await subsystem.handleGetPairingOfferRequest({
+      type: "daemon.get_pairing_offer.request",
+      requestId: "issue",
+      password: "first-relay-password",
+    });
+    await subsystem.handleGetPairingOfferRequest({
+      type: "daemon.get_pairing_offer.request",
+      requestId: "bad-reset",
+      password: "short",
+      reset: true,
+    });
+    expect(restartIntents).toEqual([]);
+    await subsystem.handleGetPairingOfferRequest({
+      type: "daemon.get_pairing_offer.request",
+      requestId: "reset",
+      password: "second-relay-password",
+      reset: true,
+    });
+
+    expect(restartIntents).toEqual([
+      { type: "restart", clientId: "client-1", requestId: "reset", reason: "relay_access_reset" },
+    ]);
+    const urls = emitted
+      .filter((message) => message.type === "daemon.get_pairing_offer.response")
+      .map((message) => message.payload.url);
+    expect(urls).toHaveLength(2);
+    expect(urls[1]).not.toBe(urls[0]);
+    expect(emitted.some((message) => message.type === "rpc_error")).toBe(true);
+  });
+
   test("diagnostics includes a log tail and redacts connection secrets", async () => {
     const { subsystem, emitted, paseoHome } = makeSubsystem({
       serverId: "srv-1",

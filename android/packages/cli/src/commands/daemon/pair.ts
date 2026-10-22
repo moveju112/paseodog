@@ -20,6 +20,7 @@ interface PairOptions {
   home?: string;
   json?: boolean;
   relay?: boolean;
+  resetPassword?: boolean;
 }
 
 export interface PairCommandOutput {
@@ -37,6 +38,8 @@ export interface PairingOffer {
 }
 
 const PAIRING_DAEMON_RPC_TIMEOUT_MS = 1500;
+// bcrypt 해시·비교와 재설정 키 교체가 느린 기기에서도 응답 전에 끊기지 않게 한다.
+const PASSWORD_PAIRING_RPC_TIMEOUT_MS = 15_000;
 const RELAY_DOCS_URL = "https://paseo.sh/docs/security";
 
 function createProcessOutput(): PairCommandOutput {
@@ -62,6 +65,10 @@ export function pairCommand(): Command {
     new Command("pair").description("Print the daemon pairing QR code and link"),
   )
     .option("--relay", "Enable relay without prompting")
+    .option(
+      "--reset-password",
+      "Set a new relay password and invalidate every existing pairing link (restarts the daemon)",
+    )
     .action(
       withGlobalOptions((options: PairOptions, _command: Command) => runPairCommand(options)),
     );
@@ -71,6 +78,7 @@ export async function resolveLocalPairingOffer(options: {
   paseoHome: string;
   enableRelay?: boolean;
   password?: string;
+  reset?: boolean;
 }): Promise<PairingOffer> {
   const instance = await readDaemonInstance(options.paseoHome);
   if (instance)
@@ -78,6 +86,7 @@ export async function resolveLocalPairingOffer(options: {
       { kind: "instance", home: options.paseoHome },
       options.enableRelay,
       options.password,
+      options.reset,
     );
   if (options.enableRelay)
     editPersistedConfig(options.paseoHome, "daemon.relay.enabled", { value: true });
@@ -91,6 +100,7 @@ export async function resolveLocalPairingOffer(options: {
     paseoHome: options.paseoHome,
     relayEnabled: config.relayEnabled,
     password: options.password,
+    reset: options.reset,
     relayEndpoint: config.relayEndpoint,
     relayPublicEndpoint: config.relayPublicEndpoint,
     relayUseTls: config.relayUseTls,
@@ -104,7 +114,10 @@ async function resolveDaemonPairingOffer(
   target: DaemonTarget,
   enableRelay: boolean | undefined,
   password: string | undefined,
+  reset?: boolean,
 ): Promise<PairingOffer> {
+  const offerTimeout =
+    password === undefined ? PAIRING_DAEMON_RPC_TIMEOUT_MS : PASSWORD_PAIRING_RPC_TIMEOUT_MS;
   const client = await connectToDaemon({
     target,
     timeout: PAIRING_DAEMON_RPC_TIMEOUT_MS,
@@ -120,8 +133,9 @@ async function resolveDaemonPairingOffer(
     }
 
     let offer = await client.getDaemonPairingOffer({
-      timeout: PAIRING_DAEMON_RPC_TIMEOUT_MS,
+      timeout: offerTimeout,
       password,
+      reset,
     });
     if (!offer.relayEnabled && enableRelay) {
       if (serverInfo.features.relayConfig !== true) {
@@ -130,8 +144,9 @@ async function resolveDaemonPairingOffer(
       await client.patchDaemonConfig({ relay: { enabled: true } });
       try {
         offer = await client.getDaemonPairingOffer({
-          timeout: PAIRING_DAEMON_RPC_TIMEOUT_MS,
+          timeout: offerTimeout,
           password,
+          reset,
         });
       } catch (error) {
         throw new Error(
@@ -172,17 +187,26 @@ export async function runPairCommand(options: PairOptions): Promise<void> {
   if (!process.stdin.isTTY) {
     throw new Error("Relay pairing needs an interactive terminal to read the password.");
   }
-  const password = await passwordPrompt({ message: "Relay password (set on first use)" });
+  const reset = options.resetPassword === true;
+  const password = await passwordPrompt({
+    message: reset ? "New relay password" : "Relay password (set on first use)",
+  });
   if (isCancel(password)) throw new Error("Relay pairing cancelled");
   if (!password || Buffer.byteLength(password, "utf8") > 72) {
     throw new Error("Relay password must contain 1–72 UTF-8 bytes");
+  }
+  if (reset) {
+    // 잊은 암호를 다시 잃지 않도록 새 암호만 두 번 확인한다.
+    const confirmation = await passwordPrompt({ message: "Confirm new relay password" });
+    if (isCancel(confirmation)) throw new Error("Relay pairing cancelled");
+    if (confirmation !== password) throw new Error("Relay passwords do not match");
   }
   const output = createProcessOutput();
   const target = options.daemonTarget;
   const resolveOffer = (enableRelay: boolean) =>
     target.kind === "instance"
-      ? resolveLocalPairingOffer({ paseoHome: target.home, enableRelay, password })
-      : resolveDaemonPairingOffer(target, enableRelay, password);
+      ? resolveLocalPairingOffer({ paseoHome: target.home, enableRelay, password, reset })
+      : resolveDaemonPairingOffer(target, enableRelay, password, reset);
   const offline = target.kind === "instance" && !(await readDaemonInstance(target.home));
   const pairing = await resolveOffer(options.relay === true);
 
@@ -192,6 +216,10 @@ export async function runPairCommand(options: PairOptions): Promise<void> {
     );
 
   outputPairingResult(pairing, options, output);
+  if (reset && pairing.url && !options.json)
+    output.writeStderr(
+      `Relay password and pairing link were reset. Previous links and passwords no longer work${offline ? "." : "; the daemon is restarting."}\n`,
+    );
 }
 
 function outputPairingResult(

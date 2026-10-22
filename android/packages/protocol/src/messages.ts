@@ -1378,6 +1378,7 @@ export const DaemonGetPairingOfferRequestSchema = z.object({
   type: z.literal("daemon.get_pairing_offer.request"),
   requestId: z.string(),
   password: z.string().min(1).max(72).optional(),
+  reset: z.boolean().optional(),
 });
 
 export const DaemonConfigReloadRequestSchema = z.object({

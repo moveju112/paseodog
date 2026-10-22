@@ -43,7 +43,7 @@ test('reviewed relay patches are idempotent and refuse source drift or partial a
         assert.throws(() => patchedRelayPasswordSource(source + '// drift', spec), /hash mismatch/);
         if (spec.edits?.length > 1) {
             const [before, after] = spec.edits[0];
-            assert.throws(() => patchedRelayPasswordSource(patched.replace(after, () => before), spec), /Partial/);
+            assert.throws(() => patchedRelayPasswordSource(patched.replace(after, () => before), spec), /Partial|hash mismatch/);
         }
     }
 });
@@ -129,10 +129,63 @@ test('relay admission throttles failed and in-flight guesses without counting su
     finally { Date.now = realNow; }
 });
 
+// 원본에 앞쪽 편집 N개만 적용한 이전 배포본은 업그레이드하고, 그 밖의 중간 상태는 거부한다.
+test('edit patches upgrade the exact previous release state and refuse other partial states', () => {
+    for (const spec of RELAY_PASSWORD_PATCHES.filter((entry) => entry.legacyEditCounts)) {
+        let original = patchedRelayPasswordSource(installed(spec), spec);
+        for (const [before, after] of [...spec.edits].reverse()) original = original.replace(after, () => before);
+        const patched = patchedRelayPasswordSource(original, spec);
+        for (const count of spec.legacyEditCounts) {
+            const legacy = spec.edits.slice(0, count).reduce((text, [before, after]) => text.replace(before, () => after), original);
+            assert.equal(patchedRelayPasswordSource(legacy, spec), patched);
+        }
+        const [before, after] = spec.edits.at(-1);
+        const skippedFirst = spec.edits.slice(1).reduce((text, [b, a]) => text.replace(b, () => a), original);
+        if (skippedFirst !== original) assert.throws(() => patchedRelayPasswordSource(skippedFirst, spec), /Partial|hash mismatch|anchor/);
+        assert.ok(patched.includes(after) && !patched.includes(before + before));
+    }
+});
+
+// 잊은 암호 재설정: 새 해시·새 데몬 키로 이전 암호·주소를 무효화하고, 손상 파일도 복구하며 Hub 연결은 보호한다.
+test('relay reset replaces the password, rotates the link key, recovers corrupt state, and protects Hub enrollment', async (t) => {
+    const home = privateHome(t);
+    const helper = await loadSource(relayPasswordModule(), new URL('relay-password.js', serverRoot));
+    const spec = RELAY_PASSWORD_PATCHES.find((entry) => entry.file.endsWith('/pairing-offer.js'));
+    const { module } = await loadSource(patchedRelayPasswordSource(installed(spec), spec),
+        new URL(spec.file, new URL('server/', packageRoot)), { [new URL('relay-password.js', serverRoot).href]: helper.url });
+    const args = { paseoHome: home, relayEnabled: true, includeQr: false };
+    const first = await module.generateLocalPairingOffer({ ...args, password: 'forgotten-secret' });
+    const keyFile = join(home, 'daemon-keypair.json');
+    const firstKey = JSON.parse(readFileSync(keyFile, 'utf8')).publicKeyB64;
+    await assert.rejects(module.generateLocalPairingOffer({ ...args, password: 'short', reset: true }), /at least 8 characters/);
+    assert.equal(JSON.parse(readFileSync(keyFile, 'utf8')).publicKeyB64, firstKey);
+    const reset = await module.generateLocalPairingOffer({ ...args, password: 'brand-new-secret', reset: true });
+    const secondKey = JSON.parse(readFileSync(keyFile, 'utf8')).publicKeyB64;
+    assert.notEqual(secondKey, firstKey);
+    assert.notEqual(reset.url, first.url);
+    assert.ok(!decodeURIComponent(reset.url).includes('brand-new-secret'));
+    assert.equal(statSync(join(home, 'relay-password')).mode & 0o777, 0o600);
+    assert.equal(statSync(keyFile).mode & 0o777, 0o600);
+    await assert.rejects(module.generateLocalPairingOffer({ ...args, password: 'forgotten-secret' }), /Incorrect relay password/);
+    assert.equal((await module.generateLocalPairingOffer({ ...args, password: 'brand-new-secret' })).url, reset.url);
+    writeFileSync(join(home, 'relay-password'), 'corrupt');
+    await module.generateLocalPairingOffer({ ...args, password: 'recovered-secret', reset: true });
+    await module.generateLocalPairingOffer({ ...args, password: 'recovered-secret' });
+    writeFileSync(join(home, 'hub-relationship.json'), '{}');
+    const keyBeforeHub = readFileSync(keyFile, 'utf8'), hashBeforeHub = readFileSync(join(home, 'relay-password'), 'utf8');
+    await assert.rejects(module.generateLocalPairingOffer({ ...args, password: 'another-secret', reset: true }), /Disconnect Paseo Hub/);
+    assert.equal(readFileSync(keyFile, 'utf8'), keyBeforeHub);
+    assert.equal(readFileSync(join(home, 'relay-password'), 'utf8'), hashBeforeHub);
+});
+
 test('web issuance and address/password entry remain hash gated and reversible', () => {
     const source = readFileSync(new URL(`server/${COMPOSER_FILE}`, packageRoot), 'utf8');
     const patched = patchedComposerSource(source);
     assert.equal(patchedComposerSource(patched), patched);
     assert.equal(patchedComposerSource(withoutRelayPassword(patched)), patched);
     assert.throws(() => patchedComposerSource(source + '// drift'), /hash mismatch/);
+    // 재설정 화면·한국어 문구·재설정 요청 전달이 들어가고, 주소 입력창의 무조건 차단은 빠진다.
+    for (const marker of ['pair-device-reset-toggle', 'reset:reset', '...(e?.reset?{reset:!0}:{})', 'resetToggle:"\\ube44']) assert.ok(patched.includes(marker), marker);
+    assert.ok(!patched.includes('try{if(!O){U(R("pairing.hostPassword.label"));return}'));
+    assert.ok(patched.includes('const e=await z.submit(n,O||void 0)'));
 });

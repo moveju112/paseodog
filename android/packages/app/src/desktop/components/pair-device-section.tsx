@@ -46,8 +46,6 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
     runtimeSnapshot?.connectionStatus === "error";
   const { patchConfig } = useDaemonConfig(serverId);
   const [copied, setCopied] = useState(false);
-  const [password, setPassword] = useState("");
-  const [passwordResetKey, setPasswordResetKey] = useState(0);
   const serverFeatures = client?.getLastServerInfoMessage()?.features;
   const supportsPairingRpc = serverFeatures?.daemonStatusRpc === true;
   const canConfigureRelay = supportsPairingRpc && serverFeatures?.relayConfig === true;
@@ -77,19 +75,10 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
     },
   });
 
-  const issueOffer = useMutation({
-    retry: false,
-    mutationFn: async () => {
-      if (!client || !supportsRelayPassword) throw new Error(t("pairing.device.updateRequired"));
-      if (!password) throw new Error(t("pairing.device.passwordRequired"));
-      return client.getDaemonPairingOffer({ password });
-    },
-    onSuccess: () => {
-      setPassword("");
-      setPasswordResetKey((key) => key + 1);
-    },
-  });
-  const offer = issueOffer.data ?? pairingQuery.data;
+  const relayIssue = useRelayPasswordIssue(client, supportsRelayPassword);
+  const offer = relayIssue.issuedOffer ?? pairingQuery.data;
+  // 발급한 주소는 재설정 재시작으로 연결이 잠시 끊겨도 계속 보여 준다.
+  const hasIssuedLink = Boolean(relayIssue.issuedOffer?.url);
 
   const qrQuery = useFetchQuery({
     queryKey: ["daemon-pairing-offer-qr", offer?.url],
@@ -120,9 +109,6 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
   const handleEnableRelay = useCallback(() => {
     enableRelay.mutate();
   }, [enableRelay]);
-  const handleGenerate = useCallback(() => {
-    issueOffer.mutate();
-  }, [issueOffer]);
 
   const qrSvg = useMemo(() => qrQuery.data ?? null, [qrQuery.data]);
 
@@ -132,16 +118,21 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
         offer={offer}
         connected={isConnected}
         supported={supportsRelayPassword}
-        password={password}
-        resetKey={passwordResetKey}
-        pending={issueOffer.isPending}
-        error={issueOffer.error}
-        onPasswordChange={setPassword}
-        onGenerate={handleGenerate}
+        password={relayIssue.password}
+        resetKey={relayIssue.resetKey}
+        pending={relayIssue.pending}
+        error={relayIssue.error}
+        resetMode={relayIssue.resetMode}
+        onPasswordChange={relayIssue.setPassword}
+        onGenerate={relayIssue.generate}
+        onToggleReset={relayIssue.toggleReset}
       />
+      <RelayResetDone visible={relayIssue.wasReset} />
       <PairDeviceBody
         isPending={supportsPairingRpc && pairingQuery.isPending}
         isDisconnected={isDisconnected}
+        hasIssuedLink={hasIssuedLink}
+        passwordProtected={supportsRelayPassword}
         error={pairingQuery.error}
         offer={offer}
         canConfigureRelay={canConfigureRelay}
@@ -159,6 +150,49 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
   );
 }
 
+// 릴레이 암호로 주소 발급·재설정 (입력 암호 -> 발급 요청 -> 성공 시 입력 초기화·재설정 모드 해제)
+function useRelayPasswordIssue(
+  client: ReturnType<typeof useHostRuntimeClient>,
+  supported: boolean,
+) {
+  const { t } = useTranslation();
+  const [password, setPassword] = useState("");
+  const [resetKey, setResetKey] = useState(0);
+  const [resetMode, setResetMode] = useState(false);
+  const issueOffer = useMutation({
+    retry: false,
+    mutationFn: async (reset: boolean) => {
+      if (!client || !supported) throw new Error(t("pairing.device.updateRequired"));
+      if (!password) throw new Error(t("pairing.device.passwordRequired"));
+      return client.getDaemonPairingOffer({ password, reset });
+    },
+    onSuccess: () => {
+      setPassword("");
+      setResetKey((key) => key + 1);
+      setResetMode(false);
+    },
+  });
+  const generate = useCallback(() => {
+    issueOffer.mutate(resetMode);
+  }, [issueOffer, resetMode]);
+  const toggleReset = useCallback(() => {
+    issueOffer.reset();
+    setResetMode((current) => !current);
+  }, [issueOffer]);
+  return {
+    password,
+    setPassword,
+    resetKey,
+    resetMode,
+    generate,
+    toggleReset,
+    pending: issueOffer.isPending,
+    error: issueOffer.error,
+    issuedOffer: issueOffer.data,
+    wasReset: Boolean(issueOffer.data?.url) && issueOffer.variables === true,
+  };
+}
+
 interface RelayPasswordFormProps {
   offer: { relayEnabled: boolean; url: string } | undefined;
   connected: boolean;
@@ -167,23 +201,31 @@ interface RelayPasswordFormProps {
   resetKey: number;
   pending: boolean;
   error: Error | null;
+  resetMode: boolean;
   onPasswordChange: (password: string) => void;
   onGenerate: () => void;
+  onToggleReset: () => void;
 }
 
-// 주소가 없는 릴레이에서만 암호 입력·발급·검증 오류를 표시한다.
+// 주소가 없는 릴레이에서만 암호 입력·발급·재설정·검증 오류를 표시한다.
 function RelayPasswordForm(props: RelayPasswordFormProps) {
   const { t } = useTranslation();
   if (!props.offer?.relayEnabled || props.offer.url || !props.connected) return null;
+  const label = props.resetMode
+    ? t("pairing.device.resetPasswordLabel")
+    : t("pairing.device.passwordLabel");
   return (
     <View style={styles.consent}>
-      <Text style={styles.consentTitle}>{t("pairing.device.passwordLabel")}</Text>
+      <Text style={styles.consentTitle}>{label}</Text>
+      {props.resetMode ? (
+        <Alert size="sm" variant="warning" description={t("pairing.device.resetWarning")} />
+      ) : null}
       <TextInput
-        key={`relay-password-${props.resetKey}`}
+        key={`relay-password-${props.resetKey}-${props.resetMode ? "reset" : "issue"}`}
         secureTextEntry
         autoCapitalize="none"
         autoCorrect={false}
-        accessibilityLabel={t("pairing.device.passwordLabel")}
+        accessibilityLabel={label}
         testID="pair-device-password"
         style={styles.linkInput}
         onChangeText={props.onPasswordChange}
@@ -195,8 +237,19 @@ function RelayPasswordForm(props: RelayPasswordFormProps) {
         disabled={!props.password || !props.supported || props.pending}
         testID="pair-device-generate"
       >
-        {t("pairing.device.generateLink")}
+        {props.resetMode ? t("pairing.device.resetAndGenerate") : t("pairing.device.generateLink")}
       </Button>
+      {props.supported ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          onPress={props.onToggleReset}
+          disabled={props.pending}
+          testID="pair-device-reset-toggle"
+        >
+          {props.resetMode ? t("pairing.device.cancelReset") : t("pairing.device.resetToggle")}
+        </Button>
+      ) : null}
       {!props.supported ? (
         <Alert size="sm" variant="warning" description={t("pairing.device.updateRequired")} />
       ) : null}
@@ -205,9 +258,18 @@ function RelayPasswordForm(props: RelayPasswordFormProps) {
   );
 }
 
+// 재설정 완료 안내 (다른 기기 재연결 필요)
+function RelayResetDone({ visible }: { visible: boolean }) {
+  const { t } = useTranslation();
+  if (!visible) return null;
+  return <Alert size="sm" variant="success" description={t("pairing.device.resetDone")} />;
+}
+
 interface PairDeviceBodyProps {
   isPending: boolean;
   isDisconnected: boolean;
+  hasIssuedLink: boolean;
+  passwordProtected: boolean;
   error: Error | null;
   offer: { relayEnabled: boolean; url: string } | undefined;
   canConfigureRelay: boolean;
@@ -224,12 +286,12 @@ interface PairDeviceBodyProps {
 
 function PairDeviceBody(props: PairDeviceBodyProps) {
   const { t } = useTranslation();
-  if (props.isDisconnected) {
+  if (props.isDisconnected && !props.hasIssuedLink) {
     return (
       <OfferLoadError message={t("workspace.terminal.hostDisconnected")} onRetry={props.onRetry} />
     );
   }
-  if (props.isPending) {
+  if (props.isPending && !props.hasIssuedLink) {
     return <Text style={styles.stateLine}>{t("pairing.device.loadingOffer")}</Text>;
   }
   if (props.error) {
@@ -342,7 +404,15 @@ function PairingOffer(props: PairDeviceBodyProps & { offer: { url: string } }) {
           {props.copied ? t("pairing.device.copied") : t("pairing.device.copy")}
         </Button>
       </View>
-      <Alert size="sm" variant="warning" description={t("pairing.device.passwordSecurity")} />
+      <Alert
+        size="sm"
+        variant="warning"
+        description={
+          props.passwordProtected
+            ? t("pairing.device.passwordSecurity")
+            : t("pairing.device.securityWarning")
+        }
+      />
     </View>
   );
 }
