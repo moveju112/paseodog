@@ -142,6 +142,12 @@ function RecentSessionRow({
 }) {
   const { t } = useTranslation();
   const timeAgo = useCompactTimeAgo(agent.lastUserMessageAt);
+  const bucket = deriveSidebarStateBucket({
+    status: agent.status,
+    requiresAttention: agent.requiresAttention ?? false,
+    attentionReason: agent.attentionReason,
+    pendingPermissionCount: agent.pendingPermissions.length,
+  });
   const placement =
     agent.projectPlacement?.workspaceName || agent.projectPlacement?.projectName || "";
   const handlePress = useCallback(() => {
@@ -167,15 +173,10 @@ function RecentSessionRow({
       testID={`sidebar-recent-session-${agent.serverId}-${agent.id}`}
     >
       <View style={styles.dotSlot}>
-        <WorkspaceStatusIndicator
-          bucket={deriveSidebarStateBucket({
-            status: agent.status,
-            requiresAttention: agent.requiresAttention ?? false,
-            attentionReason: agent.attentionReason,
-            pendingPermissionCount: agent.pendingPermissions.length,
-          })}
-          workspaceKind="directory"
-        />
+        {/* 확인한 완료(done)는 체크 없이 빈 슬롯으로 둔다 */}
+        {bucket === "done" ? null : (
+          <WorkspaceStatusIndicator bucket={bucket} workspaceKind="directory" />
+        )}
       </View>
       <Text style={styles.rowTitle} numberOfLines={1}>
         {agent.title || t("agentList.fallbackTitle")}

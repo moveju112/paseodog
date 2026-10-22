@@ -77,8 +77,13 @@ test('recent session rows use the shared indicator for running, completed, permi
         const agent = { id: 'session', serverId: 'server', pendingPermissions: [], ...input };
         const row = Row({ agent });
         const indicator = row.props.children[0].props.children;
+        assert.equal(row.props.testID, 'sidebar-recent-session-server-session');
+        // 확인한 완료는 최근 목록에서 체크를 숨긴다.
+        if (expected === 'done') {
+            assert.equal(indicator, null);
+            continue;
+        }
         assert.equal(indicator.type, 'shared-status-indicator');
         assert.equal(indicator.props.bucket, expected);
-        assert.equal(row.props.testID, 'sidebar-recent-session-server-session');
     }
 });
