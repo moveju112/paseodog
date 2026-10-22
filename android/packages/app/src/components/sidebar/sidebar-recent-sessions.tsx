@@ -1,8 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { useTranslation } from "react-i18next";
-import { Columns2 } from "lucide-react-native";
-import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { StyleSheet } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
 import { WorkspaceStatusIndicator } from "@/components/sidebar/sidebar-workspace-row-content";
 import { useCompactTimeAgo } from "@/hooks/use-time-ago";
@@ -18,13 +17,9 @@ import {
   selectSplitSessionGroups,
   type RecentSessionsWindow,
 } from "@/utils/recent-sessions";
-
-const ThemedColumns2 = withUnistyles(Columns2);
-const splitIconColorMapping = (theme: { colors: { foregroundMuted: string } }) => ({
-  color: theme.colors.foregroundMuted,
-});
 import { subscribeToRelativeTimeTick } from "@/utils/relative-time-ticker";
 import { deriveSidebarStateBucket } from "@/utils/sidebar-agent-state";
+import { getStatusDotColor } from "@/utils/status-dot-color";
 
 const WINDOW_LABEL_KEYS = {
   "15m": "sidebar.recentSessions.windows.fifteenMinutes",
@@ -94,27 +89,44 @@ export const SidebarRecentSessions = memo(function SidebarRecentSessions({
       ) : (
         // 고정 하단 영역이라 행이 많으면 이 목록만 스크롤해 작업공간 목록 높이를 지킨다.
         <ScrollView style={styles.rows} testID="sidebar-recent-sessions-rows">
-          {sessions.map(({ agent, linked }) => (
-            <View key={`${agent.serverId}:${agent.id}`}>
+          {sessions.map(({ agent, linked }) =>
+            linked.length === 0 ? (
               <RecentSessionRow
+                key={`${agent.serverId}:${agent.id}`}
                 agent={agent}
-                split={linked.length > 0}
                 onBeforeNavigate={onBeforeNavigate}
               />
-              {linked.length > 0 ? (
-                <View style={styles.linkedGroup} testID="sidebar-recent-split-group">
-                  {linked.map((linkedAgent) => (
+            ) : (
+              // 분할 화면으로 함께 열린 세션: 옅은 강조 박스와 왼쪽 강조선으로 한 묶음 표시
+              <View
+                key={`${agent.serverId}:${agent.id}`}
+                style={styles.splitBox}
+                testID="sidebar-recent-split-group"
+              >
+                <View pointerEvents="none" style={styles.splitTint} />
+                <View pointerEvents="none" style={styles.splitBar} />
+                <RecentSessionRow
+                  agent={agent}
+                  linkedTo={linked
+                    .map((item) => item.title || t("agentList.fallbackTitle"))
+                    .join(", ")}
+                  onBeforeNavigate={onBeforeNavigate}
+                />
+                {linked.map((linkedAgent) => (
+                  <View
+                    key={`${linkedAgent.serverId}:${linkedAgent.id}`}
+                    style={styles.splitDivider}
+                  >
                     <RecentSessionRow
-                      key={`${linkedAgent.serverId}:${linkedAgent.id}`}
                       agent={linkedAgent}
                       linkedTo={agent.title || t("agentList.fallbackTitle")}
                       onBeforeNavigate={onBeforeNavigate}
                     />
-                  ))}
-                </View>
-              ) : null}
-            </View>
-          ))}
+                  </View>
+                ))}
+              </View>
+            ),
+          )}
         </ScrollView>
       )}
     </View>
@@ -163,17 +175,14 @@ function RecentWindowOption({
   );
 }
 
-// 최근 세션 행 (상태 링·체크·제목·분할 표시·경과 시간 -> 누르면 세션 이동)
+// 최근 세션 행 (상태 링·체크·제목·경과 시간 -> 누르면 세션 이동)
 function RecentSessionRow({
   agent,
-  split = false,
   linkedTo,
   onBeforeNavigate,
 }: {
   agent: Agent;
-  /** 분할 화면으로 함께 열린 세션을 아래에 붙인 대표 행 */
-  split?: boolean;
-  /** 분할 화면으로 붙은 행이면 대표 세션 제목 */
+  /** 분할 화면으로 함께 열린 상대 세션 제목 (접근성 이름에만 쓴다) */
   linkedTo?: string;
   onBeforeNavigate?: () => void;
 }) {
@@ -226,13 +235,6 @@ function RecentSessionRow({
       <Text style={styles.rowTitle} numberOfLines={1}>
         {title}
       </Text>
-      {split || linkedTo ? (
-        <ThemedColumns2
-          size={12}
-          uniProps={splitIconColorMapping}
-          testID="sidebar-recent-split-icon"
-        />
-      ) : null}
       {placement ? (
         <Text style={styles.rowMeta} numberOfLines={1}>
           {placement}
@@ -291,12 +293,37 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[2],
     paddingVertical: theme.spacing[1],
   },
-  // 분할 화면으로 붙은 행: 대표 행 상태 점 아래에서 이어지는 세로선으로 연결을 표시한다.
-  linkedGroup: {
-    marginLeft: theme.spacing[2] + theme.iconSize.md / 2,
-    paddingLeft: theme.spacing[1],
-    borderLeftWidth: 1,
-    borderLeftColor: theme.colors.border,
+  // 분할 묶음 박스: 실행 중 점과 같은 파란색을 옅게 깔고 테두리·왼쪽 강조선으로 묶는다.
+  splitBox: {
+    position: "relative",
+    marginVertical: 2,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    overflow: "hidden",
+  },
+  splitTint: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: getStatusDotColor({ theme, bucket: "running" }) ?? theme.colors.accent,
+    opacity: 0.07,
+  },
+  splitBar: {
+    position: "absolute",
+    left: 0,
+    top: 6,
+    bottom: 6,
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: getStatusDotColor({ theme, bucket: "running" }) ?? theme.colors.accent,
+  },
+  splitDivider: {
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    borderStyle: "dashed",
   },
   // 행 높이 30 기준 약 6행
   rows: {
