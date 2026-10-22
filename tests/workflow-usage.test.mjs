@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, mkdir, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { controlRuntime } from '../engine/src/controls.mjs';
@@ -9,6 +10,46 @@ import { patchPaseoUsage } from '../scripts/patch-paseo-usage.mjs';
 import { createWorkflowHelpers } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/runtime-core/workflow.mjs';
 import { createWorkflowPacksApi } from '../engine/node_modules/mixdog/src/session-runtime/workflow-agents-api/workflow-packs.mjs';
 import { readMarkdownDocument } from '../engine/node_modules/mixdog/src/runtime/shared/markdown-frontmatter.mjs';
+import { normalizeWorkflowSelection } from '../engine/node_modules/mixdog/src/runtime/shared/orchestration.mjs';
+
+// 설정이 비어 있는 네이티브 기본값과 명시한 선택의 보존을 독립 프로필에서 확인한다.
+test('native defaults disable workflow instructions while preserving explicit workflow choices', async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), 'paseodog-workflow-default-'));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const moduleUrl = new URL('../engine/node_modules/mixdog/src/runtime/agent/orchestrator/config.mjs', import.meta.url).href;
+    const code = `const m = await import(${JSON.stringify(moduleUrl)});
+        process.stdout.write(JSON.stringify([
+            m.buildDefaultConfig({ detectCredentials: false }).workflow.active,
+            m.loadConfig({ secrets: false }).workflow.active,
+        ]));`;
+    const result = execFileSync(process.execPath, ['--input-type=module', '--eval', code], {
+        env: { ...process.env, MIXDOG_HOME: directory, MIXDOG_DATA_DIR: join(directory, 'data') },
+        encoding: 'utf8',
+    });
+    assert.deepEqual(JSON.parse(result), ['none', 'none']);
+    assert.equal(normalizeWorkflowSelection({}).workflow.active, 'none');
+    assert.equal(normalizeWorkflowSelection({ workflow: { active: 'default' } }).workflow.active, 'default');
+    assert.equal(normalizeWorkflowSelection({ workflow: { active: 'custom' } }).workflow.active, 'custom');
+});
+
+// 실제 문서가 있어도 기본·사용 안 함 경로에서는 문서 리더를 호출하지 않는다.
+test('unset and disabled workflows never read an existing WORKFLOW.md', async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), 'paseodog-workflow-no-read-'));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    await mkdir(join(directory, 'workflows/default'), { recursive: true });
+    await writeFile(join(directory, 'workflows/default/WORKFLOW.md'), '# Must not be loaded');
+    let reads = 0;
+    const helpers = createWorkflowHelpers({
+        rootDir: directory, dataDir: directory,
+        readMarkdownDocument() { reads += 1; throw new Error('Unexpected workflow read'); },
+    });
+    for (const config of [{}, { workflow: {} }, { workflow: { active: '' } }, { workflow: { active: 'none' } }]) {
+        assert.equal(helpers.activeWorkflowId(config), 'none');
+        assert.equal(helpers.activeWorkflowContext(config, directory).packContext, '');
+        assert.equal(helpers.activeWorkflowSummary(config, directory).id, 'none');
+    }
+    assert.equal(reads, 0);
+});
 
 test('Claude usage uses native refresh and exports only public quota fields', async () => {
     const calls = [];

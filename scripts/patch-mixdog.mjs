@@ -52,6 +52,7 @@ export const AGENT_PATCHES = [
     {
         file: 'src/runtime/agent/orchestrator/runtime-core/workflow/packs.mjs',
         blob: 'dd692d1794eae53932b24b49be6a7caa8dce72b1',
+        previousEditCount: 6,
         edits: [
             [
                 "const WORKFLOW_ENTRY = 'WORKFLOW.md';",
@@ -77,7 +78,33 @@ export const AGENT_PATCHES = [
                 '    const wanted = wantedWorkflowId(id);\n    return packCache.shared',
                 "    const wanted = wantedWorkflowId(id);\n    if (wanted === 'none') return NO_WORKFLOW;\n    return packCache.shared",
             ],
+            [
+                '    return wantedWorkflowId(config?.workflow?.active);',
+                "    return wantedWorkflowId(config?.workflow?.active || 'none');",
+            ],
         ],
+    },
+    {
+        file: 'src/runtime/agent/orchestrator/config.mjs',
+        blob: '0ebac1c63784e2a81a358f24fc521b2ae7c2874f',
+        edits: [
+            [
+                "    disabledAgents: [...DEFAULT_DISABLED_AGENT_ROSTER],\n    workflow: { active: 'default' },",
+                "    disabledAgents: [...DEFAULT_DISABLED_AGENT_ROSTER],\n    workflow: { active: 'none' },",
+            ],
+            [
+                "    agents: {},\n    workflow: { active: 'default' },",
+                "    agents: {},\n    workflow: { active: 'none' },",
+            ],
+        ],
+    },
+    {
+        file: 'src/runtime/shared/orchestration.mjs',
+        blob: '22b2379c040afc63a93d4102f72d852da29c1f7d',
+        edits: [[
+            "  const active = String(config?.workflow?.active || 'default');",
+            "  const active = String(config?.workflow?.active || 'none');",
+        ]],
     },
     {
         file: 'src/runtime/agent/orchestrator/runtime-core/workflow/context.mjs',

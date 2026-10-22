@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
 const host = vi.hoisted(() => ({
   connected: true,
@@ -33,6 +41,7 @@ interface MockInputProps {
   onChangeText?: (text: string) => void;
   accessibilityLabel?: string;
   multiline?: boolean;
+  placeholder?: string;
 }
 vi.mock("react-native", () => ({
   View: ({ children }: MockChildren) => <div>{children}</div>,
@@ -57,6 +66,7 @@ vi.mock("@/components/adaptive-text-input", () => ({
     onChangeText,
     accessibilityLabel,
     multiline,
+    placeholder,
   }: MockInputProps) {
     const handleChange = React.useCallback(
       (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -66,6 +76,7 @@ vi.mock("@/components/adaptive-text-input", () => ({
     return multiline ? (
       <textarea
         key={resetKey}
+        placeholder={placeholder}
         aria-label={accessibilityLabel}
         defaultValue={initialValue}
         onChange={handleChange}
@@ -73,6 +84,7 @@ vi.mock("@/components/adaptive-text-input", () => ({
     ) : (
       <input
         key={resetKey}
+        placeholder={placeholder}
         aria-label={accessibilityLabel}
         defaultValue={initialValue}
         onChange={handleChange}
@@ -284,31 +296,39 @@ describe("native host AI engine settings", () => {
     let page = render(<AiEnginePage serverId="style-host" section="workflow" />);
     for (const style of outputStyles) {
       await screen.findByRole("button", { name: "응답 출력 스타일" });
-      fireEvent.click(screen.getByRole("button", {
-        name: `${outputStyle === style.id ? "✓ " : ""}${style.label}`,
-      }));
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: `${outputStyle === style.id ? "✓ " : ""}${style.label}`,
+        }),
+      );
       await waitFor(() =>
-        expect(screen.getByRole("button", { name: "응답 출력 스타일" }).textContent)
-          .toBe(style.label),
+        expect(screen.getByRole("button", { name: "응답 출력 스타일" }).textContent).toBe(
+          style.label,
+        ),
       );
       await screen.findByText("저장했어요. 실시간으로 반영돼요.");
       page.unmount();
       clearAiEngineSnapshotCache();
       page = render(<AiEnginePage serverId="style-host" section="workflow" />);
       await waitFor(() =>
-        expect(screen.getByRole("button", { name: "응답 출력 스타일" }).textContent)
-          .toBe(style.label),
+        expect(screen.getByRole("button", { name: "응답 출력 스타일" }).textContent).toBe(
+          style.label,
+        ),
       );
     }
-    expect(host.invokePluginRpc.mock.calls.filter(([, , input]) =>
-      input.action === "preferences").map(([, , input]) => input.outputStyle))
-      .toEqual(outputStyles.map((style) => style.id));
+    expect(
+      host.invokePluginRpc.mock.calls
+        .filter(([, , input]) => input.action === "preferences")
+        .map(([, , input]) => input.outputStyle),
+    ).toEqual(outputStyles.map((style) => style.id));
   });
 
   it("does not invent unsupported output styles when the host has no catalog", async () => {
     render(<AiEnginePage serverId="style-host" section="workflow" />);
-    expect(await screen.findByRole("button", { name: "응답 출력 스타일" }))
-      .toHaveProperty("disabled", true);
+    expect(await screen.findByRole("button", { name: "응답 출력 스타일" })).toHaveProperty(
+      "disabled",
+      true,
+    );
     expect(screen.queryByRole("button", { name: "간결함 (Concise)" })).toBeNull();
   });
 
@@ -335,14 +355,18 @@ describe("native host AI engine settings", () => {
       await result.current.draft.control?.request({ action: "main", route: { autoEffort: false } });
     });
     await waitFor(() => expect(result.current.settings.snapshot?.route.autoEffort).toBe(false));
-    expect(host.invokePluginRpc.mock.calls.filter(([, , input]) => input.action === "main"))
-      .toHaveLength(2);
+    expect(
+      host.invokePluginRpc.mock.calls.filter(([, , input]) => input.action === "main"),
+    ).toHaveLength(2);
   });
 
   it("waits for workflow save confirmation and retains the editor on failure", async () => {
     let failSave: (error: Error) => void = () => {};
     host.invokePluginRpc.mockImplementation(async (_plugin, _method, input) => {
-      if (input.action === "workflowSave") return new Promise((_resolve, reject) => { failSave = reject; });
+      if (input.action === "workflowSave")
+        return new Promise((_resolve, reject) => {
+          failSave = reject;
+        });
       return snapshot;
     });
     render(<AiEnginePage serverId="host-one" section="workflow" />);
@@ -352,10 +376,15 @@ describe("native host AI engine settings", () => {
     expect(screen.getByText("저장 중…")).toBeTruthy();
     expect(screen.queryByText("저장했어요. 실시간으로 반영돼요.")).toBeNull();
     expect(screen.getByRole("dialog", { name: "작업 규칙 편집" })).toBeTruthy();
-    expect(host.invokePluginRpc).toHaveBeenCalledWith("paseodog-provider", "engine-controls",
-      expect.objectContaining({ action: "workflowSave", activate: false }));
+    expect(host.invokePluginRpc).toHaveBeenCalledWith(
+      "paseodog-provider",
+      "engine-controls",
+      expect.objectContaining({ action: "workflowSave", activate: false }),
+    );
     failSave(new Error("disconnected"));
-    await screen.findByText("저장 결과를 확인하지 못했어요. 새로고침으로 현재 설정을 확인해 주세요.");
+    await screen.findByText(
+      "저장 결과를 확인하지 못했어요. 새로고침으로 현재 설정을 확인해 주세요.",
+    );
     expect(screen.getByRole("dialog", { name: "작업 규칙 편집" })).toBeTruthy();
     expect(screen.queryByText("저장했어요. 실시간으로 반영돼요.")).toBeNull();
   });
@@ -492,7 +521,9 @@ describe("native host AI engine settings", () => {
     const compaction = await screen.findByRole("checkbox", { name: "자동 압축" });
     expect(screen.queryByText("자동 추론 조절 (Auto-Effort)")).toBeNull();
     expect(screen.queryByRole("checkbox", { name: "토큰절감 자동 추론 조절" })).toBeNull();
-    expect(host.invokePluginRpc.mock.calls.every(([, , input]) => input.action === "read")).toBe(true);
+    expect(host.invokePluginRpc.mock.calls.every(([, , input]) => input.action === "read")).toBe(
+      true,
+    );
     fireEvent.click(compaction);
     await waitFor(() =>
       expect(host.invokePluginRpc).toHaveBeenLastCalledWith(
@@ -558,7 +589,9 @@ describe("native host AI engine settings", () => {
     await waitFor(() => expect((toggle as HTMLInputElement).checked).toBe(false));
     expect(screen.getByText("저장 중…")).toBeTruthy();
     failSave(new Error("disconnected"));
-    await screen.findByText("저장 결과를 확인하지 못했어요. 새로고침으로 현재 설정을 확인해 주세요.");
+    await screen.findByText(
+      "저장 결과를 확인하지 못했어요. 새로고침으로 현재 설정을 확인해 주세요.",
+    );
     expect((toggle as HTMLInputElement).checked).toBe(true);
     expect(screen.queryByText("저장 중…")).toBeNull();
   });
@@ -668,6 +701,31 @@ describe("native host AI engine settings", () => {
       ),
     );
   });
+  it("selects disabled workflow directly without opening or reading its document", async () => {
+    host.invokePluginRpc.mockResolvedValue({
+      ...snapshot,
+      workflows: [...snapshot.workflows, { id: "none", name: "사용 안 함", active: false }],
+    });
+    render(<AiEnginePage serverId="host-one" section="workflow" />);
+    fireEvent.click(await screen.findByRole("button", { name: "작업 규칙 사용 안 함" }));
+    await waitFor(() =>
+      expect(host.invokePluginRpc).toHaveBeenCalledWith("paseodog-provider", "engine-controls", {
+        action: "workflow",
+        workflow: "none",
+      }),
+    );
+    expect(screen.queryByRole("dialog", { name: "작업 규칙 편집" })).toBeNull();
+    expect(host.invokePluginRpc).not.toHaveBeenCalledWith("paseodog-provider", "engine-controls", {
+      action: "workflowPack",
+      workflow: "none",
+    });
+    expect(
+      screen.getByText(
+        "기본값은 사용 안 함입니다. 사용 안 함은 WORKFLOW.md를 읽거나 대화 지침에 추가하지 않습니다.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("opens Mixdog-style workflow rule modals to edit and create workflow rules", async () => {
     render(<AiEnginePage serverId="host-one" section="workflow" />);
     fireEvent.click(await screen.findByRole("button", { name: "협업" }));
@@ -682,6 +740,7 @@ describe("native host AI engine settings", () => {
     fireEvent.click(screen.getByRole("button", { name: "작업 규칙 Default" }));
     expect(screen.getByRole("dialog", { name: "작업 규칙 편집" })).toBeTruthy();
     const bodyInput = await screen.findByLabelText("워크플로 본문");
+    expect(bodyInput.getAttribute("placeholder")).toBe("사용할 WORKFLOW.md 지침을 작성하세요.");
     fireEvent.change(bodyInput, { target: { value: "# Custom Rules\n- Always verify.\n" } });
     fireEvent.click(screen.getByRole("button", { name: "저장" }));
     await waitFor(() =>

@@ -764,6 +764,10 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
   // 작업 규칙 클릭 -> 모달 편집기 오픈
   const openEditWorkflowModal = useCallback(
     (item: EngineSnapshot["workflows"][number]) => {
+      if (item.id === "none") {
+        void request({ action: "workflow", workflow: "none" });
+        return;
+      }
       setEditingWorkflowId(item.id);
       setWfName(item.name || item.id);
       setWfDesc(item.description || "");
@@ -1168,6 +1172,10 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
             +
           </Button>
         </View>
+        <Text style={settingsStyles.rowHint}>
+          기본값은 사용 안 함입니다. 사용 안 함은 WORKFLOW.md를 읽거나 대화 지침에 추가하지
+          않습니다.
+        </Text>
         <View style={settingsStyles.card}>
           {snapshot.workflows.map((item) => (
             <Pressable
@@ -1458,7 +1466,7 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
               initialValue={wfBody}
               resetKey={wfRevision}
               onChangeText={setWfBody}
-              placeholder="비워두면 기본 WORKFLOW.md 템플릿을 사용합니다."
+              placeholder="사용할 WORKFLOW.md 지침을 작성하세요."
               multiline
               editable={!disabled}
               style={[settingsStyles.rowTitle, inputStyle, layout.bodyInput]}

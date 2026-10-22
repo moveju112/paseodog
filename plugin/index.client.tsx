@@ -373,7 +373,7 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
             <Text style={text}>{ORCHESTRATION_DESC[snapshot.orchestration] || ''}</Text>
 
             <Text style={{ ...text, fontSize: 18 }}>워크플로 (WORKFLOW.md)</Text>
-            <Text style={text}>사용 안 함을 선택하면 WORKFLOW.md를 읽거나 지침에 추가하지 않아요. 기본 지침 파일 설정은 유지돼요.</Text>
+            <Text style={text}>기본값은 사용 안 함이에요. WORKFLOW.md를 읽거나 지침에 추가하지 않아요. 기본 지침 파일 설정은 유지돼요.</Text>
             {snapshot.workflows.map((workflow) => button(workflow.name,
                 () => void request({ action: 'workflow', workflow: workflow.id }), workflow.active))}
             {activeWorkflow && activeWorkflow.id !== 'none' && button(
