@@ -65,8 +65,8 @@ function describe(entry: UsageReportEntry, windowLabel: string): string {
   return `${sourceName(entry)} ${windowLabel}`;
 }
 
-// PaseoDog: 보고서 도착 순서와 무관하게 Codex -> Claude -> 나머지 공급자 순으로 고정한다.
-const SOURCE_ORDER = ["codex", "claude"];
+// PaseoDog: 보고서 도착 순서와 무관하게 Claude -> Codex -> 나머지 공급자 순으로 고정한다.
+const SOURCE_ORDER = ["claude", "codex"];
 
 // 공급자 순위 계산 (고정 목록 순위 -> 목록 밖은 모두 뒤)
 function sourceRank(sourceId: string): number {

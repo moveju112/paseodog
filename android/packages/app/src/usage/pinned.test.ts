@@ -94,10 +94,10 @@ describe("resolvePinnedUsage", () => {
         item.percentText,
       ]),
     ).toEqual([
-      ["codex:default/weekly", "12%"],
       ["claude:default/five-hour", "31%"],
       ["claude:default/weekly", "80%"],
       ["claude:work/weekly", "90%"],
+      ["codex:default/weekly", "12%"],
     ]);
   });
 
@@ -109,12 +109,12 @@ describe("resolvePinnedUsage", () => {
       ),
     ).toEqual(["claude:default/weekly"]);
     expect(windows(reports, preferences(null)).map((item) => item.key)).toEqual([
-      "codex:default/weekly",
       "claude:default/five-hour",
+      "codex:default/weekly",
     ]);
   });
 
-  it("groups pinned windows by source in the fixed Codex-then-Claude order, not pin order", () => {
+  it("groups pinned windows by source in the fixed Claude-then-Codex order, not pin order", () => {
     const work = report({
       sourceId: "claude",
       sourceLabel: "Claude",
@@ -132,11 +132,11 @@ describe("resolvePinnedUsage", () => {
 
     const windowKeys = (source: PinnedUsageSource) => source.windows.map((window) => window.key);
     expect(sources.map((source) => [source.key, windowKeys(source)])).toEqual([
-      ["codex:default", ["codex:default/weekly"]],
       ["claude:default", ["claude:default/five-hour", "claude:default/weekly"]],
       ["claude:work", ["claude:work/weekly"]],
+      ["codex:default", ["codex:default/weekly"]],
     ]);
-    expect(sources[1]).toEqual({
+    expect(sources[0]).toEqual({
       key: "claude:default",
       sourceId: "claude",
       label: "Claude",
@@ -182,9 +182,9 @@ describe("resolvePinnedUsage", () => {
     });
 
     expect(windows([marked, codex], preferences(null)).map((item) => item.key)).toEqual([
-      "codex:default/weekly",
       "claude:default/five-hour",
       "claude:default/weekly",
+      "codex:default/weekly",
     ]);
   });
 
@@ -211,10 +211,10 @@ describe("resolvePinnedUsage", () => {
       ),
     );
 
-    expect(items.map((item) => item.percentText)).toEqual(["88%", "69%"]);
+    expect(items.map((item) => item.percentText)).toEqual(["69%", "88%"]);
     expect(items.map((item) => item.label)).toEqual([
-      "Codex Weekly 88% left",
       "Claude Session 69% left",
+      "Codex Weekly 88% left",
     ]);
   });
 
@@ -225,8 +225,8 @@ describe("resolvePinnedUsage", () => {
       windows: [{ id: "weekly", label: "Weekly", shortLabel: "wk", usedPct: 5 }],
     });
     const expected = [
-      ["codex:default", ["codex:default/weekly"]],
       ["claude:default", ["claude:default/five-hour", "claude:default/weekly"]],
+      ["codex:default", ["codex:default/weekly"]],
       ["grok:default", ["grok:default/weekly"]],
     ];
     const pins = preferences([
@@ -277,10 +277,10 @@ describe("resolvePinnedUsage", () => {
     const items = windows([mixdog, builtin], preferences(null));
 
     expect(items.map((item) => [item.shortLabel, item.percentText, item.label])).toEqual([
-      ["5h", "0%", "Codex 5-hour 0% used"],
-      ["7D", "97%", "Codex Weekly 97% used"],
       ["5H", "2%", "Claude 5H 2% used"],
       ["7D", "64%", "Claude 7D 64% used"],
+      ["5h", "0%", "Codex 5-hour 0% used"],
+      ["7D", "97%", "Codex Weekly 97% used"],
     ]);
   });
 
