@@ -26,6 +26,7 @@ import { HighlightedCodeBlock } from "@/components/highlighted-code-block";
 import { MarkdownFenceBlock } from "@/components/markdown/fence";
 import { MarkdownParagraphView, MarkdownTextSpan } from "@/components/markdown-text";
 import { MarkdownTableCellText } from "@/components/markdown-text-selection";
+import { MarkdownTable, MarkdownTableCell } from "@/components/markdown/table";
 import { getMarkdownListMarker, getMarkdownListSpacing } from "@/utils/markdown-list";
 import { markdownNodeContainsType } from "@/utils/markdown-ast";
 import { createMarkdownParser } from "@/utils/markdown-parser";
@@ -683,14 +684,17 @@ export function createSharedMarkdownRules(): RenderRules {
         </View>
       );
     },
-    th: (node: ASTNode, children: ReactNode[], _parent: ASTNode[], styles: MarkdownStyles) => (
+    table: (node: ASTNode, children: ReactNode[], _parent: ASTNode[], styles: MarkdownStyles) => (
+      <MarkdownTable key={node.key} node={node} styles={styles}>{children}</MarkdownTable>
+    ),
+    th: (node: ASTNode, children: ReactNode[], parent: ASTNode[], styles: MarkdownStyles) => (
       <MarkdownTableCellText key={node.key}>
-        <View style={styles._VIEW_SAFE_th}>{children}</View>
+        <MarkdownTableCell node={node} parent={parent} style={styles._VIEW_SAFE_th}>{children}</MarkdownTableCell>
       </MarkdownTableCellText>
     ),
-    td: (node: ASTNode, children: ReactNode[], _parent: ASTNode[], styles: MarkdownStyles) => (
+    td: (node: ASTNode, children: ReactNode[], parent: ASTNode[], styles: MarkdownStyles) => (
       <MarkdownTableCellText key={node.key}>
-        <View style={styles._VIEW_SAFE_td}>{children}</View>
+        <MarkdownTableCell node={node} parent={parent} style={styles._VIEW_SAFE_td}>{children}</MarkdownTableCell>
       </MarkdownTableCellText>
     ),
     paragraph: (

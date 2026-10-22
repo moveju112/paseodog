@@ -9,6 +9,19 @@ import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-com
 const pinSource = stripTypeScriptTypes(readFileSync(new URL('../android/packages/app/src/usage/pin-compatibility.ts', import.meta.url), 'utf8')).replace(/^export /gm, '');
 const restorePins = new Function(`${pinSource}\nreturn restoreClaudeUsagePins;`)();
 
+test('mobile message copy button moves 12px inward without changing desktop spacing', () => {
+    const shared = readFileSync(new URL('../android/packages/app/src/components/message.tsx', import.meta.url), 'utf8');
+    const styleText = shared.slice(shared.indexOf('  copyButton: {'), shared.indexOf('  trailingRow: {'));
+    const theme = { spacing: { 1: 4, 2: 8 } };
+    const style = vm.runInNewContext(`({${styleText}}).copyButton`, { theme });
+    assert.equal(style.marginRight.xs, 8);
+    assert.equal(style.marginRight.md, -4);
+    const web = CHAT_USABILITY_EDITS[0][1].split(',uni__dependencies:')[0];
+    const webStyle = vm.runInNewContext(`({${web}})`, { e: theme });
+    assert.equal(webStyle.marginRight.xs, style.marginRight.xs);
+    assert.equal(webStyle.marginRight.md, style.marginRight.md);
+});
+
 test('old Claude pins retain their periods without adding explicitly hidden sources', () => {
     const reports = [{
         id: 'claude:mixdog-anthropic-oauth', sourceId: 'claude',
@@ -65,7 +78,7 @@ test('web UI upgrades the installed renderer and remains hash-gated and idempote
     new vm.Script(source);
     assert.equal(patchedComposerSource(source), source);
     assert.equal(withChatUsability(withoutChatUsability(source)), source);
-    const [before, after] = CHAT_USABILITY_EDITS[0];
+    const [before, after] = CHAT_USABILITY_EDITS[1];
     assert.throws(() => patchedComposerSource(source.replace(after, () => before)), /Partial/);
     assert.throws(() => patchedComposerSource(source + '// drift'), /hash mismatch/);
 });

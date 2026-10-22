@@ -5,6 +5,8 @@ const pinSource = stripTypeScriptTypes(readFileSync(new URL('../android/packages
 const restorePins = new Function(`${pinSource}\nreturn restoreClaudeUsagePins;`)().toString();
 
 export const CHAT_USABILITY_EDITS = [
+    ['marginRight:-e.spacing[1],uni__dependencies:[0]},trailingRow:',
+        'marginRight:{xs:e.spacing[2],md:-e.spacing[1]},uni__dependencies:[0]},trailingRow:'],
     ['contentWrapper:{width:"100%",maxWidth:e.contentMaxWidth,alignSelf:"center",paddingHorizontal:e.spacing[2],uni__dependencies:[0]}',
         'contentWrapper:{width:"100%",maxWidth:e.contentMaxWidth,alignSelf:"center",paddingHorizontal:{xs:e.spacing[1],md:e.spacing[2]},uni__dependencies:[0]}'],
     ['streamItemWrapper:{width:"100%",maxWidth:e.contentMaxWidth,alignSelf:"center",paddingHorizontal:e.spacing[2],uni__dependencies:[0]}',
@@ -21,7 +23,7 @@ export const CHAT_USABILITY_EDITS = [
 
 // 전체 번들 해시 확인 전에 이번 UI 편집만 역순으로 제거한다.
 export function withoutChatUsability(source) {
-    const counts = CHAT_USABILITY_EDITS.map(([, after]) => source.split(after).length - 1);
+    const counts = CHAT_USABILITY_EDITS.slice(1).map(([, after]) => source.split(after).length - 1);
     if (counts.some((count) => count > 1)) throw new Error('Paseo chat usability patch drift');
     if (counts.includes(0) && counts.some((count) => count > 0)) throw new Error('Partial Paseo chat usability patch');
     for (const [before, after] of [...CHAT_USABILITY_EDITS].reverse()) source = source.replace(after, () => before);

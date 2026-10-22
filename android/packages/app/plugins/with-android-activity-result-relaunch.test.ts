@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 const { configureActivityResultRelaunch } = require("./with-android-activity-result-relaunch");
 
-// 재생성 보정 주입의 위치·멱등성·드리프트 거부 확인
+// 이전 MainActivity 우회 제거와 사용자 코드 보존을 확인한다.
 describe("withAndroidActivityResultRelaunch", () => {
   const source = [
     "class MainActivity : ReactActivity() {",
@@ -15,22 +15,33 @@ describe("withAndroidActivityResultRelaunch", () => {
     "}",
   ].join("\n");
 
-  it("notifies the React host synchronously on configuration relaunch", () => {
-    const configured = configureActivityResultRelaunch(source);
-
-    expect(configured).toContain(
-      "    super.onCreate(null)\n  }\n\n  // PASEODOG_ACTIVITY_RESULT_RELAUNCH",
-    );
-    expect(configured).toContain(
-      "    if (isChangingConfigurations) {\n      reactHost?.onHostDestroy(this)\n    }\n    super.onDestroy()",
-    );
-    expect(configureActivityResultRelaunch(configured)).toBe(configured);
+  it("leaves a fresh Activity and unrelated overrides unchanged", () => {
+    expect(configureActivityResultRelaunch(source)).toBe(source);
+    const custom = `${source}\n  override fun onDestroy() { customCleanup() }`;
+    expect(configureActivityResultRelaunch(custom)).toBe(custom);
   });
 
-  it("refuses to patch an unexpected MainActivity", () => {
-    expect(() => configureActivityResultRelaunch("class MainActivity")).toThrow();
-    expect(() =>
-      configureActivityResultRelaunch(`${source}\n  override fun onDestroy() {}`),
-    ).toThrow();
+  it("removes the obsolete forced host destruction idempotently", () => {
+    const legacy = [
+      "",
+      "  // PASEODOG_ACTIVITY_RESULT_RELAUNCH: expo onDestroy is asynchronous, so a configuration relaunch can resume",
+      "  // the new Activity before the React host hears about the old one. Notify synchronously so",
+      "  // expo-modules-core re-registers activity result contracts (image picker) for the new Activity.",
+      "  override fun onDestroy() {",
+      "    if (isChangingConfigurations) {",
+      "      reactHost?.onHostDestroy(this)",
+      "    }",
+      "    super.onDestroy()",
+      "  }",
+      "",
+    ].join("\n");
+    expect(configureActivityResultRelaunch(source + legacy)).toBe(source);
+    expect(configureActivityResultRelaunch(configureActivityResultRelaunch(source + legacy))).toBe(source);
+  });
+
+  it("rejects a modified legacy override instead of removing unknown code", () => {
+    expect(() => configureActivityResultRelaunch(`${source}\n// PASEODOG_ACTIVITY_RESULT_RELAUNCH`)).toThrow(
+      "Unexpected legacy",
+    );
   });
 });

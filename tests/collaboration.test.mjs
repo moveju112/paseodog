@@ -32,8 +32,10 @@ import { withoutOfferLink } from '../patches/paseo-offer-link.mjs';
 import { withoutSettingsCorrections } from '../patches/paseo-settings-corrections.mjs';
 import { withoutAgentEditorSafety } from '../patches/paseo-agent-editor-safety.mjs';
 import { withoutChatUsability } from '../patches/paseo-chat-usability.mjs';
+import { withoutMarkdownTable } from '../patches/paseo-markdown-table.mjs';
 // 사이드바 쿼터 패치 해제 (도넛 -> 고정 순서, 실제 composer 체인 순서)
 const withoutUsageOrder = (source) => {
+    source = withoutMarkdownTable(source);
     source = withoutCompactionBuffer(withoutOfferLink(withoutSettingsCorrections(withoutAgentEditorSafety(withoutChatUsability(source)))));
     return withoutUsageOrderOnly(withoutUsageDonut(withoutSidebarStatusShapes(withoutWorkRecords(withoutExternalLinks(withoutRelayPassword(withoutConversationFocus(source)))))));
 };

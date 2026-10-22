@@ -1,7 +1,8 @@
-const { withMainActivity } = require("expo/config-plugins");
+const { withDangerousMod, withMainActivity } = require("expo/config-plugins");
+const { dirname, resolve } = require("node:path");
+const { pathToFileURL } = require("node:url");
 
 const PATCH_MARKER = "PASEODOG_ACTIVITY_RESULT_RELAUNCH";
-const ON_CREATE_END = "    super.onCreate(null)\n  }\n";
 const ON_DESTROY_OVERRIDE = [
   "",
   `  // ${PATCH_MARKER}: expo onDestroy is asynchronous, so a configuration relaunch can resume`,
@@ -16,31 +17,37 @@ const ON_DESTROY_OVERRIDE = [
   "",
 ].join("\n");
 
-// 설정 변경 재생성 시 React 호스트 파괴를 동기 통지하는 onDestroy 주입 (MainActivity -> onDestroy)
+// 이전 우회 코드는 제거하고 Expo 내부의 Activity 등록 순서를 직접 보정한다.
 function configureActivityResultRelaunch(contents) {
-  if (contents.includes(PATCH_MARKER)) {
-    return contents;
+  if (contents.includes(PATCH_MARKER) && !contents.includes(ON_DESTROY_OVERRIDE)) {
+    throw new Error("Unexpected legacy Activity result relaunch patch");
   }
-  const at = contents.indexOf(ON_CREATE_END);
-  if (at < 0 || contents.indexOf(ON_CREATE_END, at + 1) !== -1) {
-    throw new Error("Could not find a single MainActivity onCreate end for the relaunch fix");
-  }
-  if (contents.includes("override fun onDestroy(")) {
-    throw new Error("MainActivity already overrides onDestroy; merge the relaunch fix manually");
-  }
-  const insertAt = at + ON_CREATE_END.length;
-  return contents.slice(0, insertAt) + ON_DESTROY_OVERRIDE + contents.slice(insertAt);
+  return contents.replace(ON_DESTROY_OVERRIDE, "");
 }
 
-// Kotlin MainActivity에만 재생성 보정 적용 (config -> MainActivity.kt)
+// prebuild마다 버전·해시 검증 패치를 적용하고 기존 MainActivity 우회를 제거한다.
 function withAndroidActivityResultRelaunch(config) {
-  return withMainActivity(config, (modConfig) => {
+  config = withMainActivity(config, (modConfig) => {
     if (modConfig.modResults.language !== "kt") {
       throw new Error("Activity result relaunch fix requires a Kotlin MainActivity");
     }
     modConfig.modResults.contents = configureActivityResultRelaunch(modConfig.modResults.contents);
     return modConfig;
   });
+  return withDangerousMod(config, [
+    "android",
+    async (modConfig) => {
+      const { patchExpoActivityResult } = await import(
+        pathToFileURL(resolve(__dirname, "../../../../scripts/patch-expo-activity-result.mjs")).href
+      );
+      patchExpoActivityResult(
+        dirname(require.resolve("expo-modules-core/package.json", {
+          paths: [modConfig.modRequest.projectRoot],
+        })),
+      );
+      return modConfig;
+    },
+  ]);
 }
 
 module.exports = withAndroidActivityResultRelaunch;
