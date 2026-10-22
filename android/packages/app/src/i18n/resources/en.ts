@@ -2295,6 +2295,10 @@ export const en = {
         label: "Always expand reasoning",
         description: "Show agent thinking and chain-of-thought blocks fully expanded by default",
       },
+      assistantNickname: {
+        label: "Assistant nickname",
+        description: "Name shown in conversations. Leave empty to use Dog.",
+      },
       hideReasoning: {
         label: "Hide reasoning",
         description:

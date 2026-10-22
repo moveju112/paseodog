@@ -107,6 +107,8 @@ export interface AppSettings {
   autoExpandReasoning: boolean;
   /** Hide reasoning rows in chat; the model and its native history still keep reasoning. */
   hideReasoning: boolean;
+  /** 대화에 표시할 도우미 닉네임 (비어 있으면 Dog). */
+  assistantNickname: string;
   toolCallDetailLevel: ToolCallDetailLevel;
   chatOutlineEnabled: boolean;
   /** Show the git diff summary button (+added -removed) above the composer. */
@@ -170,6 +172,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   usage: DEFAULT_USAGE_PREFERENCES,
   autoExpandReasoning: false,
   hideReasoning: false,
+  assistantNickname: "Dog",
   toolCallDetailLevel: "detailed",
   chatOutlineEnabled: true,
   showGitDiffSummary: true,
@@ -269,6 +272,7 @@ const StoredAppSettingsSchema = z
     usage: UsagePreferencesSchema,
     autoExpandReasoning: z.boolean().catch(false),
     hideReasoning: z.boolean().catch(false),
+    assistantNickname: z.string().trim().min(1).catch("Dog"),
     toolCallDetailLevel: z
       .enum(["overview", "detailed", "hidden"])
       .or(z.literal("concise").transform(() => "overview" as const))

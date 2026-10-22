@@ -2170,6 +2170,10 @@ export const ar: TranslationResources = {
         label: "عرض التفكير دائماً",
         description: "إظهار تفكير الوكيل وخطوات الاستدلال بشكل كامل بشكل افتراضي",
       },
+      assistantNickname: {
+        label: "اسم المساعد",
+        description: "الاسم المعروض في المحادثات. اتركه فارغًا لاستخدام Dog.",
+      },
       hideReasoning: {
         label: "إخفاء التفكير",
         description:

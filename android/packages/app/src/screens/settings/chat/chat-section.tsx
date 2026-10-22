@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { useTranslation } from "react-i18next";
 import {
   SettingsCard,
+  SettingsInput,
   SettingsSection,
   SettingsSelect,
   SettingsSwitch,
@@ -16,6 +17,7 @@ const TOOL_CALL_DETAIL_LEVELS: readonly AppSettings["toolCallDetailLevel"][] = [
   "hidden",
 ];
 
+// 채팅 표시 설정과 도우미 닉네임을 기기별로 저장한다.
 export function ChatSection() {
   const { t } = useTranslation();
   const { settings, updateSettings } = useAppSettings();
@@ -32,6 +34,11 @@ export function ChatSection() {
   const changeToolCallDetailLevel = useCallback(
     (toolCallDetailLevel: AppSettings["toolCallDetailLevel"]) =>
       void updateSettings({ toolCallDetailLevel }),
+    [updateSettings],
+  );
+  // 닉네임 입력 (변경값 -> 기존 앱 설정 저장·빈 값은 Dog로 정규화).
+  const changeAssistantNickname = useCallback(
+    (assistantNickname: string) => void updateSettings({ assistantNickname }),
     [updateSettings],
   );
   const changeAutoExpandReasoning = useCallback(
@@ -56,6 +63,14 @@ export function ChatSection() {
     <View>
       <SettingsSection title={t("settings.appearance.detailLevel.title")}>
         <SettingsCard>
+          <SettingsInput
+            label={t("settings.general.assistantNickname.label")}
+            hint={t("settings.general.assistantNickname.description")}
+            initialValue={settings.assistantNickname}
+            placeholder="Dog"
+            onChangeText={changeAssistantNickname}
+            testID="assistant-nickname-input"
+          />
           <SettingsSwitch
             label={t("settings.general.autoExpandReasoning.label")}
             hint={t("settings.general.autoExpandReasoning.description")}

@@ -2206,6 +2206,10 @@ export const ptBR: TranslationResources = {
         description:
           "Mostrar os blocos de pensamento e raciocínio do agente totalmente expandidos por padrão",
       },
+      assistantNickname: {
+        label: "Apelido do assistente",
+        description: "Nome exibido nas conversas. Deixe vazio para usar Dog.",
+      },
       hideReasoning: {
         label: "Ocultar raciocínio",
         description:

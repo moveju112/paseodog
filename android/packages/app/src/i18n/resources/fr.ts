@@ -2219,6 +2219,10 @@ export const fr: TranslationResources = {
         label: "Toujours afficher le raisonnement",
         description: "Afficher par défaut le raisonnement de l’agent entièrement déplié",
       },
+      assistantNickname: {
+        label: "Surnom de l’assistant",
+        description: "Nom affiché dans les conversations. Laissez vide pour utiliser Dog.",
+      },
       hideReasoning: {
         label: "Masquer le raisonnement",
         description:

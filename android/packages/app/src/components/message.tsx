@@ -349,11 +349,11 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
     marginBottom: theme.spacing[4],
   },
   bubble: {
-    backgroundColor: theme.colors.surface3,
-    borderRadius: theme.borderRadius["2xl"],
-    borderTopRightRadius: theme.borderRadius.sm,
+    backgroundColor: theme.colorScheme === "light" ? "#eaf0eb" : theme.colors.surface3,
+    borderRadius: 16,
+    borderBottomRightRadius: 4,
     paddingHorizontal: theme.spacing[4],
-    paddingVertical: theme.spacing[4],
+    paddingVertical: theme.spacing[3],
     minWidth: 0,
     flexShrink: 1,
   },
@@ -362,7 +362,7 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.content,
     ...(isWeb
       ? {
-          lineHeight: Math.round(theme.fontSize.content * 1.4),
+          lineHeight: Math.round(theme.fontSize.content * 1.8),
           overflowWrap: "anywhere" as const,
         }
       : {}),

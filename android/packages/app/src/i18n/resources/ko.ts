@@ -2182,6 +2182,10 @@ export const ko: TranslationResources = {
         label: "추론 항상 펼치기",
         description: "에이전트의 사고 및 추론 블록을 기본적으로 모두 펼쳐 표시합니다.",
       },
+      assistantNickname: {
+        label: "도우미 닉네임",
+        description: "대화에 표시할 이름입니다. 비워 두면 Dog를 사용합니다.",
+      },
       hideReasoning: {
         label: "추론 숨기기",
         description:

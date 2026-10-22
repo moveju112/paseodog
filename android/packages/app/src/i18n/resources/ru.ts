@@ -2208,6 +2208,10 @@ export const ru: TranslationResources = {
         description:
           "По умолчанию полностью разворачивать блоки размышлений и хода рассуждений агента",
       },
+      assistantNickname: {
+        label: "Имя помощника",
+        description: "Имя в диалогах. Оставьте пустым, чтобы использовать Dog.",
+      },
       hideReasoning: {
         label: "Скрывать размышления",
         description:

@@ -17,6 +17,7 @@ interface RendererDependencies {
   Pressable: ComponentType<ComponentProps<typeof import("react-native").Pressable>>;
   StyleSheet: typeof import("react-native-unistyles").StyleSheet;
   useTranslation: typeof import("react-i18next").useTranslation;
+  useAssistantNickname: () => string;
   /** 연결된 호스트 클라이언트 (서버 ID -> 클라이언트, 연결 전이면 null) */
   getClient: (serverId: string) => ContinueClient | null;
 }
@@ -27,12 +28,11 @@ export interface WorkRecordSession {
   agentId: string;
 }
 
-// 공급자 연결이 끊겨 턴이 중단될 때 데몬이 남기는 오류 본문
-const CONNECTION_CLOSED_TEXT = "[System Error] Provider connection closed";
-
 // 원래 Markdown·도구 렌더러를 재사용하고 접기·답변 제목·끊김 후 이어서 진행만 표시 단계에 더한다.
 export function createWorkRecordRenderer(deps: RendererDependencies) {
-  const { React, View, Text, Pressable, StyleSheet, useTranslation, getClient } = deps;
+  // 웹 번들에도 함수 자체를 주입하므로 오류 상수는 이 함수 안에 둔다.
+  const CONNECTION_CLOSED_TEXT = "[System Error] Provider connection closed";
+  const { React, View, Text, Pressable, StyleSheet, useTranslation, useAssistantNickname, getClient } = deps;
   const copies: Record<
     string,
     {
@@ -55,7 +55,7 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
       resumeMessage: "Continue",
     },
     ko: {
-      record: "추론·진행 기록",
+      record: "진행 기록",
       answer: "응답",
       progress: "진행 안내",
       working: "작업 진행 중…",
@@ -130,23 +130,25 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
   const styles = StyleSheet.create((theme) => ({
     record: {
       uni__dependencies: [0],
-      backgroundColor: theme.colors.surface1,
-      borderColor: theme.colors.border,
+      backgroundColor: theme.colorScheme === "light" ? "#ffffff" : theme.colors.surface1,
+      borderColor: theme.colorScheme === "light" ? "#e0e7e1" : theme.colors.border,
       borderWidth: 1,
-      borderRadius: theme.borderRadius.md,
+      borderRadius: 13,
       overflow: "hidden",
     },
     header: {
       uni__dependencies: [0],
       flexDirection: "row",
       alignItems: "center",
-      padding: theme.spacing[2],
+      padding: 15,
       gap: theme.spacing[2],
+      backgroundColor: theme.colorScheme === "light" ? "#f7f9f5" : theme.colors.surface1,
     },
     title: {
       uni__dependencies: [0],
       color: theme.colors.foregroundMuted,
       fontSize: theme.fontSize.sm,
+      fontWeight: "600",
       flex: 1,
     },
     count: {
@@ -158,17 +160,40 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
       uni__dependencies: [0],
       color: theme.colors.foregroundMuted,
       fontSize: theme.fontSize.sm,
-      paddingHorizontal: theme.spacing[2],
-      paddingBottom: theme.spacing[2],
+      paddingHorizontal: 18,
+      paddingBottom: 14,
+      paddingTop: 10,
     },
-    body: { uni__dependencies: [0], padding: theme.spacing[2], gap: theme.spacing[2] },
+    body: { uni__dependencies: [0], padding: 18, gap: 16 },
+    entry: {
+      uni__dependencies: [0],
+      borderLeftWidth: 1,
+      borderLeftColor: theme.colors.border,
+      paddingLeft: 16,
+      marginLeft: 5,
+    },
+    entryDot: {
+      uni__dependencies: [0],
+      position: "absolute",
+      left: -4,
+      top: 4,
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: theme.colors.foregroundMuted,
+    },
+    active: {
+      uni__dependencies: [0],
+      color: theme.colorScheme === "light" ? "#47755a" : theme.colors.foreground,
+      fontSize: theme.fontSize.sm,
+    },
     footer: {
       uni__dependencies: [0],
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       gap: theme.spacing[1],
-      padding: theme.spacing[2],
+      padding: 10,
       borderTopColor: theme.colors.border,
       borderTopWidth: 1,
     },
@@ -178,12 +203,36 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
       fontSize: theme.fontSize.sm,
       marginBottom: theme.spacing[1],
     },
+    answerContainer: { paddingLeft: 40 },
+    answerHeader: {
+      uni__dependencies: [0],
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginLeft: -40,
+      marginBottom: 8,
+    },
+    avatar: {
+      uni__dependencies: [0],
+      width: 28,
+      height: 28,
+      borderRadius: 9,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.colorScheme === "light" ? "#e7efe9" : theme.colors.surface1,
+    },
+    avatarText: {
+      uni__dependencies: [0],
+      color: theme.colorScheme === "light" ? "#3c6a50" : theme.colors.foreground,
+      fontSize: theme.fontSize.sm,
+      fontWeight: "600",
+    },
     answer: {
       uni__dependencies: [0],
       color: theme.colors.foreground,
       fontSize: theme.fontSize.sm,
       fontWeight: "600",
-      marginBottom: theme.spacing[2],
+      flexShrink: 1,
     },
     resume: {
       uni__dependencies: [0],
@@ -239,6 +288,7 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
         React.createElement(Text, { style: styles.count, accessible: false }, expanded ? "⌄" : "›"),
         React.createElement(Text, { style: styles.title }, copy.record),
         React.createElement(Text, { style: styles.count }, String(record.count)),
+        record.active ? React.createElement(Text, { style: styles.active }, `● ${copy.working}`) : null,
       ),
       record.active && !expanded
         ? React.createElement(
@@ -254,7 +304,8 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
             record.items.map((item, index) =>
               React.createElement(
                 View,
-                { key: item.id },
+                { key: item.id, style: styles.entry },
+                React.createElement(View, { style: styles.entryDot, accessible: false }),
                 item.kind === "assistant_message" && !item.blockIndex
                   ? React.createElement(
                       Text,
@@ -293,13 +344,22 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
     );
   }
 
-  // 답변 제목은 첫 Markdown 블록에만 달아 표·코드·링크 등 기존 본문 표시를 유지한다.
+  // 첫 답변 블록에 설정 닉네임·아바타를 달고 기존 Markdown 본문과 기능은 유지한다.
   function Answer({ children }: { children: ReactNode }) {
-    const copy = useCopy();
+    const nickname = useAssistantNickname();
     return React.createElement(
       View,
-      { testID: "assistant-answer" },
-      React.createElement(Text, { style: styles.answer, accessibilityRole: "header" }, copy.answer),
+      { testID: "assistant-answer", style: styles.answerContainer },
+      React.createElement(
+        View,
+        { style: styles.answerHeader },
+        React.createElement(
+          View,
+          { style: styles.avatar, accessible: false },
+          React.createElement(Text, { style: styles.avatarText }, Array.from(nickname)[0]),
+        ),
+        React.createElement(Text, { style: styles.answer, accessibilityRole: "header", numberOfLines: 1 }, nickname),
+      ),
       children,
     );
   }
@@ -362,8 +422,9 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
         content,
         React.createElement(ResumeAfterDisconnect, { session }),
       );
-    return layout.item.kind === "assistant_message" && layout.item.answerStart
+    if (layout.item.kind !== "assistant_message") return content;
+    return layout.item.answerStart
       ? React.createElement(Answer, null, content)
-      : content;
+      : React.createElement(View, { style: styles.answerContainer }, content);
   };
 }

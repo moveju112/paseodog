@@ -2224,6 +2224,10 @@ export const es: TranslationResources = {
         description:
           "Mostrar los bloques de pensamiento y razonamiento del agente totalmente expandidos de forma predeterminada",
       },
+      assistantNickname: {
+        label: "Apodo del asistente",
+        description: "Nombre mostrado en las conversaciones. Déjalo vacío para usar Dog.",
+      },
       hideReasoning: {
         label: "Ocultar razonamiento",
         description:

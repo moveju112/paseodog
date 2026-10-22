@@ -43,6 +43,23 @@ function makeDeps(
 }
 
 describe("loadAppSettingsFromStorage", () => {
+  // 누락·빈 값·오류는 Dog로, 사용자가 지정한 닉네임은 재시작 후에도 유지한다.
+  it("normalizes and persists the assistant nickname", async () => {
+    for (const value of [undefined, "", "   ", null, 7, {}, ["Dog"]]) {
+      const deps = makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({ assistantNickname: value }),
+        }),
+      });
+      expect((await loadAppSettingsFromStorage(deps)).assistantNickname).toBe("Dog");
+    }
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+    await saveAppSettings({ queryClient, updates: { assistantNickname: "  강아지 🐶  " }, deps });
+    expect((await loadAppSettingsFromStorage(deps)).assistantNickname).toBe("강아지 🐶");
+    await saveAppSettings({ queryClient, updates: { assistantNickname: "" }, deps });
+    expect((await loadAppSettingsFromStorage(deps)).assistantNickname).toBe("Dog");
+  });
   it("preserves a persisted steer send behavior", async () => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({

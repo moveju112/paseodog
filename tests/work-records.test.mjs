@@ -6,6 +6,7 @@ import { Script } from 'node:vm';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import { WORK_RECORD_EDITS, withWorkRecords, withoutWorkRecords } from '../patches/paseo-work-records.mjs';
 import { ASSISTANT_PHASE_PATCHES, patchedAssistantPhaseSource } from '../scripts/patch-paseo-assistant-phase.mjs';
+import { RELAY_PASSWORD_PATCHES } from '../scripts/patch-paseo-relay-password.mjs';
 
 // 공용 원본에서 타입만 지워 웹·모바일에서 같은 묶음·렌더러 계약을 검사한다.
 function loadFunction(file, name) {
@@ -130,6 +131,7 @@ test('work record renderer is collapsed by default, expands on press and collaps
         borderRadius: { md: 6 }, spacing: { 1: 4, 2: 8 }, fontSize: { sm: 12 } };
     const render = createRenderer({ React, View: 'view', Text: 'text', Pressable: 'pressable',
         StyleSheet: { create: (make) => make(theme) },
+        useAssistantNickname: () => 'Dog',
         useTranslation: () => ({ i18n: { language: 'ko' } }) });
     const record = project({ tail: [user, thought, assistant('p', '진행', 'commentary')], head: [] }, true).tail[1];
     const row = { item: record, phase: 'complete' };
@@ -151,10 +153,10 @@ test('work record renderer is collapsed by default, expands on press and collaps
     await act(async () => button('assistant-work-record-toggle')[0].props.onPress());
     await act(async () => tree.update(render({ ...row, item: { ...record, active: false } }, body)));
     assert.equal(tree.root.findAllByType('body').length, 0);
-    // 응답 제목은 한국어로 "응답"이다.
+    // 기본 답변 제목은 공급자 이름 대신 Dog다.
     let answer;
     await act(async () => { answer = create(render({ item: { kind: 'assistant_message', id: 'a', text: '본문', answerStart: true } }, body)); });
-    assert.equal(answer.root.findAll((node) => node.type === 'text' && node.props.accessibilityRole === 'header')[0].props.children, '응답');
+    assert.equal(answer.root.findAll((node) => node.type === 'text' && node.props.accessibilityRole === 'header')[0].props.children, 'Dog');
     await act(async () => answer.unmount());
     await act(async () => tree.unmount());
     delete globalThis.IS_REACT_ACT_ENVIRONMENT;
@@ -172,7 +174,7 @@ test('a turn that ended on a closed provider connection offers one explicit cont
     const client = { sendAgentMessage: async (agentId, text, options) => { sent.push([agentId, text, options]); if (fail) throw new Error('offline'); } };
     const render = createRenderer({ React, View: 'view', Text: 'text', Pressable: 'pressable',
         StyleSheet: { create: (make) => make(theme) }, useTranslation: () => ({ i18n: { language: 'ko' } }),
-        getClient: (serverId) => (serverId === 'srv' ? client : null) });
+        useAssistantNickname: () => 'Dog', getClient: (serverId) => (serverId === 'srv' ? client : null) });
     const body = (layout) => React.createElement('body', { id: layout.item.id }, layout.item.text);
     const error = { kind: 'assistant_message', id: 'e', text: '[System Error] Provider connection closed', answerStart: true };
     const session = { serverId: 'srv', agentId: 'agent-1' };
@@ -232,7 +234,12 @@ test('reviewed web bundle supports the same A renderer and rejects partial patch
 
 test('all phase transport patches are exact-blob gated and idempotent', () => {
     for (const spec of ASSISTANT_PHASE_PATCHES) {
-        const source = readFileSync(new URL('../' + spec.root + '/' + spec.file, import.meta.url), 'utf8');
+        const installed = readFileSync(new URL('../' + spec.root + '/' + spec.file, import.meta.url), 'utf8');
+        // 뒤에 적용되는 릴레이 필드만 되돌린 뒤 기존 단계 패치의 원본 blob을 검증한다.
+        const relay = RELAY_PASSWORD_PATCHES.find((entry) => entry.package === 'protocol');
+        const source = spec.file === relay.file
+            ? [...relay.edits].reverse().reduce((text, [before, after]) => text.replace(after, () => before), installed)
+            : installed;
         const patched = patchedAssistantPhaseSource(source, spec);
         assert.equal(patchedAssistantPhaseSource(patched, spec), patched);
         assert.throws(() => patchedAssistantPhaseSource(patched + '// drift', spec), /hash mismatch/);

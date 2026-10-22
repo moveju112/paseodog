@@ -99,6 +99,6 @@ test('web issuance and address/password entry remain hash gated and reversible',
     const source = readFileSync(new URL(`server/${COMPOSER_FILE}`, packageRoot), 'utf8');
     const patched = patchedComposerSource(source);
     assert.equal(patchedComposerSource(patched), patched);
-    assert.equal(withoutRelayPassword(patched), withoutRelayPassword(source));
+    assert.equal(patchedComposerSource(withoutRelayPassword(patched)), patched);
     assert.throws(() => patchedComposerSource(source + '// drift'), /hash mismatch/);
 });

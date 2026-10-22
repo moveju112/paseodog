@@ -2190,6 +2190,10 @@ export const ja: TranslationResources = {
         label: "常に思考プロセスを展開",
         description: "デフォルトでAIのエージェント思考・推論ブロックを完全に展開して表示します",
       },
+      assistantNickname: {
+        label: "アシスタントのニックネーム",
+        description: "会話に表示する名前です。空欄の場合は Dog を使います。",
+      },
       hideReasoning: {
         label: "思考プロセスを非表示",
         description:

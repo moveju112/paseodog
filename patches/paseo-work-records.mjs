@@ -16,7 +16,7 @@ const recordGap = sourceFunction('work-record-model.ts', 'getWorkRecordGap');
 const projectionStart = 'e.createStreamPresentation=function(){const l=new WeakMap,H=';
 const projectionInjected = `e.createStreamPresentation=function(){const pdRecordCache={records:new Map,answers:new WeakMap},pdWork=${projection};const l=new WeakMap,H=`;
 const viewStart = 'function ae(e){return e.pendingPermissions||';
-const viewInjected = `const pdRenderWorkRecord=(${renderer})({React:h,View:f.withUnistyles(l.View),Text:f.withUnistyles(l.Text),Pressable:f.withUnistyles(l.Pressable),StyleSheet:f.StyleSheet,useTranslation:y.useTranslation,getClient:e=>k.useSessionStore.getState().sessions[e]?.client??null});${viewStart}`;
+const viewInjected = `const pdRenderWorkRecord=(${renderer})({React:h,View:f.withUnistyles(l.View),Text:f.withUnistyles(l.Text),Pressable:f.withUnistyles(l.Pressable),StyleSheet:f.StyleSheet,useTranslation:y.useTranslation,useAssistantNickname:()=>F.useSettings(e=>e.assistantNickname),getClient:e=>k.useSessionStore.getState().sessions[e]?.client??null});${viewStart}`;
 // 렌더러 호출: 읽기 전용(je)이 아니면 이어서 진행 대상 세션(serverId tt, agentId o)을 넘긴다.
 const LEGACY_RENDER_CALL = 'content:pdRenderWorkRecord(e,Ln),layoutItem:e,strategy:Ne,';
 const RENDER_CALL = 'content:pdRenderWorkRecord(e,Ln,je?void 0:{serverId:tt,agentId:o}),layoutItem:e,strategy:Ne,';
@@ -84,6 +84,7 @@ const LEGACY_PROJECTION_HASHES = new Map([
 
 // 검토한 이전 렌더러 주입본 ("답변" 제목 판, 하단 접기만 있고 이어서 진행 버튼 이전 판)
 const LEGACY_RENDERER_HASHES = new Set([
+    'bbee3a381966f4353b33b9bd23508dffab9f0b04bf789cabf78a36bed78e9e17',
     '024f9bc387a66785f68f082e69a2584d85c0027f48b754227c3caa9e3feb8954',
     '8f7df87fbd7357758d76d470875751ec1f55882e7c8008bd5ad09aa23e150c3e',
 ]);

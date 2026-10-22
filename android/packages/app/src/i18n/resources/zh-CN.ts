@@ -2145,6 +2145,10 @@ export const zhCN: TranslationResources = {
         label: "始终展开推理过程",
         description: "默认情况下完全展开 AI 的思考和推理过程",
       },
+      assistantNickname: {
+        label: "助手昵称",
+        description: "对话中显示的名称。留空则使用 Dog。",
+      },
       hideReasoning: {
         label: "隐藏推理过程",
         description: "完成后仅显示最终回答；隐藏推理、进度消息和工具，保留审批请求和错误",
