@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 import { controlRuntime, modelProjection } from '../engine/src/controls.mjs';
 import { createEngineControls } from '../plugin/server/controls.mjs';
 import { fixture, until } from './helpers.mjs';
@@ -371,3 +373,49 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
     ]);
 });
 
+
+// 제어 프로세스가 먼저 stdin을 닫으면 EPIPE를 소비하고 쓰기 요청을 재전송하지 않는다.
+test('control daemon stdin failures reject uncertain writes without retrying mutations', async () => {
+    const children = [];
+    let fallbacks = 0;
+    const controls = createEngineControls({
+        spawnProcess() {
+            const child = new EventEmitter();
+            child.stdin = new PassThrough();
+            child.stdout = new PassThrough();
+            child.stderr = new PassThrough();
+            child.kill = () => {};
+            children.push(child);
+            return child;
+        },
+        execCommand: async () => {
+            fallbacks++;
+            throw new Error('Must not retry a mutation');
+        },
+    });
+    controls.bind({ command: '/engine', args: [], env: {} });
+    try {
+        const request = controls.read({ action: 'compaction', enabled: false });
+        // 실제 stream 이벤트에서 발생하는 비동기 EPIPE도 예외 없이 정리해야 한다.
+        while (children.length === 0) await new Promise(resolve => setImmediate(resolve));
+        children[0].stdin.destroy(Object.assign(new Error('broken pipe'), { code: 'EPIPE' }));
+        await assert.rejects(request, /설정 저장 결과를 확인할 수 없어요/);
+        assert.equal(fallbacks, 0);
+        // 처리 완료된 이전 프로세스의 늦은 이벤트가 새 프로세스에 영향을 주지 않는다.
+        const next = controls.read({ action: 'compaction', enabled: true });
+        while (children.length < 2) await new Promise(resolve => setImmediate(resolve));
+        const old = children[0], fresh = children[1];
+        old.emit('exit', 1);
+        old.stdout.emit('error', new Error('old stdout error'));
+        fresh.stdout.write(JSON.stringify({ id: 'ctl_2', ok: true, value: { saved: true } }) + '\n');
+        assert.deepEqual(await next, { saved: true });
+        assert.equal(fallbacks, 0);
+    } finally {
+        await controls.close();
+        for (const child of children) {
+            child.stdin.destroy();
+            child.stdout.destroy();
+            child.stderr.destroy();
+        }
+    }
+});
