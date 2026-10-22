@@ -35,7 +35,7 @@ export const AGENT_MESSAGE_PATCHES = [
     },
     {
         file: 'dist/server/server/agent/plugin-provider.js',
-        blob: '0157997f5d06d2fc80436ee189903c2590e840cb',
+        blob: 'd7103206aad6675b168f4d17aba5e578a5144d62',
         normalize: patchedSteerSource,
         edits: agentMessageTransportEdits,
     },

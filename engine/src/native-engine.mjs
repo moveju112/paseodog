@@ -269,7 +269,8 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
         async action(request) {
             if (closed || steeringOwner) throw new Error('Native engine busy or closed');
             if (runtime.session?.remoteAttached === true) throw new Error('Unmanaged native writer');
-            if (['undo', 'redo'].includes(request.operation) && config.mode === 'review')
+            if ((['undo', 'redo'].includes(request.operation)
+                || (request.operation === 'rewind' && request.scope !== 'conversation')) && config.mode === 'review')
                 throw new Error('Review 모드에서는 파일을 복구할 수 없어요.');
             return nativeSessionAction(runtime, request, {
                 // 선택한 전용 프로필 서버만 기존 호스트 경계에 추가하고 다른 저장 서버는 숨긴다.

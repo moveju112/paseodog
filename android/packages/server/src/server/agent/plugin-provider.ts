@@ -1566,6 +1566,16 @@ class PluginAgentSession implements AgentSession {
       token,
       scope,
     });
+    // 대화 범위 되돌리기는 대상 사용자 메시지부터 재수화 기록을 버린다.
+    if (scope !== "files") {
+      const index = this.history.findIndex(
+        (event) =>
+          event.type === "timeline" &&
+          event.item.type === "user_message" &&
+          event.item.messageId === messageId,
+      );
+      if (index >= 0) this.history.splice(index);
+    }
   }
 
   private publish(event: AgentStreamEvent): void {

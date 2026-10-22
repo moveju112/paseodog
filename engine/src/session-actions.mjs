@@ -37,6 +37,7 @@ export async function nativeSessionAction(runtime, request, { selectMcp } = {}) 
             checkpointId: record.checkpointId, files: record.files.length,
         })) };
     }
+    if (operation === 'rewind') return rewindSession(runtime, request);
     if (operation === 'changes') return runtime.getTurnChanges({ checkpointId, patch: Boolean(file), file });
     if (operation === 'review') return runtime.getSessionReviewDiff();
     if (operation === 'undo' || operation === 'redo') {
@@ -46,4 +47,40 @@ export async function nativeSessionAction(runtime, request, { selectMcp } = {}) 
             : runtime.reapplyTurnChanges(checkpointId, file || null, revision);
     }
     throw new Error('Unsupported native session action');
+}
+
+// 사용자 메시지 시점으로 되돌리기 (대상 확인 -> 이후 턴 파일 최신순 복구 -> 모델 대화 절단)
+async function rewindSession(runtime, { scope, text, since, confirmed }) {
+    if (confirmed !== true) throw new Error('되돌리기 확인이 필요해요.');
+    if (!['conversation', 'files', 'both'].includes(scope)) throw new Error('Invalid rewind scope');
+    const conversation = scope !== 'files', files = scope !== 'conversation';
+    const target = typeof text === 'string' ? text.trim() : '';
+    if (conversation && !target) throw new Error('Invalid rewind target');
+    if (files && !Number.isFinite(since)) throw new Error('Invalid rewind time');
+    if (conversation) {
+        // 파일을 바꾸기 전에 원본 절단 기준(같은 텍스트의 마지막 사용자 메시지)이 남아 있는지 확인한다.
+        const { promptContentText } = await import('mixdog/src/runtime/agent/orchestrator/session/manager/prompt-utils.mjs');
+        const { messages } = runtime.readModelMessages(0);
+        if (!messages.some((message) => message?.role === 'user' && promptContentText(message.content).trim() === target))
+            throw new Error('모델 대화에서 되돌릴 메시지를 찾지 못했어요. 압축된 대화는 되돌릴 수 없어요.');
+    }
+    let turns = 0;
+    if (files) {
+        const { loadTurnChangeRecords } = await import('mixdog/src/runtime/shared/turn-snapshot-store.mjs');
+        const records = (await loadTurnChangeRecords(runtime.id))
+            .filter((record) => Number(record.createdAt) >= since
+                && (record.files || []).some((entry) => entry.state !== 'reverted'))
+            .sort((left, right) => Number(right.createdAt) - Number(left.createdAt));
+        for (const record of records) {
+            try { await runtime.revertTurnChanges(record.checkpointId, null, Number(record.revision)); }
+            catch (error) {
+                throw new Error(`파일 복구가 최근 ${turns}개 턴까지만 적용됐어요. 대화는 바꾸지 않았어요: ${error.message}`);
+            }
+            turns++;
+        }
+    }
+    if (!conversation) return { turns };
+    const result = await runtime.rewindMessages({ text: target });
+    if (!result) throw new Error(`대화를 되돌리지 못했어요.${turns ? ` 파일은 최근 ${turns}개 턴을 복구했어요.` : ''}`);
+    return { turns, removed: result.removed };
 }

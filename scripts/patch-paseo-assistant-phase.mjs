@@ -11,7 +11,7 @@ export const ASSISTANT_PHASE_PATCHES = [
     { root: 'plugin/node_modules/@getpaseo/plugin', file: 'dist/server/provider.js', blob: '011490f3eebf9c15c985474c07b52beda5ca697c', edits: PROVIDER_PHASE_EDITS },
     { root: 'tools/node_modules/@getpaseo/protocol', file: 'dist/messages.js', blob: '33893c7e2598b8194cb9926d98f0084792c1e158', edits: MESSAGES_PHASE_EDITS },
     { root: 'plugin/node_modules/@getpaseo/protocol', file: 'dist/messages.js', blob: '33893c7e2598b8194cb9926d98f0084792c1e158', edits: MESSAGES_PHASE_EDITS },
-    { root: 'tools/node_modules/@getpaseo/server', file: 'dist/server/server/agent/plugin-provider.js', blob: '05405b3fd71c5742d9e7805b846cc8dae771fa5f', edits: ADAPTER_PHASE_EDITS },
+    { root: 'tools/node_modules/@getpaseo/server', file: 'dist/server/server/agent/plugin-provider.js', blob: '377a7cadccd3e2413f601417d5ee1d69e012f485', edits: ADAPTER_PHASE_EDITS },
     { root: 'tools/node_modules/@getpaseo/server', file: 'dist/server/server/agent/timeline-projection.js', blob: 'c04cdf08abf75c90cb46f303a76b310c91fab634', edits: PROJECTION_PHASE_EDITS },
 ];
 

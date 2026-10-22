@@ -6,7 +6,9 @@ import { questionRequestInput, questionAnswers } from './question.mjs';
 import { agentMessageSource } from './agent-message.mjs';
 import { compactionNotice, projectCompaction } from './compaction.mjs';
 
-export const CAPABILITIES = ['prompt.message', 'prompt.image', 'prompt.command', 'prompt.steer', 'session.configure', 'session.persistence', 'session.list', 'permission'];
+export const CAPABILITIES = ['prompt.message', 'prompt.image', 'prompt.command', 'prompt.steer', 'session.configure', 'session.persistence', 'session.list',
+    'session.revert.conversation', 'session.revert.files', 'session.revert.both', 'permission'];
+const REVERT_CAPABILITIES = ['session.revert.conversation', 'session.revert.files', 'session.revert.both'];
 // 계승 목록과 세션 도구에서 같은 첫 사용자 지시로 대상을 구분한다.
 function sessionDescription(row) {
     const prompt = row.items.find(({ item }) => item.type === 'user_message'
@@ -107,7 +109,14 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
     // 구조화된 내부 송신자는 감사 기록에만 남기고 사용자 타임라인으로 내보내지 않는다.
     function publishItem(session, row) {
         if (row.item.source?.kind === 'agent') return;
-        emit({ type: 'timeline.item', sessionId: session.id, ...row });
+        const revertToken = revertTokenFor(session, row.item);
+        emit({ type: 'timeline.item', sessionId: session.id, ...row, ...(revertToken ? { item: { ...row.item, revertToken } } : {}) });
+    }
+    // 사람이 보낸 텍스트 전용 턴 시작 메시지만 되돌리기 대상으로 노출한다.
+    function revertTokenFor(session, item) {
+        if (item.type !== 'user_message' || !item.id.startsWith('user:')
+            || !REVERT_CAPABILITIES.some((capability) => selected.includes(capability))) return null;
+        return session.record.receipts[item.id.slice('user:'.length)]?.rewindable === true ? { messageId: item.id } : null;
     }
     function recordItem(session, item, timestamp = new Date().toISOString()) {
         if (session.closed) return;
@@ -684,7 +693,9 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             turn.engine = await session.enginePromise;
             if (session.closing || session.closed || turn.canceled) throw new Error('Session closed or interrupted during startup');
             const result = { type: 'turn', turnId: turn.id };
-            session.record.receipts[receiptKey] = { hash: requestHash, turnId: turn.id, state: 'running', result, ...(source ? { source } : {}) };
+            session.record.receipts[receiptKey] = { hash: requestHash, turnId: turn.id, state: 'running', result, ...(source ? { source } : {}),
+                // 원본 대화 절단은 텍스트로 대상을 찾으므로 이미지·명령·에이전트 전달은 제외한다.
+                ...(!source && !parsed.command && !parsed.content ? { rewindable: true } : {}) };
             session.record.active = { turnId: turn.id, receiptKey };
             flush(session); // Durable receipt BEFORE inference; never automatically replay an uncertain write.
             turn.accepted = true;
@@ -747,6 +758,8 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         if (!session || session.closed || session.closing || session.broken || !session.engine)
             throw new Error('Session is not ready');
         if (session.active || session.configuring) throw new Error('응답·설정 변경이 끝난 뒤 다시 시도해 주세요.');
+        // 되돌리기는 저널 절단과 함께 session.revert로만 실행한다.
+        if (input.operation === 'rewind') throw new Error('Use session.revert to rewind');
         if (input.operation === 'configure') {
             await configureSession({ sessionId: session.id, requestId: randomUUID(), changes: input.changes });
             return { config: sessionConfig(session) };
@@ -803,6 +816,38 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             } finally { release(); }
             return { persistence: { version: 2, data: { bridgeId } }, compacted: result.compacted };
         } finally { session.configuring = false; }
+    }
+    // 메시지 시점으로 되돌리기 (대상·위치 확인 -> 네이티브 복구 -> 대화 범위면 저널 절단)
+    async function revertSession(input) {
+        if (!selected.includes(`session.revert.${input.scope}`)) throw new Error('Revert scope not negotiated');
+        const session = sessions.get(input.sessionId);
+        if (!session || session.closed || session.closing || session.broken || !session.engine)
+            throw new Error('Session is not ready');
+        if (session.active || session.configuring) throw new Error('응답·설정 변경이 끝난 뒤 다시 시도해 주세요.');
+        const messageId = input.token?.messageId;
+        const index = session.record.items.findIndex(({ item }) => item.id === messageId);
+        const row = session.record.items[index];
+        if (index < 0 || !revertTokenFor(session, row.item)) throw new Error('이 메시지는 되돌릴 수 없어요.');
+        const conversation = input.scope !== 'files';
+        // 원본은 같은 텍스트의 마지막 사용자 메시지에서 자르므로 이후 중복이 있으면 위치를 확정할 수 없다.
+        if (conversation && session.record.items.slice(index + 1).some(({ item }) =>
+            item.type === 'user_message' && item.text.trim() === row.item.text.trim()))
+            throw new Error('같은 내용의 이후 메시지가 있어 되돌릴 위치를 확정할 수 없어요.');
+        session.configuring = true;
+        try {
+            await session.engine.action({ operation: 'rewind', scope: input.scope, text: row.item.text,
+                since: Date.parse(row.timestamp), confirmed: true });
+            if (conversation) {
+                session.record.items.splice(index);
+                // 잘린 턴의 quota 재개는 더 이상 이어갈 대화가 없다.
+                clearTimeout(session.resumeTimer);
+                session.lastQuota = null;
+                session.record.quotaResume = null;
+                try { flush(session); }
+                catch (error) { containAfterJournalFailure(session, error); throw error; }
+            }
+        } finally { session.configuring = false; }
+        emit({ type: 'request.completed', requestId: input.requestId });
     }
     async function interrupt(session, reason = 'User interrupted') {
         if (!session) throw new Error('Session not found');
@@ -862,6 +907,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             case 'session.configure': return configureSession(input);
             case 'session.prompt': return promptSession(input);
             case 'session.permission': return acceptPermission(input);
+            case 'session.revert': return revertSession(input);
             case 'session.interrupt': await interrupt(sessions.get(input.sessionId)); emit({ type: 'request.completed', requestId: input.requestId }); return;
             case 'session.close': {
                 const session = sessions.get(input.sessionId);
