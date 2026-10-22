@@ -110,15 +110,15 @@ test('usage shows independent agent/effort rows even without provider model summ
     await act(async () => tree.root.findAllByType('pressable')
         .find((node) => node.props.accessibilityLabel === 'AI 사용량·에이전트 분석').props.onPress());
     const labels = tree.root.findAllByType('view').map((node) => node.props.accessibilityLabel);
-    assert.ok(labels.includes('test worker low 사용량'));
-    assert.ok(labels.includes('test 에이전트 미기록 effort 미기록 사용량'));
+    assert.ok(labels.includes('worker openai test low 사용량'));
+    assert.ok(labels.includes('에이전트 미기록 openai test effort 미기록 사용량'));
     const content = tree.root.findAllByType('text').map((node) => node.children.join('')).join('\n');
-    assert.ok(content.includes('에이전트·Effort별 사용량'));
+    assert.ok(content.includes('에이전트·Effort'));
     assert.ok(labels.includes('worker 에이전트 사용량'));
     assert.ok(labels.includes('에이전트 미기록 에이전트 사용량'));
-    assert.ok(content.includes('Effort: low'));
-    assert.ok(content.includes('Effort: 미기록'));
-    assert.ok(content.indexOf('에이전트·Effort별 사용량') < content.indexOf('제공자·모델'));
+    // 요약 지표 다음에 OAuth 한도 → 토큰 → 제공자·모델 → 에이전트·Effort 순서로 배치한다.
+    const order = ['OAuth 한도', '추이', '제공자·모델', '에이전트·Effort'].map((title) => content.indexOf(title));
+    assert.ok(order.every((index, position) => index >= 0 && (position === 0 || index > order[position - 1])), String(order));
 });
 
 // 같은 에이전트·모델의 effort는 한 묶음에 모으고, 제공자·모델·에이전트·미기록 값은 따로 유지한다.
@@ -142,27 +142,22 @@ test('usage groups effort rows by agent then provider model without repeating he
     const groups = views.filter((node) => node.props.accessibilityLabel?.endsWith(' 에이전트 사용량'));
     assert.deepEqual(groups.map((node) => node.props.accessibilityLabel),
         ['worker 에이전트 사용량', 'reviewer 에이전트 사용량', '에이전트 미기록 에이전트 사용량']);
-    const models = (group) => group.findAllByType('view').map((node) => node.props.accessibilityLabel)
-        .filter((label) => label?.endsWith(' 모델 사용량'));
-    assert.deepEqual(models(groups[0]),
-        ['worker openai gpt 모델 사용량', 'worker azure gpt 모델 사용량', 'worker openai mini 모델 사용량']);
-    assert.deepEqual(models(groups[1]), ['reviewer openai gpt 모델 사용량']);
-    assert.deepEqual(models(groups[2]), ['에이전트 미기록 openai gpt 모델 사용량']);
-    const workerOpenaiGpt = groups[0].findAllByType('view')
-        .find((node) => node.props.accessibilityLabel === 'worker openai gpt 모델 사용량');
-    const effortRows = workerOpenaiGpt.findAllByType('view').map((node) => node.props.accessibilityLabel)
-        .filter((label) => label?.endsWith(' 사용량') && !label.endsWith(' 모델 사용량'));
-    assert.deepEqual(effortRows, ['gpt worker low 사용량', 'gpt worker high 사용량']);
     const texts = (node) => node.findAllByType('text').map((item) => item.children.join(''));
-    assert.equal(texts(workerOpenaiGpt).filter((value) => value === 'openai · gpt').length, 1);
-    assert.equal(texts(groups[0]).filter((value) => value === 'worker').length, 1);
-    assert.ok(texts(workerOpenaiGpt).includes('호출 2 · 토큰 20'));
-    assert.ok(texts(workerOpenaiGpt).includes('환산 비용 $0.20'));
-    const mini = groups[0].findAllByType('view')
-        .find((node) => node.props.accessibilityLabel === 'worker openai mini 모델 사용량');
-    assert.ok(texts(mini).includes('Effort: 미기록'));
-    assert.ok(texts(mini).includes('환산 비용 미확인'));
-    assert.ok(texts(groups[2]).includes('호출 6 · 토큰 60'));
+    // 표 행: 모델 이름은 같은 모델의 첫 effort 행에만 쓰고 나머지 행은 비운다.
+    const rows = (group) => group.findAllByType('view').filter((node) => node.props.accessibilityLabel?.endsWith(' 사용량')
+        && !node.props.accessibilityLabel.endsWith(' 에이전트 사용량'));
+    assert.deepEqual(rows(groups[0]).map((row) => texts(row)), [
+        ['openai · gpt', 'low', '1', '10', '$0.10'],
+        ['', 'high', '2', '20', '$0.20'],
+        ['azure · gpt', 'low', '3', '30', '$0.30'],
+        ['openai · mini', '미기록', '5', '50', '미확인'],
+    ]);
+    assert.deepEqual(rows(groups[1]).map((row) => texts(row)), [['openai · gpt', 'high', '4', '40', '$0.40']]);
+    assert.deepEqual(rows(groups[2]).map((row) => texts(row)), [['openai · gpt', '미기록', '6', '60', '$0.60']]);
+    assert.deepEqual(rows(groups[0]).map((row) => row.props.accessibilityLabel).slice(0, 2),
+        ['worker openai gpt low 사용량', 'worker openai gpt high 사용량']);
+    // 표 머리글은 에이전트 묶음마다 한 번만 표시한다.
+    assert.equal(texts(groups[0]).filter((value) => value === 'Effort').length, 1);
 });
 
 test('effort section remains visible with missing or empty historical detail', async (t) => {
@@ -175,7 +170,7 @@ test('effort section remains visible with missing or empty historical detail', a
         await act(async () => tree.root.findAllByType('pressable')
             .find((node) => node.props.accessibilityLabel === 'AI 사용량·에이전트 분석').props.onPress());
         const content = tree.root.findAllByType('text').map((node) => node.children.join('')).join('\n');
-        assert.ok(content.includes('에이전트·Effort별 사용량'));
+        assert.ok(content.includes('에이전트·Effort'));
         assert.ok(content.includes('선택한 기간에 Effort별 상세 기록이 없습니다.'));
     }
 });
@@ -249,15 +244,17 @@ test('model usage metrics share columns across models and providers without wrap
     await act(async () => trigger.props.onPress());
     const rows = tree.root.findAllByType('view').filter((node) => node.props.accessibilityLabel?.endsWith(' 사용량 지표'));
     assert.equal(rows.length, 3);
-    const cells = rows.map((row) => row.findAllByType('view').filter((node) => node.props.accessibilityLabel?.includes(': ')));
-    const labels = ['호출', 'TOK/S', '토큰', '입력', '출력', '캐시', '적중'];
+    const cells = rows.map((row) => row.findAllByType('text'));
+    const header = tree.root.findAllByType('view').find((node) => node.props.accessibilityLabel === 'openai-oauth 모델별 사용량')
+        .findAllByType('text').slice(0, 9).map((node) => node.children.join(''));
+    assert.deepEqual(header, ['모델', '호출', 'TOK/S', '토큰', '입력', '출력', '캐시', '적중', '환산액']);
     for (const row of cells) {
-        assert.deepEqual(row.map((cell) => cell.props.accessibilityLabel.split(': ')[0]), labels);
+        assert.equal(row.length, header.length);
         assert.deepEqual(row.map((cell) => cell.props.style.width), cells[0].map((cell) => cell.props.style.width));
-        assert.ok(row.every((cell) => cell.props.style.flexShrink === 0));
+        assert.ok(row.every((cell) => cell.props.style.flexShrink === 0 && cell.props.numberOfLines === 1));
     }
-    assert.equal(cells[0][2].props.accessibilityLabel, '토큰: 121,939,203');
-    assert.equal(cells[1][2].props.accessibilityLabel, '토큰: 65');
+    assert.equal(cells[0][3].children.join(''), '121,939,203');
+    assert.equal(cells[1][3].children.join(''), '65');
 });
 
 // OAuth 조회 실패를 계정 미연결로 오인하지 않게 하고, 사용자 지정 기간 입력 안내를 표시한다.
@@ -279,8 +276,8 @@ test('usage separates OAuth quota failure from disconnected accounts and guides 
     assert.ok(content().includes(quotaError));
     assert.ok(!content().includes('연결된 OAuth 계정 없음'));
     // 할당량 실패와 별개로 토큰·Effort 사용량은 그대로 표시한다.
-    assert.ok(content().includes('4,321') && content().includes('worker') && content().includes('Effort: high'));
-    assert.ok(content().indexOf('OAuth 사용량') < content().indexOf(quotaError));
+    assert.ok(content().includes('4,321') && content().includes('worker') && content().includes('high'));
+    assert.ok(content().indexOf('OAuth 한도') < content().indexOf(quotaError));
     await act(async () => pressable('사용자 지정').props.onPress());
     assert.equal(calls.length, 1);
     assert.ok(content().includes('YYYY-MM-DD 형식으로 입력하면 조회해요'));
@@ -319,8 +316,8 @@ test('live status hides duplicate job stages, names orchestration modes and mark
     const content = tree.root.findAllByType('text').map((node) => node.children.join('')).join('\n');
     assert.ok(content.includes('완료') && !content.includes('완료 · 완료'));
     assert.ok(content.includes('실행 중 · 에이전트 시작 중'));
-    assert.ok(content.includes('오케스트레이션: 에이전트 협업'));
-    assert.equal(content.split('하위 에이전트 작업 상태 확인 불가').length - 1, 2);
+    assert.ok(content.includes('모드\n에이전트 협업'));
+    assert.equal(content.split('작업 상태 확인 불가').length - 1, 2);
 });
 
 // 라벨 기반 버튼 조회·누르기 도우미
@@ -351,7 +348,7 @@ test('monitor switches to native token and OAuth usage with period selection and
         };
     };
     const screen = await renderScreen(liveScreen);
-    await screen.press('토큰·OAuth 사용량');
+    await screen.press('사용량·한도');
     assert.deepEqual(calls.at(-1), ['engine-metrics', { view: 'hour', refresh: 'auto' }]);
     assert.match(JSON.stringify(screen.tree.toJSON()), /Codex|65%|리셋 티켓/);
     assert.doesNotMatch(JSON.stringify(screen.tree.toJSON()), /지난 7일|지난 90일|지난 1년/);

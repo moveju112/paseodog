@@ -18,23 +18,19 @@ export function AnalysisFooter(props: PluginSurfaceProps) {
         </Pressable>
         <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
             {open && <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
-                <View accessibilityViewIsModal style={{ width: '94%', maxWidth: 1100, height: '88%',
-                    backgroundColor: colors.surface0, borderRadius: 16, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' }}>
+                <View accessibilityViewIsModal style={{ width: '94%', maxWidth: 960, height: '88%',
+                    backgroundColor: colors.surface0, borderRadius: 14, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-                        paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border,
-                        backgroundColor: colors.surface1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 }}>
-                            <View style={{ width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
-                                backgroundColor: colors.accent }}>
-                                <Icon name="Activity" size={16} color={colors.accentForeground} />
-                            </View>
-                            <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 17, fontWeight: '600', flexShrink: 1 }}>
+                        paddingLeft: 16, paddingRight: 8, paddingVertical: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
+                            <Icon name="Activity" size={16} color={colors.accent} />
+                            <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 15, fontWeight: '600', flexShrink: 1 }}>
                                 AI 사용량·에이전트 분석</Text>
                         </View>
                         <Pressable accessibilityRole="button" accessibilityLabel="분석 모달 닫기"
-                            onPress={() => setOpen(false)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
-                                borderWidth: 1, borderColor: colors.border }}>
-                            <Text style={{ color: colors.foreground, fontSize: 13 }}>닫기</Text>
+                            onPress={() => setOpen(false)} style={{ width: 32, height: 32, borderRadius: 8,
+                                alignItems: 'center', justifyContent: 'center' }}>
+                            <Text style={{ color: colors.foregroundMuted, fontSize: 18 }}>✕</Text>
                         </Pressable>
                     </View>
                     <LiveStatus {...props} initialTab="usage" />

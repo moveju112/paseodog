@@ -46,9 +46,13 @@ function groupEfforts(efforts: EffortRow[]) {
     }
     return [...groups.values()];
 }
-const modelColumnWidths = { '호출': 88, 'TOK/S': 96, '토큰': 144, '입력': 128, '출력': 128, '캐시': 144, '적중': 96 };
-const modelMetricsWidth = Object.values(modelColumnWidths).reduce((sum, width) => sum + width, 0)
-    + (Object.keys(modelColumnWidths).length - 1) * 6;
+type Column = { label: string; width: number; align?: 'left' | 'right'; grow?: boolean };
+const providerColumns: Column[] = [{ label: '모델', width: 180, align: 'left', grow: true }, { label: '호출', width: 64 },
+    { label: 'TOK/S', width: 64 }, { label: '토큰', width: 100 }, { label: '입력', width: 96 }, { label: '출력', width: 92 },
+    { label: '캐시', width: 100 }, { label: '적중', width: 64 }, { label: '환산액', width: 80 }];
+const effortColumns: Column[] = [{ label: '모델', width: 200, align: 'left', grow: true },
+    { label: 'Effort', width: 96, align: 'left' }, { label: '호출', width: 64 }, { label: '토큰', width: 110 },
+    { label: '환산액', width: 80 }];
 
 // 공통 카드 컨테이너 (테마 표면·테두리 적용)
 function Card({ colors, children, style }: { colors: Colors; children: React.ReactNode; style?: object }) {
@@ -72,16 +76,27 @@ function Track({ colors, pct, color }: { colors: Colors; pct: number; color: str
     </View>;
 }
 
-// 라벨·값 한 쌍 칩 (모델 행 지표 표시)
-function Chip({ colors, label, value }: { colors: Colors; label: keyof typeof modelColumnWidths; value: string }) {
-    return <View accessibilityLabel={`${label}: ${value}`} style={{ width: modelColumnWidths[label], flexShrink: 0,
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4,
-        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6,
-        backgroundColor: colors.surface2 }}>
-        <Text style={{ color: colors.foregroundMuted, fontSize: 11, flexShrink: 0 }}>{label}</Text>
-        <Text selectable numberOfLines={1} style={{ color: colors.foreground, fontSize: 11, fontWeight: '600',
-            textAlign: 'right', fontVariant: ['tabular-nums'], flexShrink: 1 }}>{value}</Text>
-    </View>;
+// 컬럼 정렬 표 (머리글 한 번 -> 값 행, 좁은 화면은 가로 스크롤)
+function Table({ colors, columns, rows, label }: { colors: Colors; columns: Column[];
+    rows: { key: string; label: string; cells: string[] }[]; label: string }) {
+    const minWidth = columns.reduce((sum, column) => sum + column.width, 0);
+    // 이름 컬럼은 남는 폭을 채우고 숫자 컬럼은 고정 폭·우측 정렬
+    const cellStyle = (column: Column) => ({ width: column.grow ? undefined : column.width, flexGrow: column.grow ? 1 : 0,
+        flexBasis: column.grow ? column.width : undefined, flexShrink: 0, paddingHorizontal: 6, textAlign: column.align ?? 'right' });
+    return <ScrollView horizontal style={{ flexGrow: 0 }} contentContainerStyle={{ flexGrow: 1 }}>
+        <View accessibilityLabel={label} style={{ flexGrow: 1, minWidth }}>
+            <View style={{ flexDirection: 'row', paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                {columns.map((column) => <Text key={column.label} numberOfLines={1}
+                    style={{ ...cellStyle(column), color: colors.foregroundMuted, fontSize: 11, fontWeight: '600' }}>{column.label}</Text>)}
+            </View>
+            {rows.map((row, index) => <View key={row.key} accessibilityLabel={row.label} style={{ flexDirection: 'row', paddingVertical: 7,
+                borderTopWidth: index ? 1 : 0, borderTopColor: colors.surface2 }}>
+                {row.cells.map((value, cell) => <Text key={columns[cell].label} selectable numberOfLines={1}
+                    style={{ ...cellStyle(columns[cell]), color: colors.foreground, fontSize: 12,
+                        fontWeight: cell ? '400' : '600', fontVariant: ['tabular-nums'] }}>{value}</Text>)}
+            </View>)}
+        </View>
+    </ScrollView>;
 }
 
 // 섹션 제목 (제목 -> 보조 설명)
@@ -149,30 +164,25 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
     const breakdownSum = breakdown.reduce((sum, item) => sum + item.value, 0);
     const inputStyle = { ...text, minWidth: 150, flexGrow: 1, flexBasis: 150, paddingHorizontal: 12, paddingVertical: 8,
         borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surface0 };
-    return <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <View style={{ flexShrink: 1, gap: 4, minWidth: 220 }}>
-                <Text style={{ ...text, fontSize: 22, fontWeight: '700' }}>PaseoDog 토큰·OAuth 사용량</Text>
-                <Text style={muted}>PaseoDog 전용 엔진 프로필의 기록 · 2분마다 자동 갱신 · 구독 환산 비용은 실제 청구액이 아니에요.</Text>
+    return <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <View accessibilityRole="tablist" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 2, padding: 3, borderRadius: 9,
+                backgroundColor: colors.surface2, flexShrink: 1 }}>
+                {periods.map(([id, label]) => {
+                    const selected = view === id;
+                    return <Pressable key={id} accessibilityRole="tab" accessibilityState={{ selected }}
+                        onPress={() => setView(id)} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6,
+                            backgroundColor: selected ? colors.surface0 : 'transparent' }}>
+                        <Text style={{ fontSize: 13, fontWeight: selected ? '600' : '400',
+                            color: selected ? colors.foreground : colors.foregroundMuted }}>{label}</Text></Pressable>;
+                })}
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel="사용량 새로고침" disabled={busy}
                 onPress={() => { forceNext.current = true; setRevision((value) => value + 1); }}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8,
-                    borderRadius: 8, backgroundColor: colors.accent, opacity: busy ? 0.6 : 1 }}>
-                <Text style={{ color: colors.accentForeground, fontSize: 13, fontWeight: '600' }}>
-                    {busy ? '조회 중…' : '↻ 사용량 새로고침'}</Text>
+                style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border,
+                    opacity: busy ? 0.6 : 1 }}>
+                <Text style={{ color: colors.foreground, fontSize: 13 }}>{busy ? '조회 중…' : '↻ 새로고침'}</Text>
             </Pressable>
-        </View>
-        <View accessibilityRole="tablist" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, padding: 4, borderRadius: 10,
-            backgroundColor: colors.surface2, alignSelf: 'flex-start', maxWidth: '100%' }}>
-            {periods.map(([id, label]) => {
-                const selected = view === id;
-                return <Pressable key={id} accessibilityRole="tab" accessibilityState={{ selected }}
-                    onPress={() => setView(id)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 7,
-                        backgroundColor: selected ? colors.accent : 'transparent' }}>
-                    <Text style={{ fontSize: 13, fontWeight: selected ? '600' : '400',
-                        color: selected ? colors.accentForeground : colors.foreground }}>{label}</Text></Pressable>;
-            })}
         </View>
         {view === 'custom' && <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
             <TextInput accessibilityLabel="사용량 시작일" placeholder="YYYY-MM-DD" placeholderTextColor={colors.foregroundMuted}
@@ -186,7 +196,7 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
         {!!error && <View style={{ padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.statusDanger, backgroundColor: colors.surface1 }}>
             <Text accessibilityLiveRegion="polite" style={{ ...text, color: colors.statusDanger }}>{error}</Text></View>}
         {data && totals && <>
-            <Text style={muted}>{new Date(data.range.fromMs).toLocaleString()} ~ {new Date(data.range.toMs).toLocaleString()}</Text>
+            <Text style={muted}>{new Date(data.range.fromMs).toLocaleString()} ~ {new Date(data.range.toMs).toLocaleString()} · 2분마다 자동 갱신</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                 <StatTile colors={colors} label="환산액" value={money(totals.costUsd)} hint="구독 환산 · 청구액 아님" />
                 <StatTile colors={colors} label="API 비용" value={money(totals.costBilled)} />
@@ -197,108 +207,7 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
             {!!totals.costUnpricedTurns && <View style={{ padding: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.statusWarning }}>
                 <Text style={{ ...text, fontSize: 13, color: colors.statusWarning }}>
                     가격 미확인 호출 {number(totals.costUnpricedTurns)}건은 비용 합계에서 누락될 수 있어요.</Text></View>}
-            <SectionTitle colors={colors} title="에이전트·Effort별 사용량" />
-            {groupEfforts(data.efforts || []).map((group) => {
-                const agentLabel = group.agent || '에이전트 미기록';
-                return <View key={JSON.stringify(group.agent)} accessibilityLabel={`${agentLabel} 에이전트 사용량`}>
-                    <Card colors={colors}>
-                        <Text selectable style={{ ...text, fontSize: 15, fontWeight: '600' }}>{agentLabel}</Text>
-                        {group.models.map((model) => <View key={JSON.stringify([model.provider, model.model])}
-                            accessibilityLabel={`${agentLabel} ${model.provider} ${model.model} 모델 사용량`}
-                            style={{ gap: 6, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
-                            <Text selectable style={muted}>{model.provider} · {model.model}</Text>
-                            {model.rows.map((item) => <View key={JSON.stringify(item.effort)}
-                                accessibilityLabel={`${model.model} ${agentLabel} ${item.effort || 'effort 미기록'} 사용량`}
-                                style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 10 }}>
-                                <Text style={{ ...text, fontWeight: '600', minWidth: 120 }}>Effort: {item.effort || '미기록'}</Text>
-                                <Text style={text}>호출 {number(item.turns)} · 토큰 {number(item.tokens)}</Text>
-                                <Text style={muted}>환산 비용 {item.costUnpricedTurns === item.turns ? '미확인' : money(item.costUsd)}</Text>
-                            </View>)}
-                        </View>)}
-                    </Card>
-                </View>;
-            })}
-            {!data.efforts?.length && <Text style={muted}>선택한 기간에 Effort별 상세 기록이 없습니다.</Text>}
-            <Text style={muted}>요청에 적용된 effort 기준입니다. 과거 기록은 추정하지 않고 미기록으로 표시하며, 상세 기록이 없는 합계는 이 분류에 포함되지 않을 수 있어요.</Text>
-            <Card colors={colors}>
-                <Text style={{ ...text, fontWeight: '600' }}>토큰 구성</Text>
-                <View style={{ flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.surface2 }}>
-                    {breakdownSum > 0 && breakdown.map((item) => item.value > 0 &&
-                        <View key={item.label} style={{ flex: item.value / breakdownSum, backgroundColor: item.color }} />)}
-                </View>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
-                    {breakdown.map((item) => <View key={item.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: item.color }} />
-                        <Text style={muted}>{item.label}</Text>
-                        <Text selectable style={{ ...text, fontSize: 13, fontWeight: '600' }}>{number(item.value)}</Text>
-                    </View>)}
-                </View>
-            </Card>
-            <Card colors={colors}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-                    <Text style={{ ...text, fontWeight: '600' }}>토큰 추이</Text>
-                    <Text style={muted}>최대 {number(maxTokens)} 토큰</Text>
-                </View>
-                {series.length ? <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <View style={{ width: 44, height: chartHeight, justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                        <Text style={{ ...muted, fontSize: 10 }}>{compact(peak)}</Text>
-                        <Text style={{ ...muted, fontSize: 10 }}>{compact(peak / 2)}</Text>
-                        <Text style={{ ...muted, fontSize: 10 }}>0</Text>
-                    </View>
-                    <View style={{ flex: 1, gap: 6 }}>
-                        <View style={{ height: chartHeight, justifyContent: 'flex-end' }}>
-                            {[0, 0.5, 1].map((ratio) => <View key={ratio} style={{ position: 'absolute', left: 0, right: 0,
-                                top: ratio * (chartHeight - 1), height: 1, backgroundColor: colors.border, opacity: ratio === 1 ? 1 : 0.5 }} />)}
-                            <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: chartHeight, gap: series.length > 60 ? 1 : 3 }}>
-                                {series.map((row, index) => <View key={index} accessibilityLabel={`${row.label}: ${number(row.tokens)} 토큰`}
-                                    style={{ flex: 1, height: Math.max(1, (row.tokens || 0) / peak * chartHeight),
-                                        backgroundColor: colors.accent, borderTopLeftRadius: 3, borderTopRightRadius: 3,
-                                        opacity: row.tokens ? 1 : 0.35 }} />)}
-                            </View>
-                        </View>
-                        <View style={{ flexDirection: 'row' }}>
-                            {labelGroups.map((group, index) => <Text key={index} numberOfLines={1}
-                                style={{ ...muted, fontSize: 10, flex: group.size }}>{group.label}</Text>)}
-                        </View>
-                    </View>
-                </View> : <Text style={muted}>해당 기간 기록 없음</Text>}
-            </Card>
-            <SectionTitle colors={colors} title="제공자·모델" hint={`${data.providers.length}개 제공자`} />
-            {!data.providers.length && <Text style={muted}>해당 기간 기록 없음</Text>}
-            <ScrollView horizontal style={{ flexGrow: 0 }} contentContainerStyle={{ flexGrow: 1 }}>
-            <View style={{ flexGrow: 1, minWidth: modelMetricsWidth + 28, gap: 14 }}>
-            {data.providers.map((row) => <Card key={row.provider} colors={colors}>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
-                        <Text selectable style={{ ...text, fontSize: 15, fontWeight: '600' }}>{row.provider}</Text>
-                        <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, borderWidth: 1, borderColor: colors.border }}>
-                            <Text style={{ ...muted, fontSize: 11 }}>{row.providerKind}</Text></View>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
-                        <Text style={muted}>점유 {percent(row.share)}</Text>
-                        <Text selectable style={{ ...text, fontWeight: '700' }}>{money(row.costUsd)}</Text>
-                    </View>
-                </View>
-                <Track colors={colors} pct={(row.share || 0) * 100} color={colors.accent} />
-                {row.models.map((model) => <View key={model.model} style={{ gap: 6, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-                        <Text selectable numberOfLines={1} style={{ ...text, fontSize: 13, fontWeight: '600', flexShrink: 1 }}>{model.model}</Text>
-                        <Text selectable style={{ ...text, fontSize: 13 }}>{money(model.costUsd)}</Text>
-                    </View>
-                    <View accessibilityLabel={`${model.model} 사용량 지표`} style={{ flexDirection: 'row', gap: 6 }}>
-                        <Chip colors={colors} label="호출" value={number(model.turns)} />
-                        <Chip colors={colors} label="TOK/S" value={number(model.outputTokensPerSecond)} />
-                        <Chip colors={colors} label="토큰" value={number(model.tokens)} />
-                        <Chip colors={colors} label="입력" value={number(model.input)} />
-                        <Chip colors={colors} label="출력" value={number(model.output)} />
-                        <Chip colors={colors} label="캐시" value={number((model.cacheRead || 0) + (model.cacheWrite || 0))} />
-                        <Chip colors={colors} label="적중" value={percent(model.cacheHitRate)} />
-                    </View>
-                </View>)}
-            </Card>)}
-            </View>
-            </ScrollView>
-            <SectionTitle colors={colors} title="OAuth 사용량" />
+            <SectionTitle colors={colors} title="OAuth 한도" />
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                 {data.quotas.map((row) => <Card key={row.id} colors={colors} style={{ flexGrow: 1, flexBasis: 280, minWidth: 240 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -335,6 +244,85 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
                     {data.quotaError}</Text>}
                 {!data.quotas.length && !data.quotaError && <Text style={muted}>연결된 OAuth 계정 없음</Text>}
             </View>
+            <SectionTitle colors={colors} title="토큰" />
+            <Card colors={colors}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                    <Text style={{ ...text, fontWeight: '600' }}>추이</Text>
+                    <Text style={muted}>구간 최대 {number(maxTokens)} 토큰</Text>
+                </View>
+                {series.length ? <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ width: 44, height: chartHeight, justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                        <Text style={{ ...muted, fontSize: 10 }}>{compact(peak)}</Text>
+                        <Text style={{ ...muted, fontSize: 10 }}>{compact(peak / 2)}</Text>
+                        <Text style={{ ...muted, fontSize: 10 }}>0</Text>
+                    </View>
+                    <View style={{ flex: 1, gap: 6 }}>
+                        <View style={{ height: chartHeight, justifyContent: 'flex-end' }}>
+                            {[0, 0.5, 1].map((ratio) => <View key={ratio} style={{ position: 'absolute', left: 0, right: 0,
+                                top: ratio * (chartHeight - 1), height: 1, backgroundColor: colors.border, opacity: ratio === 1 ? 1 : 0.5 }} />)}
+                            <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: chartHeight, gap: series.length > 60 ? 1 : 3 }}>
+                                {series.map((row, index) => <View key={index} accessibilityLabel={`${row.label}: ${number(row.tokens)} 토큰`}
+                                    style={{ flex: 1, height: Math.max(1, (row.tokens || 0) / peak * chartHeight),
+                                        backgroundColor: colors.accent, borderTopLeftRadius: 3, borderTopRightRadius: 3,
+                                        opacity: row.tokens ? 1 : 0.35 }} />)}
+                            </View>
+                        </View>
+                        <View style={{ flexDirection: 'row' }}>
+                            {labelGroups.map((group, index) => <Text key={index} numberOfLines={1}
+                                style={{ ...muted, fontSize: 10, flex: group.size }}>{group.label}</Text>)}
+                        </View>
+                    </View>
+                </View> : <Text style={muted}>해당 기간 기록 없음</Text>}
+                <View style={{ gap: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
+                    <Text style={{ ...text, fontWeight: '600' }}>구성</Text>
+                    <View style={{ flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.surface2 }}>
+                        {breakdownSum > 0 && breakdown.map((item) => item.value > 0 &&
+                            <View key={item.label} style={{ flex: item.value / breakdownSum, backgroundColor: item.color }} />)}
+                    </View>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
+                        {breakdown.map((item) => <View key={item.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: item.color }} />
+                            <Text style={muted}>{item.label}</Text>
+                            <Text selectable style={{ ...text, fontSize: 13, fontWeight: '600' }}>{number(item.value)}</Text>
+                        </View>)}
+                    </View>
+                </View>
+            </Card>
+            <SectionTitle colors={colors} title="제공자·모델" hint={`${data.providers.length}개 제공자`} />
+            {!data.providers.length && <Text style={muted}>해당 기간 기록 없음</Text>}
+            {data.providers.map((row) => <Card key={row.provider} colors={colors}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
+                        <Text selectable style={{ ...text, fontSize: 15, fontWeight: '600' }}>{row.provider}</Text>
+                        <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, borderWidth: 1, borderColor: colors.border }}>
+                            <Text style={{ ...muted, fontSize: 11 }}>{row.providerKind}</Text></View>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+                        <Text style={muted}>점유 {percent(row.share)}</Text>
+                        <Text selectable style={{ ...text, fontWeight: '700' }}>{money(row.costUsd)}</Text>
+                    </View>
+                </View>
+                <Track colors={colors} pct={(row.share || 0) * 100} color={colors.accent} />
+                <Table colors={colors} columns={providerColumns} label={`${row.provider} 모델별 사용량`}
+                    rows={row.models.map((model) => ({ key: model.model, label: `${model.model} 사용량 지표`, cells: [model.model, number(model.turns),
+                        number(model.outputTokensPerSecond), number(model.tokens), number(model.input), number(model.output),
+                        number((model.cacheRead || 0) + (model.cacheWrite || 0)), percent(model.cacheHitRate), money(model.costUsd)] }))} />
+            </Card>)}
+            <SectionTitle colors={colors} title="에이전트·Effort" hint="요청에 적용된 effort 기준" />
+            {groupEfforts(data.efforts || []).map((group) => {
+                const agentLabel = group.agent || '에이전트 미기록';
+                return <Card key={JSON.stringify(group.agent)} colors={colors}>
+                    <Text selectable style={{ ...text, fontSize: 15, fontWeight: '600' }}>{agentLabel}</Text>
+                    <Table colors={colors} columns={effortColumns} label={`${agentLabel} 에이전트 사용량`}
+                        rows={group.models.flatMap((model) => model.rows.map((item, index) => ({
+                            key: JSON.stringify([model.provider, model.model, item.effort]),
+                            label: `${agentLabel} ${model.provider} ${model.model} ${item.effort || 'effort 미기록'} 사용량`,
+                            cells: [index ? '' : `${model.provider} · ${model.model}`, item.effort || '미기록', number(item.turns),
+                                number(item.tokens), item.costUnpricedTurns === item.turns ? '미확인' : money(item.costUsd)] })))} />
+                </Card>;
+            })}
+            {!data.efforts?.length && <Text style={muted}>선택한 기간에 Effort별 상세 기록이 없습니다.</Text>}
+            <Text style={{ ...muted, fontSize: 11 }}>과거 기록은 추정하지 않고 미기록으로 표시하며, 상세 기록이 없는 합계는 이 분류에 포함되지 않을 수 있어요.</Text>
         </>}
     </ScrollView>;
 }
