@@ -117,6 +117,19 @@ exports.default = async function afterPack(context) {
   const platform = context.electronPlatformName;
   const arch = ARCH_MAP[context.arch] || process.arch;
 
+  // 대상 OS의 Mixdog·공급자를 실제 파일로 넣어 Node와 Git 없는 첫 ���행도 지원한다.
+  if (platform === "linux" || platform === "win32") {
+    const { pathToFileURL } = require("node:url");
+    const { prepareDesktopRuntime } = await import(
+      pathToFileURL(path.resolve(__dirname, "../../../../scripts/prepare-desktop-runtime.mjs")).href
+    );
+    await prepareDesktopRuntime({
+      output: path.join(context.appOutDir, "resources", "paseodog-runtime"),
+      platform,
+      arch,
+    });
+  }
+
   pruneNativeModules(context.appOutDir, platform, arch);
 
   if (platform === "linux") {

@@ -36,7 +36,8 @@ function seedMixdogData(nativeHome) {
 }
 
 // PaseoDog 전용 공급자만 활성화하고 기본 내장·ACP 외부 공급자 및 타 공급자 프로필을 정리한다.
-export function configure({home=paseoHome, enginePath=worker, nativeHome=mixdogHome, stateDir=journalRoot, trustPlugins=false}={}) {
+export function configure({home=paseoHome, enginePath=worker, nativeHome=mixdogHome, stateDir=journalRoot, trustPlugins=false,
+    engineEnv={}, defaultListen='127.0.0.1:6767'}={}) {
     if(!trustPlugins) throw new Error('Explicit --trust-plugins required. Plugin and agent code run with this user\'s filesystem/network access.');
     for(const path of [home,nativeHome,stateDir]) {mkdirSync(path,{recursive:true,mode:0o700});if(lstatSync(path).isSymbolicLink()) throw new Error('Refusing symlink config directory');}
     seedMixdogData(nativeHome);
@@ -50,8 +51,8 @@ export function configure({home=paseoHome, enginePath=worker, nativeHome=mixdogH
     for(const id of DISABLED_BUILTIN_PROVIDERS) {
         providers[id]={...(providers[id]||{}),enabled:false};
     }
-    providers.paseodog={...(providers.paseodog||{}),enabled:true,command:[process.execPath,enginePath],env:{...(providers.paseodog?.env||{}),MIXDOG_HOME:nativeHome,MIXDOG_DATA_DIR:join(nativeHome,'data'),PASEODOG_STATE_DIR:stateDir}};
-    const baseDaemon=previous.daemon||{listen:'127.0.0.1:6767',hostnames:['localhost','127.0.0.1'],relay:{enabled:false}};
+    providers.paseodog={...(providers.paseodog||{}),enabled:true,command:[process.execPath,enginePath],env:{...(providers.paseodog?.env||{}),...engineEnv,MIXDOG_HOME:nativeHome,MIXDOG_DATA_DIR:join(nativeHome,'data'),PASEODOG_STATE_DIR:stateDir}};
+    const baseDaemon=previous.daemon||{listen:defaultListen,hostnames:['localhost','127.0.0.1'],relay:{enabled:false}};
     const daemon=Array.isArray(baseDaemon.agentProfiles)
         ? {...baseDaemon,agentProfiles:baseDaemon.agentProfiles.filter((profile)=>profile?.provider==='paseodog')}
         : baseDaemon;

@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
+import { configure } from '../scripts/configure.mjs';
+import { prepareDesktopRuntime } from '../scripts/prepare-desktop-runtime.mjs';
+
+const require = createRequire(import.meta.url);
+
+test('desktop config uses its dedicated listener, Electron Node mode and absolute engine argv', (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'paseodog-desktop-config-'));
+    t.after(() => rmSync(root, { recursive: true }));
+    const file = configure({
+        home: join(root, 'paseo'), nativeHome: join(root, 'mixdog'), stateDir: join(root, 'sessions'),
+        enginePath: join(root, 'engine with spaces.mjs'), trustPlugins: true,
+        engineEnv: { ELECTRON_RUN_AS_NODE: '1' }, defaultListen: '127.0.0.1:6768',
+    });
+    const config = JSON.parse(readFileSync(file, 'utf8'));
+    assert.equal(config.daemon.listen, '127.0.0.1:6768');
+    assert.equal(config.daemon.relay.enabled, false);
+    assert.equal(config.agents.providers.paseodog.env.ELECTRON_RUN_AS_NODE, '1');
+    assert.deepEqual(config.agents.providers.paseodog.command, [process.execPath, join(root, 'engine with spaces.mjs')]);
+    assert.equal(config.plugins, undefined);
+});
+
+test('runtime packager rejects unsupported targets before writing files', async () => {
+    await assert.rejects(prepareDesktopRuntime({ platform: 'win32', arch: 'arm64' }), /Unsupported/);
+});
+
+test('Android user-facing version can follow the common release version without losing its fallback', () => {
+    const { configureVersionNameOverride } = require('../android/packages/app/plugins/with-android-version-code.js');
+    const result = configureVersionNameOverride('    versionName "0.11.4"');
+    assert.equal(result, "    versionName (findProperty('paseodogVersionName') ?: '0.11.4').toString()");
+    assert.equal(configureVersionNameOverride(result), result);
+    assert.throws(() => configureVersionNameOverride('unreviewed'), /literal versionName/);
+});

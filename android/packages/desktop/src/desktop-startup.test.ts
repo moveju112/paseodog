@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runDesktopStartup } from "./desktop-startup";
+import { resolveDesktopStateRoot, runDesktopStartup } from "./desktop-startup";
 
 beforeEach(() => {
   vi.stubEnv("PASEO_HOME", undefined);
@@ -13,6 +13,15 @@ afterEach(() => {
 });
 
 describe("desktop startup", () => {
+  it("uses the Windows wrapper's LOCALAPPDATA profile and explicit overrides", () => {
+    expect(resolveDesktopStateRoot({ LOCALAPPDATA: "/users/local" }, "win32", "/users/me")).toBe(
+      resolve("/users/local/paseodog"),
+    );
+    expect(resolveDesktopStateRoot({ PASEODOG_HOME: "/custom" }, "win32", "/users/me")).toBe(
+      resolve("/custom"),
+    );
+  });
+
   it("runs CLI passthrough before GUI login-shell env inheritance", async () => {
     const calls: string[] = [];
     await runDesktopStartup({

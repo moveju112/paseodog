@@ -17,16 +17,32 @@ function configureVersionCodeOverride(contents) {
   );
 }
 
+// 사용자에게 보이는 앱 버전도 릴리즈 공통 버전으로 덮어쓴다.
+function configureVersionNameOverride(contents) {
+  if (contents.includes("paseodogVersionName")) return contents;
+  const line = /^(\s*)versionName "([^"]+)"$/m;
+  if (!line.test(contents))
+    throw new Error("Could not find a literal versionName in app/build.gradle");
+  return contents.replace(
+    line,
+    (_, indent, name) =>
+      `${indent}versionName (findProperty('paseodogVersionName') ?: '${name}').toString()`,
+  );
+}
+
 // prebuild 시 app/build.gradle에 versionCode 덮어쓰기 적용
 function withAndroidVersionCode(config) {
   return withAppBuildGradle(config, (modConfig) => {
     if (modConfig.modResults.language !== "groovy") {
       throw new Error("versionCode override requires a Groovy app/build.gradle");
     }
-    modConfig.modResults.contents = configureVersionCodeOverride(modConfig.modResults.contents);
+    modConfig.modResults.contents = configureVersionNameOverride(
+      configureVersionCodeOverride(modConfig.modResults.contents),
+    );
     return modConfig;
   });
 }
 
 module.exports = withAndroidVersionCode;
 module.exports.configureVersionCodeOverride = configureVersionCodeOverride;
+module.exports.configureVersionNameOverride = configureVersionNameOverride;

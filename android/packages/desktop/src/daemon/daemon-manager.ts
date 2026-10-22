@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { app, ipcMain, powerMonitor } from "electron";
+import { app, dialog, ipcMain, powerMonitor } from "electron";
 import log from "electron-log/main";
 import {
   resolvePaseoHome,
@@ -53,6 +53,10 @@ import {
   readLegacySkillSelection,
 } from "../integrations/legacy-skill-selection.js";
 import { tailFile } from "../diagnostics/tail-file.js";
+import { resolveDesktopStateRoot } from "../desktop-startup.js";
+import { prepareBundledProvider } from "./bundled-provider.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 const DAEMON_LOG_FILENAME = "daemon.log";
 let ownedLaunch: { home: string; instance: DaemonInstance } | null = null;
@@ -276,9 +280,57 @@ function assertBuiltInDaemonManagementEnabled(settings: DesktopSettings): void {
   }
 }
 
+let startingDaemon: Promise<DesktopDaemonStatus> | null = null;
+
+// 겹친 시작 요청은 같은 초기화·신뢰 확인·플러그인 등록 결과를 공유한다.
 async function startDaemon(): Promise<DesktopDaemonStatus> {
+  if (!startingDaemon)
+    startingDaemon = startDaemonOnce().finally(() => {
+      startingDaemon = null;
+    });
+  return startingDaemon;
+}
+
+// 내장 공급자를 준비하고 기존 수동 데몬은 유지한 채 로컬 호스트를 시작한다.
+async function startDaemonOnce(): Promise<DesktopDaemonStatus> {
   assertBuiltInDaemonManagementEnabled(await getDesktopSettingsStore().get());
 
+  const home = getPaseoHome();
+  const bundled = app.isPackaged
+    ? await prepareBundledProvider({
+        home,
+        stateRoot: resolveDesktopStateRoot(),
+        resourcesPath: process.resourcesPath,
+        version: app.getVersion(),
+        execPath: process.execPath,
+        confirmTrust: async () => {
+          const result = await dialog.showMessageBox({
+            type: "warning",
+            title: "PaseoDog 로컬 엔진 설정",
+            message: "이 PC에서 Mixdog 엔진과 PaseoDog 플러그인을 사용할까요?",
+            detail:
+              "에이전트와 도구는 현재 사용자 권한으로 파일과 네트워크에 접근해요. 이후 모델 계정은 설정의 계정 연결에서 로그인할 수 있어요.",
+            buttons: ["취소", "설정하고 시작"],
+            defaultId: 0,
+            cancelId: 0,
+          });
+          return result.response === 1;
+        },
+        runSetup: async (entryPath) => {
+          const setup = createNodeEntrypointInvocation({
+            entrypoint: { entryPath, execArgv: [] },
+            argvMode: "node-script",
+            args: ["--trust-plugins"],
+            baseEnv: process.env,
+          });
+          await promisify(execFile)(setup.command, setup.args, {
+            env: setup.env,
+            timeout: 90_000,
+            windowsHide: true,
+          });
+        },
+      })
+    : null;
   const current = await resolveDesktopDaemonStatus();
   logDesktopDaemonLifecycle("initial status check before start", {
     status: current.status,
@@ -289,18 +341,28 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
     desktopManaged: current.desktopManaged,
   });
   if (current.status === "running" || current.status === "starting") {
-    if (shouldRestartForVersion(current)) {
+    if (bundled?.changed && current.desktopManaged && current.pid && current.startedAt) {
+      await stopDesktopDaemon("manual_ipc", { pid: current.pid, startedAt: current.startedAt });
+    } else if (shouldRestartForVersion(current)) {
       logDesktopDaemonLifecycle("daemon version mismatch, restarting", {
         appVersion: normalizeVersion(resolveDesktopAppVersion()),
         daemonVersion: normalizeVersion(current.version),
       });
       await stopDesktopDaemon("version_mismatch");
     } else {
+      if (bundled?.needsInstall)
+        await runExternalCliJsonCommand([
+          "plugin",
+          "install",
+          bundled.pluginPath,
+          "--home",
+          home,
+          "--json",
+        ]);
       return current;
     }
   }
 
-  const home = getPaseoHome();
   const invocation = createNodeEntrypointInvocation({
     entrypoint: resolveDaemonRunnerEntrypoint(),
     argvMode: "node-script",
@@ -322,6 +384,15 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
   } catch (error) {
     if (!(error instanceof DaemonInstanceError && error.code === "DAEMON_NOT_READY")) throw error;
   }
+  if (bundled?.needsInstall)
+    await runExternalCliJsonCommand([
+      "plugin",
+      "install",
+      bundled.pluginPath,
+      "--home",
+      home,
+      "--json",
+    ]);
   return resolveDesktopDaemonStatus();
 }
 
