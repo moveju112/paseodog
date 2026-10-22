@@ -8,6 +8,6 @@ let count=0,failures=0;
 for(const file of walk(root)){
     if(file.endsWith('.mjs')){const check=spawnSync(process.execPath,['--check',file],{encoding:'utf8'});if(check.status!==0){console.error(check.stderr);failures++;}count++;}
     else if(file.endsWith('.json')){try{JSON.parse(readFileSync(file,'utf8'));}catch(e){console.error(file,e.message);failures++;}}
-    else if(file.endsWith('.sh')){const check=spawnSync('bash',['-n',file],{encoding:'utf8'});if(check.status!==0){console.error(check.stderr);failures++;}}
+    else if(file.endsWith('.sh')&&process.platform!=='win32'){const check=spawnSync('bash',['-n',file],{encoding:'utf8'});if(check.status!==0){console.error(check.stderr);failures++;}}
 }
 console.log(`Checked ${count} JavaScript modules, JSON and shell syntax; failures=${failures}`);process.exitCode=failures?1:0;

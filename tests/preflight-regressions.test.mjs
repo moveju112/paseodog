@@ -173,7 +173,7 @@ test('CLI detects run after global host option, keeps explicit provider choices'
         for (const rel of ['bin/paseodog.mjs', 'scripts/paths.mjs', 'plugin/server/util.mjs', 'plugin/shared/release.json', 'package.json']) {
             mkdirSync(join(root, rel, '..'), { recursive: true }); copyFileSync(join(repoRoot, rel), join(root, rel));
         }
-        const fake = join(root, 'tools/node_modules/.bin/paseo'); mkdirSync(join(fake, '..'), { recursive: true });
+        const fake = join(root, 'tools/node_modules/@getpaseo/cli/bin/paseo'); mkdirSync(join(fake, '..'), { recursive: true });
         writeFileSync(fake, '#!/usr/bin/env node\nconsole.log(JSON.stringify({argv:process.argv.slice(2),dir:process.env.MIXDOG_DATA_DIR}));', { mode: 0o755 });
         const invoke = (argv) => {
             const result = spawnSync(process.execPath, [join(root, 'bin/paseodog.mjs'), ...argv], {

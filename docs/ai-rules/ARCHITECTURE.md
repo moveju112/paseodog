@@ -30,7 +30,7 @@ PaseoDog = Paseo (daemon, desktop/mobile/web/SSH clients) + Mixdog (inference, n
 | Dedicated home | `${PASEODOG_HOME:-~/.local/share/paseodog}` → paseo/ (PASEO_HOME), mixdog/ (MIXDOG_HOME). `evidence: scripts/paths.mjs:6` |
 | Dedicated daemon port | `listen` in the dedicated home's paseo/config.json (this PC: `127.0.0.1:6768`). 6767 is stock Paseo |
 | Installed PC app | /opt/PaseoDog, log `~/.config/PaseoDog/logs/main.log` |
-| Plugin registration | the source checkout's `plugin/` is registered directly. `evidence: scripts/install.sh:64` |
+| Plugin registration | the source checkout's `plugin/` is registered directly. `evidence: scripts/install.mjs:94` |
 
 ## Data flow
 

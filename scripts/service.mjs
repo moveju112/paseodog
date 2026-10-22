@@ -1,9 +1,18 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { root, stateRoot } from './paths.mjs';
-if(process.platform!=='linux'){console.error('Linux systemd user service only');process.exit(1);}
-if(!process.argv.includes('--install')){console.log('Run: node scripts/service.mjs --install (writes service only; does not start it)');process.exit(0);}
+import { root, stateRoot, launcherPath } from './paths.mjs';
+if(!['linux','win32'].includes(process.platform)){console.error('Linux systemd user service or Windows logon start only');process.exit(1);}
+if(!process.argv.includes('--install')){console.log('Run: node scripts/service.mjs --install (registers startup only; does not start it)');process.exit(0);}
+if(process.platform==='win32'){
+    // Per-user Run key: starts the dedicated daemon at logon without administrator rights.
+    const key='HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+    const result=spawnSync('reg.exe',['add',key,'/v','PaseoDog','/t','REG_SZ','/d',`"${launcherPath}" start`,'/f'],{encoding:'utf8',windowsHide:true});
+    if(result.status!==0){console.error(result.error?.message||result.stderr||'reg add failed');process.exit(1);}
+    console.log(`Registered ${key}\\PaseoDog -> "${launcherPath}" start\nRemove with: reg delete ${key} /v PaseoDog /f\nNo daemon was started automatically.`);
+    process.exit(0);
+}
 const quote=(s)=>'"'+s.replaceAll('\\','\\\\').replaceAll('"','\\"').replaceAll('%','%%')+'"';
 const dir=join(homedir(),'.config','systemd','user');mkdirSync(dir,{recursive:true});
 const file=join(dir,'paseodog.service');

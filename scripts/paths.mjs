@@ -1,16 +1,24 @@
 import { homedir } from 'node:os';
-import { dirname, resolve, join } from 'node:path';
+import { dirname, resolve, join, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-export const stateRoot = resolve(process.env.PASEODOG_HOME || join(homedir(), '.local', 'share', 'paseodog'));
+const defaultStateRoot = process.platform === 'win32'
+    ? join(process.env.LOCALAPPDATA, 'paseodog')
+    : join(homedir(), '.local', 'share', 'paseodog');
+export const stateRoot = resolve(process.env.PASEODOG_HOME || defaultStateRoot);
 export const paseoHome = join(stateRoot, 'paseo');
 export const mixdogHome = join(stateRoot, 'mixdog');
 export const mixdogDataDir = join(mixdogHome, 'data');
 export const journalRoot = join(stateRoot, 'sessions');
-export const paseoBin = join(root, 'tools', 'node_modules', '.bin', 'paseo');
-export const nativeBin = join(root, 'engine', 'node_modules', '.bin', 'mixdog');
+// npm .bin 셸 래퍼 대신 패키지 진입 파일을 현재 Node로 직접 실행한다 (Windows 호환).
+export const paseoBin = join(root, 'tools', 'node_modules', '@getpaseo', 'cli', 'bin', 'paseo');
+export const nativeBin = join(root, 'engine', 'node_modules', 'mixdog', 'src', 'cli.mjs');
 export const worker = join(root, 'engine', 'bin', 'paseodog-engine.mjs');
+export const launcherPath = process.platform === 'win32'
+    ? join(stateRoot, 'bin', 'paseodog.cmd')
+    : join(homedir(), '.local', 'bin', 'paseodog');
+export const installCommand = process.platform === 'win32' ? 'node scripts/install.mjs' : 'bash scripts/install.sh';
 // Paseo에 저장된 연결 경로·모델 선택만 재사용하며 토큰 내용은 읽지 않는다.
 export function providerEnvironment(home = paseoHome) {
     let config;
@@ -25,9 +33,13 @@ export function providerEnvironment(home = paseoHome) {
 export const runtimeEnv = () => {
     // Never inherit a parent Mixdog profile or a Node loader override.
     const { NODE_OPTIONS: _options, NODE_PATH: _nodePath, ...base } = process.env;
+    // Windows keeps the key as "Path"; replace it instead of adding a second PATH.
+    const pathKey = Object.keys(base).find((key) => key.toUpperCase() === 'PATH') || 'PATH';
+    const inheritedPath = base[pathKey] || '';
+    delete base[pathKey];
     return { ...base, ...providerEnvironment(), PASEO_HOME: paseoHome, MIXDOG_HOME: mixdogHome,
         MIXDOG_DATA_DIR: mixdogDataDir, PASEODOG_STATE_DIR: journalRoot,
-        PATH: `${dirname(process.execPath)}:${join(root,'tools','node_modules','.bin')}:${process.env.PATH || ''}` };
+        PATH: [dirname(process.execPath), join(root,'tools','node_modules','.bin'), inheritedPath].join(delimiter) };
 };
 export function supportedNode(version = process.versions.node) {
     const [major,minor] = version.split('.').map(Number);

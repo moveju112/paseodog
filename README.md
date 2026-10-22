@@ -8,7 +8,7 @@
 | Windows (x64) | `PaseoDog-Setup-<버전>-x64.exe` |
 | Linux (x64) | `PaseoDog-<버전>-amd64.deb` |
 
-Linux 서버의 데몬이 Mixdog 엔진을 실행하고, 휴대폰·PC 앱·웹에서 같은 세션을 제어합니다. 앱만으로는 동작하지 않으니 먼저 서버에 데몬을 설치하세요.
+Linux 서버(또는 Windows PC)의 데몬이 Mixdog 엔진을 실행하고, 휴대폰·PC 앱·웹에서 같은 세션을 제어합니다. 앱만으로는 동작하지 않으니 먼저 데몬을 설치하세요.
 
 ## 1. 데몬 설치 (Linux 서버)
 
@@ -50,6 +50,21 @@ cd paseodog
 git pull
 bash scripts/install.sh
 ```
+
+### Windows 데몬 (시험 지원)
+
+필요: Node.js `^22.19.0` 또는 `>=24`, Git, npm, .NET Framework 4.x(Windows 10/11 기본 포함). 관리자 권한 없이 일반 사용자로 설치합니다.
+
+```powershell
+git clone https://github.com/moveju112/paseodog.git
+cd paseodog
+node scripts/install.mjs           # TRUST 입력 → 의존성 설치, 검사, 데몬 시작, 플러그인 등록
+```
+
+- 상태와 런처는 `%LOCALAPPDATA%\paseodog`에 저장됩니다. `%LOCALAPPDATA%\paseodog\bin`을 사용자 PATH에 추가하면 `paseodog auth`, `paseodog password`, `paseodog doctor`를 바로 실행할 수 있습니다.
+- 세션마다 엔진과 셸 하위 프로세스를 Job Object로 묶어, 세션을 중지하면 남은 프로세스까지 함께 종료합니다. 격리 헬퍼는 처음 설치할 때 기본 `csc.exe`로 빌드됩니다.
+- 로그인할 때 자동으로 시작하려면 `node scripts/service.mjs --install`을 실행하세요(사용자 Run 키 등록).
+- 루트 테스트는 POSIX 도구가 필요해서 Windows 설치 중에는 건너뜁니다. 업데이트는 `git pull` 후 `node scripts/install.mjs`를 다시 실행하세요.
 
 ## 2. 앱 설치
 

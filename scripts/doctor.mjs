@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { root,paseoHome,mixdogHome,journalRoot,paseoBin,nativeBin,supportedNode } from './paths.mjs';
 import { patch, PIN } from './patch-mixdog.mjs';
 import { CLI_VERSION } from './patch-paseo-cli.mjs';
+import { windowsCompilerPath } from '../plugin/server/windows-job.mjs';
 const checks=[];
 const record=(name,ok,detail)=>checks.push({name,status:ok?'PASS':'FAIL',detail});
 record('node',supportedNode(),process.versions.node+'; required ^22.19.0 || >=24.0.0');
@@ -11,6 +12,10 @@ record('git',spawnSync('git',['--version'],{encoding:'utf8'}).status===0,'Git ex
 if (process.platform === 'linux') {
     const scope = spawnSync('/usr/bin/systemctl', ['--user', 'show-environment'], {encoding:'utf8', timeout:3500});
     record('systemd user scope',scope.status===0,scope.status===0?'User cgroup manager available':'Per-session Linux shell containment unavailable; check XDG_RUNTIME_DIR and lingering');
+}
+if (process.platform === 'win32') {
+    const compiler = windowsCompilerPath();
+    record('Windows job helper compiler',existsSync(compiler),compiler+' (.NET Framework 4.x; builds the per-session kill-on-close job helper)');
 }
 for(const [name,file] of [['Paseo CLI',paseoBin],['Mixdog CLI',nativeBin]])record(name,existsSync(file),file);
 for(const [name,path,pin] of [['Paseo','tools/node_modules/@getpaseo/cli/package.json',CLI_VERSION],['Mixdog','engine/node_modules/mixdog/package.json',PIN]]){
@@ -21,7 +26,8 @@ try{const c=JSON.parse(readFileSync(join(paseoHome,'config.json'),'utf8'));recor
     const listen=c.daemon?.listen||'unset';record('listen configured',typeof listen==='string',listen);
 }catch(e){record('Paseo config',false,e.message);}
 for(const path of [paseoHome,mixdogHome,journalRoot]){
-    const exists=existsSync(path);record('private state directory',exists&&!lstatSync(path).isSymbolicLink()&&(lstatSync(path).mode&0o077)===0,path);
+    // Windows has no POSIX mode bits; the per-user profile ACL protects %LOCALAPPDATA%.
+    const exists=existsSync(path);record('private state directory',exists&&!lstatSync(path).isSymbolicLink()&&(process.platform==='win32'||(lstatSync(path).mode&0o077)===0),path);
 }
 const output={checkedAt:new Date().toISOString(),platform:process.platform,checks,
     notChecked:['Live account authentication','Real model response','Native helper execution','Android LTE/5G pairing','Server reboot/service recovery'],

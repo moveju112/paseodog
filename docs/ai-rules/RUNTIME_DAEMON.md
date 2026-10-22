@@ -25,7 +25,7 @@ Build, signing and GitHub publish order: [tasks/RELEASE.md](tasks/RELEASE.md). T
   - why: source, build, published release, installed app and running app are separate states.
   - ❌ hand-editing the installed `app.asar`.
   - ✅ after install, confirm `dpkg -s paseodog` reports the built version.
-- **NEVER** run `scripts/install.sh` as a check or upgrade trial.
+- **NEVER** run `scripts/install.sh` / `scripts/install.mjs` as a check or upgrade trial.
   - why: install rewrites the profile, re-applies patches and starts/reloads the daemon.
   - ✅ check with `paseodog doctor`; patches with `node scripts/patch-<이름>.mjs --check`.
 - **NEVER** fold new public listeners or chat/account data deletion into PC-apply approval.

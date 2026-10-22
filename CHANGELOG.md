@@ -2,6 +2,7 @@
 
 ## 1.0.0-rc.7 - 2026-10-21
 
+- Windows에서도 데몬을 설치·실행할 수 있게 한다(시험 지원). 설치는 공통 Node 설치 스크립트(`scripts/install.mjs`, Linux는 `install.sh`가 호출)로 합치고, 상태는 `%LOCALAPPDATA%\paseodog`, 런처는 `paseodog.cmd`를 쓴다. 세션 엔진은 .NET Framework 기본 `csc.exe`로 빌드한 헬퍼가 Job Object(`KILL_ON_JOB_CLOSE`)에 묶어 실행해, 세션 중지·크래시 때 셸 하위 프로세스까지 종료한다. 자동 시작은 사용자 Run 키로 등록한다. CLI는 npm `.bin` 래퍼 대신 Node로 진입 파일을 직접 실행한다.
 - 사이드바 쿼터 요약(막대·도넛)의 공급자 순서를 Claude → Codex로 바꾼다. 이전 순서 패치가 적용된 데몬 웹 UI도 원본 해시 검증을 거쳐 새 순서로 교체한다(공유 앱 원본·웹 번들 패치 공통).
 - README를 릴리즈 다운로드 링크와 설치법만 남기도록 정리한다. 플랫폼별 파일, 데몬 설치·자동 시작·업데이트, 앱 연결 방법을 적는다.
 - Windows x64 데스크톱을 설치형(NSIS `.exe`)으로만 다시 함께 배포한다. 최대 압축 zip은 빌드 시간(약 9분)에 비해 이점이 없어 대상에서 뺀다. Linux에서 교차 빌드하며 Windows용 런타임 바이너리(sherpa-onnx 로컬 음성 인식, 플러그인 컴파일용 esbuild)를 포함한다.

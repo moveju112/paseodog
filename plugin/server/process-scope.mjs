@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { createWindowsJobScope } from './windows-job.mjs';
 
 const execFileAsync = promisify(execFile);
 const NOT_LOADED = /(?:not loaded|not found|could not be found|does not exist)/i;
@@ -16,8 +17,10 @@ function commandError(error) {
  * A process group is NOT sufficient on Linux: Mixdog's native shell helper
  * calls setpgid and escapes its parent's group. Each real session therefore
  * runs in a dedicated systemd *user scope* (one cgroup, independent of PGIDs).
- * The explicit legacy group mode below is reserved for tests and platforms
- * without Linux cgroups; the production provider never selects it on Linux.
+ * On Windows each session runs under a kill-on-close Job Object helper
+ * (windows-job.mjs). The explicit legacy group mode below is reserved for
+ * tests and platforms without either; production never selects it on Linux
+ * or Windows.
  */
 export function createProcessScope({ launch, platform = process.platform, mode = 'strict',
     runCommand = (cmd, args, opts) => execFileAsync(cmd, args, opts),
@@ -25,6 +28,7 @@ export function createProcessScope({ launch, platform = process.platform, mode =
     now = () => Date.now(), sleep = delay, unitName = `paseodog-${randomUUID().replaceAll('-', '')}.scope`,
     verifyMs = 4000 } = {}) {
     if (!launch?.command) throw new Error('Missing engine launch command');
+    if (platform === 'win32' && mode === 'strict') return createWindowsJobScope({ launch, runCommand });
     if (platform !== 'linux' || mode === 'test-only-process-group') {
         if (platform === 'linux' && mode !== 'test-only-process-group') throw new Error('Invalid process scope mode');
         return {
