@@ -1169,6 +1169,7 @@ export const fr: TranslationResources = {
       title: "Récents",
       empty: "Aucune session avec message sur cette période",
       windowAccessibility: "Afficher les sessions : {{window}}",
+      splitLinked: "Ouverte en vue scindée avec {{title}}",
       windows: {
         fifteenMinutes: "15 min",
         oneHour: "1 h",

@@ -1149,6 +1149,7 @@ export const ko: TranslationResources = {
       title: "최근",
       empty: "이 기간에 채팅한 세션 없음",
       windowAccessibility: "{{window}} 이내 세션 보기",
+      splitLinked: "{{title}}와 분할 화면으로 연결됨",
       windows: {
         fifteenMinutes: "15분",
         oneHour: "1시간",

@@ -16,7 +16,10 @@ const recordGap = sourceFunction('work-record-model.ts', 'getWorkRecordGap');
 const projectionStart = 'e.createStreamPresentation=function(){const l=new WeakMap,H=';
 const projectionInjected = `e.createStreamPresentation=function(){const pdRecordCache={records:new Map,answers:new WeakMap},pdWork=${projection};const l=new WeakMap,H=`;
 const viewStart = 'function ae(e){return e.pendingPermissions||';
-const viewInjected = `const pdRenderWorkRecord=(${renderer})({React:h,View:f.withUnistyles(l.View),Text:f.withUnistyles(l.Text),Pressable:f.withUnistyles(l.Pressable),StyleSheet:f.StyleSheet,useTranslation:y.useTranslation});${viewStart}`;
+const viewInjected = `const pdRenderWorkRecord=(${renderer})({React:h,View:f.withUnistyles(l.View),Text:f.withUnistyles(l.Text),Pressable:f.withUnistyles(l.Pressable),StyleSheet:f.StyleSheet,useTranslation:y.useTranslation,getClient:e=>k.useSessionStore.getState().sessions[e]?.client??null});${viewStart}`;
+// 렌더러 호출: 읽기 전용(je)이 아니면 이어서 진행 대상 세션(serverId tt, agentId o)을 넘긴다.
+const LEGACY_RENDER_CALL = 'content:pdRenderWorkRecord(e,Ln),layoutItem:e,strategy:Ne,';
+const RENDER_CALL = 'content:pdRenderWorkRecord(e,Ln,je?void 0:{serverId:tt,agentId:o}),layoutItem:e,strategy:Ne,';
 const spacingEdits = [
     ['e.getGapBetweenStreamItems=function(u,c){if(!u||!c)return 0;',
         `e.getGapBetweenStreamItems=function(u,c){const pdGap=(${recordGap})(u,c);if(null!==pdGap)return pdGap;if(!u||!c)return 0;`],
@@ -46,7 +49,7 @@ export const WORK_RECORD_EDITS = [
         '(s.groupWorkRecords?pdWork((0,n.projectToolCallDetailLevel)({level:s.level,tail:y.tail,head:y.head,preparedHistory:b,isTurnActive:s.isTurnActive}),s.isTurnActive,pdRecordCache,s.hideReasoning):(0,n.projectToolCallDetailLevel)({level:s.level,tail:y.tail,head:y.head,preparedHistory:b,isTurnActive:s.isTurnActive}))'],
     ['isTurnActive:Nt,hideReasoning:pdHideReasoning}', 'isTurnActive:Nt,hideReasoning:pdHideReasoning,groupWorkRecords:!0}'],
     [viewStart, viewInjected],
-    ['content:Ln(e),layoutItem:e,strategy:Ne,', 'content:pdRenderWorkRecord(e,Ln),layoutItem:e,strategy:Ne,'],
+    ['content:Ln(e),layoutItem:e,strategy:Ne,', RENDER_CALL],
     ...spacingEdits,
 ];
 
@@ -79,10 +82,30 @@ const LEGACY_PROJECTION_HASHES = new Map([
     ['b6bf3716ac78d587356bb6f1399347df171b4742179363da145cdab86804e66c', true],
 ]);
 
+// 검토한 이전 렌더러 주입본 ("답변" 제목 판, 하단 접기만 있고 이어서 진행 버튼 이전 판)
+const LEGACY_RENDERER_HASHES = new Set([
+    '024f9bc387a66785f68f082e69a2584d85c0027f48b754227c3caa9e3feb8954',
+    '8f7df87fbd7357758d76d470875751ec1f55882e7c8008bd5ad09aa23e150c3e',
+]);
+
+// 이전에 검토한 렌더러 주입·호출만 현재 렌더러 주입·호출로 바꾼다.
+function withCurrentRenderer(source) {
+    if (source.split(LEGACY_RENDER_CALL).length > 2) throw new Error('Paseo work record drift');
+    source = source.replace(LEGACY_RENDER_CALL, () => RENDER_CALL);
+    const startMarker = 'const pdRenderWorkRecord=(';
+    const start = source.indexOf(startMarker);
+    if (start === -1 || source.includes(viewInjected)) return source;
+    const end = source.indexOf(viewStart, start);
+    const previous = source.slice(start, end + viewStart.length);
+    if (end === -1 || !LEGACY_RENDERER_HASHES.has(createHash('sha256').update(previous).digest('hex')))
+        throw new Error('Paseo work record legacy renderer drift');
+    return source.replace(previous, () => viewInjected);
+}
+
 // 전체 패치만 제거해 기존 번들 원본 해시 검증과 독립 패치 검사를 보존한다.
 export function withoutWorkRecords(source) {
     let edits = WORK_RECORD_EDITS;
-    source = withCurrentRecordGap(source);
+    source = withCurrentRenderer(withCurrentRecordGap(source));
     const start =source.indexOf('e.createStreamPresentation=function(){const pdRecordCache=');
     if (start !== -1 && !source.includes(projectionInjected)) {
         const endMarker = ';const l=new WeakMap,H=';

@@ -1178,6 +1178,7 @@ export const es: TranslationResources = {
       title: "Recientes",
       empty: "No hay sesiones con mensajes en este periodo",
       windowAccessibility: "Mostrar sesiones de {{window}}",
+      splitLinked: "Abierta en vista dividida con {{title}}",
       windows: {
         fifteenMinutes: "15 min",
         oneHour: "1 h",

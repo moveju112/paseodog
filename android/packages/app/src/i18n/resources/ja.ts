@@ -1155,6 +1155,7 @@ export const ja: TranslationResources = {
       title: "最近",
       empty: "この期間にメッセージしたセッションはありません",
       windowAccessibility: "{{window}}以内のセッションを表示",
+      splitLinked: "{{title}}と分割表示で連結",
       windows: {
         fifteenMinutes: "15分",
         oneHour: "1時間",

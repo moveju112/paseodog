@@ -1134,6 +1134,7 @@ export const zhCN: TranslationResources = {
       title: "最近",
       empty: "此时间段内没有发过消息的会话",
       windowAccessibility: "显示{{window}}内的会话",
+      splitLinked: "与{{title}}分屏显示",
       windows: {
         fifteenMinutes: "15分钟",
         oneHour: "1小时",

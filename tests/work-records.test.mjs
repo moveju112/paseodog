@@ -135,13 +135,75 @@ test('work record renderer is collapsed by default, expands on press and collaps
     const row = { item: record, phase: 'complete' };
     const body = (layout) => React.createElement('body', { id: layout.item.id }, layout.item.text);
     let tree;
+    const button = (testID) => tree.root.findAll((node) => node.type === 'pressable' && node.props.testID === testID);
     await act(async () => { tree = create(render(row, body)); });
     assert.equal(tree.root.findAllByType('body').length, 0);
-    assert.equal(tree.root.findByType('pressable').props.accessibilityState.expanded, false);
-    await act(async () => tree.root.findByType('pressable').props.onPress());
+    assert.equal(button('assistant-work-record-toggle')[0].props.accessibilityState.expanded, false);
+    assert.equal(button('assistant-work-record-collapse').length, 0);
+    await act(async () => button('assistant-work-record-toggle')[0].props.onPress());
     assert.deepEqual(tree.root.findAllByType('body').map((node) => node.props.id), ['thought', 'p']);
+    // 펼친 기록 맨 아래의 접기 버튼도 기록을 접는다.
+    const [collapse] = button('assistant-work-record-collapse');
+    assert.deepEqual(collapse.findAllByType('text').map((node) => node.props.children), ['⌃', '접기']);
+    await act(async () => collapse.props.onPress());
+    assert.equal(tree.root.findAllByType('body').length, 0);
+    assert.equal(button('assistant-work-record-collapse').length, 0);
+    await act(async () => button('assistant-work-record-toggle')[0].props.onPress());
     await act(async () => tree.update(render({ ...row, item: { ...record, active: false } }, body)));
     assert.equal(tree.root.findAllByType('body').length, 0);
+    // 응답 제목은 한국어로 "응답"이다.
+    let answer;
+    await act(async () => { answer = create(render({ item: { kind: 'assistant_message', id: 'a', text: '본문', answerStart: true } }, body)); });
+    assert.equal(answer.root.findAll((node) => node.type === 'text' && node.props.accessibilityRole === 'header')[0].props.children, '응답');
+    await act(async () => answer.unmount());
+    await act(async () => tree.unmount());
+    delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+});
+
+test('a turn that ended on a closed provider connection offers one explicit continue request', async () => {
+    const req = createRequire(new URL('../plugin/package.json', import.meta.url));
+    const React = req('react');
+    const { create, act } = req('react-test-renderer');
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const theme = { colors: { surface1: '#f5f5f5', border: '#ddd', foregroundMuted: '#777', foreground: '#111', accent: '#20f', accentForeground: '#fff' },
+        borderRadius: { md: 6 }, spacing: { 1: 4, 2: 8, 3: 12 }, fontSize: { sm: 12 } };
+    const sent = [];
+    let fail = false;
+    const client = { sendAgentMessage: async (agentId, text, options) => { sent.push([agentId, text, options]); if (fail) throw new Error('offline'); } };
+    const render = createRenderer({ React, View: 'view', Text: 'text', Pressable: 'pressable',
+        StyleSheet: { create: (make) => make(theme) }, useTranslation: () => ({ i18n: { language: 'ko' } }),
+        getClient: (serverId) => (serverId === 'srv' ? client : null) });
+    const body = (layout) => React.createElement('body', { id: layout.item.id }, layout.item.text);
+    const error = { kind: 'assistant_message', id: 'e', text: '[System Error] Provider connection closed', answerStart: true };
+    const session = { serverId: 'srv', agentId: 'agent-1' };
+    const button = (tree) => tree.root.findAll((node) => node.type === 'pressable' && node.props.testID === 'assistant-resume-after-disconnect');
+    let tree;
+    // 대화 끝이 아니거나, 진행 중이거나, 세션 정보가 없거나(읽기 전용), 다른 오류면 버튼이 없다.
+    for (const [row, target] of [[{ item: error, belowItem: { kind: 'user_message' }, phase: 'complete' }, session],
+        [{ item: error, belowItem: null, phase: 'streaming' }, session], [{ item: error, belowItem: null, phase: 'complete' }, undefined],
+        [{ item: { ...error, text: '[System Error] Usage limit' }, belowItem: null, phase: 'complete' }, session]]) {
+        await act(async () => { tree = create(render(row, body, target)); });
+        assert.equal(button(tree).length, 0);
+        await act(async () => tree.unmount());
+    }
+    await act(async () => { tree = create(render({ item: error, belowItem: null, phase: 'complete' }, body, session)); });
+    const [resume] = button(tree);
+    assert.deepEqual(resume.findAllByType('text').map((node) => node.props.children), ['이어서 진행하기']);
+    await act(async () => resume.props.onPress());
+    await act(async () => button(tree)[0].props.onPress());
+    // 누를 때 한 번만 새 메시지로 보내고, 응답을 기다리는 동안 다시 보내지 않는다.
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0][0], 'agent-1');
+    assert.equal(sent[0][1], '이어서 진행');
+    assert.match(sent[0][2].messageId, /^msg_\d+_/);
+    assert.equal(button(tree)[0].props.disabled, true);
+    await act(async () => tree.unmount());
+    // 전송이 실패하면 자동 재전송 없이 다시 누를 수 있게만 돌아온다.
+    fail = true;
+    await act(async () => { tree = create(render({ item: error, belowItem: null, phase: 'complete' }, body, session)); });
+    await act(async () => button(tree)[0].props.onPress());
+    assert.equal(sent.length, 2);
+    assert.equal(button(tree)[0].props.disabled, false);
     await act(async () => tree.unmount());
     delete globalThis.IS_REACT_ACT_ENVIRONMENT;
 });
@@ -155,6 +217,8 @@ test('reviewed web bundle supports the same A renderer and rejects partial patch
     const [before, after] = WORK_RECORD_EDITS[0];
     assert.throws(() => patchedComposerSource(patched.replace(after, before)), /Partial/);
     assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
+    // 검토하지 않은 렌더러 주입본은 교체하지 않는다.
+    assert.throws(() => withoutWorkRecords(patched.replace('collapse: "접기"', 'collapse: "닫기"')), /legacy renderer drift/);
     // 실제 번들의 append 경로에서 단계만 늦게 바뀌어도 본문은 중복되지 않는다.
     const code = WORK_RECORD_EDITS.find(([text]) => text.startsWith('function A('))[1];
     const append = new Function('S', 'p', code + ';return A;')(

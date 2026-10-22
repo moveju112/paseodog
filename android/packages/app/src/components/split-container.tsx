@@ -10,6 +10,10 @@ import {
   type SetStateAction,
 } from "react";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { matchSessionReveal, useSessionRevealStore } from "@/stores/session-reveal-store";
+
+// 고른 세션 칸 강조 테두리를 보여 주는 시간
+const SESSION_REVEAL_FLASH_MS = 1200;
 import {
   DndContext,
   DragOverlay,
@@ -1249,6 +1253,24 @@ function SplitPaneView({
     () => onTogglePaneMaximized(paneId),
     [onTogglePaneMaximized, paneId],
   );
+  // PaseoDog: 최근 목록에서 고른 세션을 보여 주는 칸을 잠깐 강조한다.
+  const revealRequest = useSessionRevealStore((state) => state.request);
+  const activeAgentId =
+    activeTabDescriptor?.target.kind === "agent" ? activeTabDescriptor.target.agentId : null;
+  const [revealedId, setRevealedId] = useState<number | null>(null);
+  const shownRevealIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    const id = matchSessionReveal(revealRequest, normalizedServerId, activeAgentId, Date.now());
+    // 같은 요청은 한 번만 강조한다.
+    if (id === null || id === shownRevealIdRef.current) return;
+    shownRevealIdRef.current = id;
+    setRevealedId(id);
+  }, [activeAgentId, normalizedServerId, revealRequest]);
+  useEffect(() => {
+    if (revealedId === null) return;
+    const timer = setTimeout(() => setRevealedId(null), SESSION_REVEAL_FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [revealedId]);
   return (
     <RenderProfile id={`SplitPaneView:${pane.id}`}>
       <View
@@ -1257,6 +1279,13 @@ function SplitPaneView({
         style={styles.pane}
         testID={`workspace-pane-${pane.id}`}
       >
+        {revealedId !== null ? (
+          <View
+            pointerEvents="none"
+            style={styles.paneReveal}
+            testID={`workspace-pane-reveal-${pane.id}`}
+          />
+        ) : null}
         <WindowChromeSafeArea placement="inline" style={styles.paneTabs}>
           <TitlebarDragRegion />
           <WorkspaceDesktopTabsRow
@@ -1422,6 +1451,18 @@ const styles = StyleSheet.create((theme) => ({
     minHeight: 0,
     backgroundColor: theme.colors.surface0,
     overflow: "hidden",
+  },
+  // 고른 세션을 보여 주는 칸의 잠깐 강조 테두리 (내용 위에 겹치고 입력은 통과)
+  paneReveal: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 10,
+    borderWidth: 2,
+    borderColor: theme.colors.accent,
+    borderRadius: theme.borderRadius.md,
   },
   paneTabs: {
     position: "relative",

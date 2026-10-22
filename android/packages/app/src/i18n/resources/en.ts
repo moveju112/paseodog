@@ -1150,6 +1150,7 @@ export const en = {
       title: "Recent",
       empty: "No sessions you messaged in this range",
       windowAccessibility: "Show sessions from the last {{window}}",
+      splitLinked: "Open in split view with {{title}}",
       windows: {
         fifteenMinutes: "15m",
         oneHour: "1h",

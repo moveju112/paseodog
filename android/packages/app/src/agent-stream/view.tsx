@@ -917,7 +917,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
 
     const renderStreamItem = useCallback(
       (layoutItem: StreamLayoutItem) => {
-        const content = renderWorkRecord(layoutItem, renderStreamItemContent);
+        // 읽기 전용 화면에는 연결 끊김 후 이어서 진행 버튼을 두지 않는다.
+        const content = renderWorkRecord(
+          layoutItem,
+          renderStreamItemContent,
+          readOnly ? undefined : { serverId: resolvedServerId, agentId },
+        );
         return renderStreamItemWithTurnFooter({
           content,
           layoutItem,
@@ -927,9 +932,11 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         });
       },
       [
+        agentId,
         handleForkAssistantTurn,
         readOnly,
         renderStreamItemContent,
+        resolvedServerId,
         streamRenderStrategy,
         supportsAgentForkContextCursor,
       ],

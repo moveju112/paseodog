@@ -1168,6 +1168,7 @@ export const ptBR: TranslationResources = {
       title: "Recentes",
       empty: "Nenhuma sessão com mensagem neste período",
       windowAccessibility: "Mostrar sessões de {{window}}",
+      splitLinked: "Aberta em tela dividida com {{title}}",
       windows: {
         fifteenMinutes: "15 min",
         oneHour: "1 h",

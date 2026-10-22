@@ -1159,6 +1159,7 @@ export const ru: TranslationResources = {
       title: "Недавние",
       empty: "Нет сессий с сообщениями за этот период",
       windowAccessibility: "Показать сессии за {{window}}",
+      splitLinked: "Открыта в разделённом виде с {{title}}",
       windows: {
         fifteenMinutes: "15 мин",
         oneHour: "1 ч",

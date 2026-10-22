@@ -1142,6 +1142,7 @@ export const ar: TranslationResources = {
       title: "الأخيرة",
       empty: "لا توجد جلسات راسلتها في هذه الفترة",
       windowAccessibility: "عرض الجلسات خلال {{window}}",
+      splitLinked: "مفتوحة في عرض مقسّم مع {{title}}",
       windows: {
         fifteenMinutes: "15 د",
         oneHour: "1 س",
