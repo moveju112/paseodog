@@ -5,7 +5,7 @@
 | 플랫폼 | 파일 |
 |---|---|
 | Android (arm64) | `PaseoDog-<versionCode>-arm64-v8a.apk` |
-| Windows (x64) | `PaseoDog-Setup-<버전>-x64.exe` (설치형), `PaseoDog-Setup-<버전>-x64.zip` (압축 해제 후 실행) |
+| Windows (x64) | `PaseoDog-Setup-<버전>-x64.exe` |
 | Linux (x64) | `PaseoDog-<버전>-amd64.deb` |
 
 Linux 서버의 데몬이 Mixdog 엔진을 실행하고, 휴대폰·PC 앱·웹에서 같은 세션을 제어합니다. 앱만으로는 동작하지 않으니 먼저 서버에 데몬을 설치하세요.
@@ -54,7 +54,7 @@ bash scripts/install.sh
 ## 2. 앱 설치
 
 - **Android**: `.apk`를 받아 설치합니다. 이후 업데이트는 앱 설정에서 받습니다.
-- **Windows**: `.exe`를 실행해 설치하거나 `.zip`을 풀어 `PaseoDog.exe`를 실행합니다. 코드서명이 없어서 SmartScreen 경고가 뜨면 **추가 정보 → 실행**을 누르세요.
+- **Windows**: `.exe`를 실행해 설치합니다. 코드서명이 없어서 SmartScreen 경고가 뜨면 **추가 정보 → 실행**을 누르세요.
 - **Linux**: `sudo apt install ./PaseoDog-<버전>-amd64.deb`
 
 ## 3. 앱을 데몬에 연결
