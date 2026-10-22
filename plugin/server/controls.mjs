@@ -33,18 +33,29 @@ function createControlDaemon({ launch, spawnProcess, terminateProcess }) {
             stdio: ['pipe', 'pipe', 'pipe'],
         });
         if (!spawned?.stdin || !spawned?.stdout) throw new Error('Control stdio unavailable');
+        // 종료된 이전 프로세스의 늦은 오류가 새 연결을 종료하지 않도록 분리한다.
+        const failSpawned = (reason) => {
+            if (child === spawned) failAll(reason);
+        };
         const decoder = createJsonLineDecoder((frame) => {
-            if (!frame || typeof frame.id !== 'string') return;
+            if (child !== spawned || !frame || typeof frame.id !== 'string') return;
             const entry = pending.get(frame.id);
             if (!entry) return;
             pending.delete(frame.id);
             clearTimeout(entry.timeout);
             if (frame.ok) entry.resolve(frame.value);
             else entry.reject(new Error(frame.error || 'Engine settings failed'));
-        }, () => failAll('Control daemon decode error'));
-        spawned.stdout.on('data', (chunk) => decoder.write(chunk));
-        spawned.on?.('error', () => failAll('Control daemon process error'));
-        spawned.on?.('exit', () => failAll('Control daemon exited'));
+        }, () => failSpawned('Control daemon decode error'));
+        spawned.stdout.on('data', (chunk) => {
+            if (child === spawned) decoder.write(chunk);
+        });
+        spawned.stdin.on('error', () => failSpawned('Control daemon input error'));
+        spawned.stdout.on('error', () => failSpawned('Control daemon output error'));
+        // 자식의 stderr를 버려 파이프 포화에 의한 교착을 방지하고 내용은 노출하지 않는다.
+        spawned.stderr?.on?.('error', () => failSpawned('Control daemon stderr error'));
+        spawned.stderr?.resume?.();
+        spawned.on?.('error', () => failSpawned('Control daemon process error'));
+        spawned.on?.('exit', () => failSpawned('Control daemon exited'));
         child = spawned;
         touch();
         return child;
@@ -63,7 +74,9 @@ function createControlDaemon({ launch, spawnProcess, terminateProcess }) {
                 timeout.unref?.();
                 pending.set(id, { resolve, reject, timeout });
                 try {
-                    proc.stdin.write(encodeFrame({ v: 1, id, request }));
+                    proc.stdin.write(encodeFrame({ v: 1, id, request }), (error) => {
+                        if (error && child === proc) failAll('Control daemon write failed');
+                    });
                 } catch (error) {
                     pending.delete(id);
                     clearTimeout(timeout);
