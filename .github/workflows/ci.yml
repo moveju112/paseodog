@@ -14,8 +14,21 @@ jobs:
         with:
           node-version: '24'
       - run: npm run check
-      - name: Install client test build dependencies
-        run: npm --prefix plugin ci
+      - name: Install root test dependencies from committed lockfiles
+        run: |
+          npm --prefix tools ci
+          npm --prefix engine ci --install-strategy=nested
+          npm --prefix plugin ci
+          # Root tests also import Expo/desktop source and installed Android packages.
+          # Never run Android workspace install hooks in this read-only CI setup.
+          npm --prefix android ci --ignore-scripts
+      - name: Apply and verify pinned runtime patches
+        run: |
+          for patch in mixdog paseo-usage paseo-steer paseo-agent-messages paseo-assistant-phase \
+              paseo-workspace-name paseo-session-titles paseo-local-stt paseo-relay-password paseo-composer; do
+            node "scripts/patch-${patch}.mjs"
+            node "scripts/patch-${patch}.mjs" --check
+          done
       - run: npm test
       - run: python3 scripts/package.py
       - name: Verify release ZIP really includes pinned lockfiles
