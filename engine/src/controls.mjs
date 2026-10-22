@@ -168,7 +168,7 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         }
         if (request.mainBufferTokens !== undefined) {
             if (typeof request.mainBufferTokens !== 'number' || !Number.isFinite(request.mainBufferTokens)
-                || request.mainBufferTokens < 1000 || request.mainBufferTokens > 500000)
+                || (request.mainBufferTokens !== 0 && request.mainBufferTokens < 1000) || request.mainBufferTokens > 500000)
                 throw new Error('Invalid mainBufferTokens');
             patch.mainBufferTokens = Math.round(request.mainBufferTokens);
         }
@@ -178,10 +178,7 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             patch.summaryModel = request.summaryModel.trim();
         }
         if (request.memoryTimeoutMs !== undefined) {
-            if (typeof request.memoryTimeoutMs !== 'number' || !Number.isFinite(request.memoryTimeoutMs)
-                || (request.memoryTimeoutMs !== 0 && (request.memoryTimeoutMs < 1000 || request.memoryTimeoutMs > 600000)))
-                throw new Error('Invalid memoryTimeoutMs');
-            patch.memoryTimeoutMs = Math.round(request.memoryTimeoutMs);
+            throw new Error('메모리 추출 제한 시간은 현재 엔진에서 지원하지 않아요.');
         }
         if (!Object.keys(patch).length) throw new Error('enabled must be boolean');
         await runtime.setCompactionSettings(patch);
@@ -352,7 +349,6 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         ...(bufferRatio !== undefined ? { mainBufferPercent: bufferRatio } : {}),
         ...(typeof rawCompaction.mainBufferTokens === 'number' ? { mainBufferTokens: rawCompaction.mainBufferTokens } : {}),
         ...(typeof rawCompaction.summaryModel === 'string' ? { summaryModel: rawCompaction.summaryModel } : {}),
-        ...(typeof rawCompaction.memoryTimeoutMs === 'number' ? { memoryTimeoutMs: rawCompaction.memoryTimeoutMs } : {}),
     };
     const rawAutoClear = typeof runtime.getAutoClear === 'function' ? runtime.getAutoClear() : null;
     const autoClear = rawAutoClear && typeof rawAutoClear === 'object' ? {

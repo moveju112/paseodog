@@ -1,13 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { nativeSessionAction } from '../engine/src/session-actions.mjs';
-import { _setTurnSnapshotStoreRootForTest, upsertTurnChangeRecord }
-    from '../engine/node_modules/mixdog/src/runtime/shared/turn-snapshot-store.mjs';
 import { patchPaseoSteer } from '../scripts/patch-paseo-steer.mjs';
-import { fixture, until, delay } from './helpers.mjs';
+import { fixture, until } from './helpers.mjs';
 
 const message = (id, text) => ({ type: 'session.prompt', sessionId: 'p1',
     prompt: { clientMessageId: id, delivery: 'auto', input: { type: 'message', content: [{ type: 'text', text }] } } });
@@ -45,34 +41,38 @@ test('revert tokens mark human text turns and conversation revert truncates the 
     assert.deepEqual(second.revertToken, { messageId: second.id });
     const done = await revert(f, 'r1', second.id, 'conversation');
     assert.equal(done.type, 'request.completed');
-    assert.equal(actions.length, 1);
+    assert.equal(actions.length, 2);
+    assert.equal(actions[0].validateOnly, true);
+    assert.equal(actions[1].validateOnly, undefined);
     assert.equal(actions[0].operation, 'rewind');
     assert.equal(actions[0].scope, 'conversation');
     assert.equal(actions[0].text, 'second');
     assert.equal(actions[0].confirmed, true);
-    assert.ok(Number.isFinite(actions[0].since));
+    assert.equal(actions[0].since, undefined);
     const bridgeId = f.events.find((event) => event.type === 'session.opened').persistence.data.bridgeId;
     const items = f.store.load(bridgeId).items.map(({ item }) => item.id);
     assert.ok(!items.includes(second.id));
     assert.ok(items.includes(users[0].item.id));
 });
 
-// 파일 범위는 저널을 유지하고, 위치가 모호하거나 노출하지 않은 대상은 엔진 호출 전에 거절한다.
-test('files revert keeps the journal and ambiguous or foreign targets are refused', async (t) => {
+// 시각 기반 파일 복구와 중복·타 세션 메시지는 엔진 호출 전에 거절한다.
+test('file scopes and ambiguous or foreign targets are refused without mutation', async (t) => {
     const actions = [];
     const f = fixture({ async action(request) { actions.push(request); return { turns: 1 }; } });
     t.after(() => f.connection.close());
     await f.ready();
     await runTurn(f, message('m1', 'same'));
     const first = userItems(f.events)[0].item;
-    assert.equal((await revert(f, 'files', first.id, 'files')).type, 'request.completed');
+    assert.match((await revert(f, 'files', first.id, 'files')).error.message, /not negotiated/);
+    assert.match((await revert(f, 'both', first.id, 'both')).error.message, /not negotiated/);
     const bridgeId = f.events.find((event) => event.type === 'session.opened').persistence.data.bridgeId;
     assert.ok(f.store.load(bridgeId).items.some(({ item }) => item.id === first.id));
     await runTurn(f, message('m2', ' same '));
-    const ambiguous = await revert(f, 'dup', first.id, 'both');
+    const ambiguous = await revert(f, 'dup', first.id, 'conversation');
     assert.match(ambiguous.error.message, /같은 내용/);
+    assert.match((await revert(f, 'dup-last', userItems(f.events).at(-1).item.id, 'conversation')).error.message, /같은 내용/);
     assert.match((await revert(f, 'unknown', 'user:missing', 'conversation')).error.message, /되돌릴 수 없어요/);
-    assert.equal(actions.length, 1);
+    assert.equal(actions.length, 0);
     await assert.rejects(f.connection.sessionAction({ sessionId: 'p1', operation: 'rewind', scope: 'files', confirmed: true }),
         /session\.revert/);
 });
@@ -89,39 +89,95 @@ test('revert is neither advertised nor executed without negotiation', async (t) 
     assert.match((await revert(f, 'r1', item.id, 'conversation')).error.message, /not negotiated/);
 });
 
-// 실제 변경 기록 저장소에서 대상 이후 턴만 최신순으로 복구한 뒤 대화를 자른다.
-test('native rewind reverts later turn checkpoints newest first, then truncates the conversation', async (t) => {
-    const root = mkdtempSync(join(tmpdir(), 'paseodog-rewind-'));
-    _setTurnSnapshotStoreRootForTest(root);
-    t.after(() => { _setTurnSnapshotStoreRootForTest(''); rmSync(root, { recursive: true, force: true }); });
+// 네이티브 대화의 유일한 본문만 절단하고 파일·중복·누락 대상을 거절한다.
+test('native rewind requires a unique retained message and never guesses file checkpoints', async () => {
     const calls = [];
+    const messages = [{ role: 'user', content: 'older' },
+        { role: 'user', content: [{ type: 'text', text: 'target' }] }];
     const runtime = {
         id: 'native-rewind',
-        readModelMessages: () => ({ messages: [{ role: 'user', content: 'older' },
-            { role: 'user', content: [{ type: 'text', text: 'target' }] }] }),
+        readModelMessages: () => ({ messages }),
         async revertTurnChanges(...args) { calls.push(['undo', ...args]); },
         async rewindMessages(options) { calls.push(['rewind', options]); return { removed: 3 }; },
     };
-    const file = (path) => ({ path, status: 'modified' });
-    await upsertTurnChangeRecord(runtime.id, { checkpointId: 'before', root, files: [file('a.txt')] });
-    await delay(5);
-    const since = Date.now();
-    await delay(5);
-    await upsertTurnChangeRecord(runtime.id, { checkpointId: 'target-turn', root, files: [file('b.txt')] });
-    await delay(5);
-    await upsertTurnChangeRecord(runtime.id, { checkpointId: 'later-turn', root, files: [file('c.txt')] });
-    await assert.rejects(nativeSessionAction(runtime, { operation: 'rewind', scope: 'both', text: 'target', since }), /확인/);
-    await assert.rejects(nativeSessionAction(runtime, { operation: 'rewind', scope: 'both', text: 'gone', since, confirmed: true }),
-        /찾지 못했어요/);
+    const request = { operation: 'rewind', scope: 'conversation', text: 'target', confirmed: true };
+    await assert.rejects(nativeSessionAction(runtime, { ...request, confirmed: false }), /확인/);
+    await assert.rejects(nativeSessionAction(runtime, { ...request, text: 'gone' }), /찾지 못했어요/);
+    for (const scope of ['files', 'both'])
+        await assert.rejects(nativeSessionAction(runtime, { ...request, scope, since: 0 }), /턴별 Undo/);
     assert.equal(calls.length, 0);
-    const result = await nativeSessionAction(runtime, { operation: 'rewind', scope: 'both', text: ' target ', since, confirmed: true });
-    assert.deepEqual(calls, [['undo', 'later-turn', null, 1], ['undo', 'target-turn', null, 1], ['rewind', { text: 'target' }]]);
-    assert.deepEqual(result, { turns: 2, removed: 3 });
+    assert.deepEqual(await nativeSessionAction(runtime, request), { turns: 0, removed: 3 });
+    assert.deepEqual(calls, [['rewind', { text: 'target' }]]);
     calls.length = 0;
-    runtime.revertTurnChanges = async (id) => { calls.push(id); if (id === 'target-turn') throw new Error('conflict'); };
-    await assert.rejects(nativeSessionAction(runtime, { operation: 'rewind', scope: 'both', text: 'target', since, confirmed: true }),
-        /최근 1개 턴까지만.*대화는 바꾸지 않았어요: conflict/);
-    assert.deepEqual(calls, ['later-turn', 'target-turn']);
+    messages.push({ role: 'user', content: ' target ' });
+    await assert.rejects(nativeSessionAction(runtime, request), /같은 내용/);
+    assert.equal(calls.length, 0);
+});
+
+// 모델 호출 전에 실패한 중복 메시지가 이전 정상 모델 기록을 지우지 못하게 한다.
+test('failed duplicate prompts cannot rewind an earlier successful model turn', async (t) => {
+    const modelMessages = [];
+    let attempts = 0, rewinds = 0;
+    const f = fixture({
+        async ask(text) {
+            if (++attempts === 2) throw new Error('Unable to refresh engine settings before turn');
+            modelMessages.push({ role: 'user', content: text });
+            return { content: 'ok' };
+        },
+        async action() { rewinds++; modelMessages.length = 0; },
+    });
+    t.after(() => f.connection.close());
+    await f.ready();
+    await runTurn(f, message('first', 'same'));
+    await runTurn(f, message('failed', 'same'));
+    const result = await revert(f, 'failed-revert', userItems(f.events).at(-1).item.id, 'conversation');
+    assert.match(result.error.message, /정상 완료/);
+    assert.equal(modelMessages.length, 1);
+    assert.equal(rewinds, 0);
+});
+
+// 네이티브 변경 전 영속 마커를 남기고 실패·재접속 때 변경을 다시 실행하지 않는다.
+test('uncertain rewind is durable and blocks reuse without replay', async (t) => {
+    let attempts = 0, persistence;
+    const f = fixture({ async action(request) {
+        if (request.validateOnly) return { ready: true };
+        attempts++;
+        assert.ok(f.store.load(persistence.data.bridgeId).pendingRevert);
+        throw new Error('worker disconnected after native save');
+    } });
+    t.after(() => f.connection.close());
+    await f.ready();
+    persistence = f.events.find((event) => event.type === 'session.opened').persistence;
+    await runTurn(f, message('first', 'unique'));
+    const id = userItems(f.events)[0].item.id;
+    assert.match((await revert(f, 'fault', id, 'conversation')).error.message, /결과 확인/);
+    assert.match((await revert(f, 'retry', id, 'conversation')).error.message, /not ready/);
+    await f.connection.close();
+    const resumed = fixture({}, { store: f.store });
+    t.after(() => resumed.connection.close());
+    await resumed.connection.send({ ...resumed.open, persistence });
+    const failure = await until(resumed.events, (event) => event.type === 'request.failed');
+    assert.match(failure.error.message, /이전 되돌리기 결과가 불확실/);
+    assert.equal(attempts, 1);
+    assert.equal(resumed.creates.length, 0);
+    assert.ok(f.store.load(persistence.data.bridgeId).items.some(({ item }) => item.id === id));
+});
+
+// 변경 전 압축 누락 거부는 영속 마커나 세션 잠금을 남기지 않는다.
+test('read-only rewind validation failure leaves the session usable', async (t) => {
+    const f = fixture({ async action(request) {
+        assert.equal(request.validateOnly, true);
+        throw new Error('모델 대화에서 되돌릴 메시지를 찾지 못했어요.');
+    } });
+    t.after(() => f.connection.close());
+    await f.ready();
+    await runTurn(f, message('first', 'compacted'));
+    const id = userItems(f.events)[0].item.id;
+    assert.match((await revert(f, 'missing', id, 'conversation')).error.message, /찾지 못했어요/);
+    const persistence = f.events.find((event) => event.type === 'session.opened').persistence;
+    assert.equal(f.store.load(persistence.data.bridgeId).pendingRevert, undefined);
+    await runTurn(f, message('next', 'still usable'));
+    assert.equal(f.events.filter((event) => event.type === 'session.turn').at(-1).state, 'completed');
 });
 
 // 설치한 데몬 어댑터가 대화 되돌리기 뒤 대상 메시지부터 재수화 기록을 버린다.

@@ -296,7 +296,6 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
         action: 'compaction',
         mainBufferTokens: 32000,
         summaryModel: 'subscription/small',
-        memoryTimeoutMs: 45000,
     });
     await controlRuntime(value, {
         action: 'features',
@@ -337,7 +336,7 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
     await controlRuntime(value, { action: 'agentDelete', agent: 'worker' });
 
     assert.deepEqual(calls, [
-        ['compaction', { mainBufferTokens: 32000, summaryModel: 'subscription/small', memoryTimeoutMs: 45000 }],
+        ['compaction', { mainBufferTokens: 32000, summaryModel: 'subscription/small' }],
         ['recap', false],
         ['memoryTools', true],
         ['webSearch', true],

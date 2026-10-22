@@ -20,6 +20,7 @@ export function ResourceSettings({ theme }: PluginSurfaceProps) {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [body, setBody] = useState('');
+    const [loadedSkill, setLoadedSkill] = useState('');
     const [command, setCommand] = useState('');
     const [argumentsText, setArgumentsText] = useState('');
     const [url, setUrl] = useState('');
@@ -39,7 +40,9 @@ export function ResourceSettings({ theme }: PluginSurfaceProps) {
         setBusy(true); setError(''); setPending(null);
         try {
             const value: any = await invoke(request);
-            if (request.operation === 'skillRead') setPreview(value.content);
+            if (request.operation === 'skillRead') {
+                setPreview(value.content); setBody(value.content); setLoadedSkill(request.name || '');
+            }
             else if (request.operation.startsWith('mcpLogin')) setFlow(value);
             else setSnapshot(value);
         } catch (failure) {
@@ -54,11 +57,11 @@ export function ResourceSettings({ theme }: PluginSurfaceProps) {
         setPending({ ...request, confirmed: true });
     }
     // 네이티브·web에서 동일한 접근성 버튼을 제공한다.
-    function button(label: string, press: () => void) {
-        return <Pressable key={label} accessibilityRole="button" disabled={busy}
-            accessibilityState={{ disabled: busy }} onPress={press}
+    function button(label: string, press: () => void, disabled = busy) {
+        return <Pressable key={label} accessibilityRole="button" disabled={disabled}
+            accessibilityState={{ disabled }} onPress={press}
             style={{ padding: 12, minHeight: 48, borderWidth: 1, borderColor: theme.colors.border,
-                borderRadius: 8, opacity: busy ? 0.5 : 1 }}><Text style={text}>{label}</Text></Pressable>;
+                borderRadius: 8, opacity: disabled ? 0.5 : 1 }}><Text style={text}>{label}</Text></Pressable>;
     }
 
     return <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
@@ -99,13 +102,14 @@ export function ResourceSettings({ theme }: PluginSurfaceProps) {
         </>}
         {tab === 'skills' && <>
             {snapshot?.skills?.map((row: any) => button(`${row.name} 내용 보기`,
-                () => { setName(row.name); setDescription(row.description || ''); void run({ operation: 'skillRead', name: row.name }); }))}
+                () => { setName(row.name); setDescription(row.description || ''); setBody(''); setPreview(''); setLoadedSkill(''); void run({ operation: 'skillRead', name: row.name }); }))}
             {preview ? <Text selectable style={text}>{preview}</Text> : null}
             <TextInput accessibilityLabel="스킬 이름" placeholder="스킬 이름" value={name} onChangeText={setName} style={inputStyle} />
             <TextInput accessibilityLabel="스킬 설명" placeholder="설명" value={description} onChangeText={setDescription} style={inputStyle} />
             <TextInput accessibilityLabel="스킬 지침 본문" placeholder="저장할 지침 본문" multiline value={body} onChangeText={setBody} style={{ ...inputStyle, minHeight: 180 }} />
             {button('스킬 추가', () => change({ operation: 'skillAdd', data: { name, description, body } }))}
-            {button('스킬 수정', () => change({ operation: 'skillSave', data: { name, originalName: name, description, body } }))}
+            {button('스킬 수정', () => change({ operation: 'skillSave', data: { name, originalName: name, description, body } }),
+                busy || !loadedSkill || loadedSkill !== name)}
             {button('스킬 다시 불러오기', () => change({ operation: 'skillsReload' }))}
         </>}
         {tab === 'plugins' && <>

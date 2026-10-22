@@ -413,6 +413,69 @@ test('MCP editor confirms exact native input and never retries an uncertain muta
     assert.match(JSON.stringify(screen.tree.toJSON()), /자동 재시도하지 않습니다/);
 });
 
+// 스킬 선택 시 본문을 교체하고 읽기 실패 후에는 빈 본문으로 덮어쓰지 못하게 한다.
+test('skill selection loads the selected body and read failures disable saving', async (t) => {
+    const { settings, renderScreen } = await loadClient(t);
+    const calls = [];
+    globalThis.__paseodogTestRpc = async (input) => {
+        calls.push(input);
+        if (input.operation === 'skillRead') {
+            if (input.name === 'broken') throw new Error('read failed');
+            return { name: input.name, content: `body ${input.name}` };
+        }
+        return { skills: ['a', 'b', 'broken'].map((name) => ({ name })), mcp: [], plugins: [] };
+    };
+    const screen = await renderScreen(settings('mixdog-resources'));
+    await screen.press('skills');
+    await screen.press('a 내용 보기');
+    const body = () => screen.tree.root.findAllByType('input')
+        .find((node) => node.props.accessibilityLabel === '스킬 지침 본문');
+    await act(async () => body().props.onChangeText('edited a'));
+    await screen.press('b 내용 보기');
+    assert.equal(body().props.value, 'body b');
+    await screen.press('스킬 수정');
+    await screen.press('확인하고 실행');
+    assert.deepEqual(calls.find((input) => input.operation === 'skillSave').data,
+        { name: 'b', originalName: 'b', description: '', body: 'body b' });
+    await screen.press('broken 내용 보기');
+    assert.equal(body().props.value, '');
+    const save = screen.tree.root.findAllByType('pressable')
+        .find((node) => node.findByType('text').children.join('') === '스킬 수정');
+    assert.equal(save.props.disabled, true);
+});
+
+// 네이티브 파일·턴 상태에 따라 복구 가능한 버튼만 활성화한다.
+test('session undo and redo buttons reflect native recovery availability', async (t) => {
+    const { settings, renderScreen } = await loadClient(t);
+    globalThis.__paseodogTestRpc = async (input, name) => {
+        if (name === 'engine-status') return { sessions: [{ id: 'one', title: 'Project', model: 'model', state: 'idle' }] };
+        if (name === 'engine-controls') return { models: [] };
+        if (name === 'engine-resources') return { mcp: [] };
+        if (input.operation === 'history') return { turns: [{ checkpointId: 'cp', files: 3 }] };
+        return { status: 'ready', canUndo: false, canReapply: true, revision: 4, reason: 'blocked file',
+            files: [
+                { path: 'applied', state: 'applied', revertable: true },
+                { path: 'reverted', state: 'reverted', revertable: true },
+                { path: 'blocked', state: 'applied', revertable: false, reason: 'missing patch' },
+            ] };
+    };
+    const screen = await renderScreen(settings('mixdog-session-tools'));
+    await screen.press('Project · model');
+    await screen.press('턴별 변경 이력');
+    await screen.press('최근 1번째 턴 · 3개 파일');
+    for (const [label, disabled] of [
+        ['Undo · applied', false], ['Redo · applied', true],
+        ['Undo · reverted', true], ['Redo · reverted', false],
+        ['Undo · blocked', true], ['Redo · blocked', true],
+        ['선택한 턴 전체 Undo', true], ['선택한 턴 전체 Redo', false],
+    ]) {
+        const button = screen.tree.root.findAllByType('pressable')
+            .find((node) => node.findByType('text').children.join('') === label);
+        assert.equal(button.props.disabled, disabled, label);
+    }
+    assert.match(JSON.stringify(screen.tree.toJSON()), /missing patch/);
+});
+
 test('settings register separate sections without a main model picker and dispatch scoped changes', async (t) => {
     const { settingsScreens, settings, liveScreen, renderScreen } = await loadClient(t);
     assert.deepEqual(settingsScreens.map((item) => [item.id, item.title, item.icon]), [

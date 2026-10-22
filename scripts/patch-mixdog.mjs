@@ -4,12 +4,14 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EFFORT_USAGE_PATCHES } from '../patches/effort-usage.mjs';
 import { DEFAULT_OUTPUT_STYLE_PATCHES } from '../patches/default-output-style.mjs';
+import { COMPACTION_SUMMARY_ROUTE_PATCH } from '../patches/compaction-summary-route.mjs';
 export const PIN = '1.3.1';
 export const ORIGINAL_BLOB = '6de5147ccdce6c9b3aa5f48dc740af439834b7b1';
 export const ANCHOR = '      const turnContext = await dispatchPromptSubmit(turn, session0, prompt, options);';
 export const ADDITION = '\n      // PaseoDog host-policy boundary v1 (local Apache-2.0 modification).\n      if (typeof options.beforeSessionAsk === \'function\') {\n        await options.beforeSessionAsk(session0);\n      }';
 export const MARKER = 'PaseoDog host-policy boundary v1';
 export const AGENT_PATCHES = [
+    COMPACTION_SUMMARY_ROUTE_PATCH,
     ...EFFORT_USAGE_PATCHES,
     ...DEFAULT_OUTPUT_STYLE_PATCHES,
     {
@@ -222,9 +224,13 @@ export const AGENT_PATCHES = [
     {
         file: 'src/session-runtime/settings-compaction-api.mjs',
         blob: 'cdfdfb44509491a693110c0bbcf8c1a9eac1f70e',
+        previousEditCount: 1,
         edits: [[
             '      if (hasOwn(input, \'onModelChange\')) next.onModelChange = input.onModelChange !== false;',
             '      if (hasOwn(input, \'onModelChange\')) next.onModelChange = input.onModelChange !== false;\n      if (hasOwn(input, \'summaryModel\')) {\n        if (input.summaryModel) next.summaryModel = String(input.summaryModel).trim();\n        else delete next.summaryModel;\n      }\n      if (hasOwn(input, \'memoryTimeoutMs\')) {\n        const ms = Number(input.memoryTimeoutMs);\n        if (Number.isFinite(ms) && ms > 0) next.memoryTimeoutMs = Math.round(ms);\n        else delete next.memoryTimeoutMs;\n      }',
+        ], [
+            "const SESSION_COMPACTION_KEYS = [\n",
+            "const SESSION_COMPACTION_KEYS = [\n  'summaryModel',\n",
         ]],
     },
     {

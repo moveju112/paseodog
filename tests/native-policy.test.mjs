@@ -4,6 +4,16 @@ import { attachHostPolicy, mapMcpServers } from '../engine/src/policy.mjs';
 import { createNativeEngine } from '../engine/src/native-engine.mjs';
 import { patchedSource, gitBlob, ANCHOR, MARKER } from '../scripts/patch-mixdog.mjs';
 const makeSession=()=>({id:'sess1',messages:[{role:'system',content:'base'}],cwd:'/work'});
+// Review의 파일 탐색은 승인 경로를 사용하며 상위 명시적 거부는 유지한다.
+test('review accepts find through approval but preserves upstream block', async () => {
+    const session = makeSession();
+    attachHostPolicy(session, { mode: 'review' });
+    assert.equal((await session.beforeToolHook({ name: 'find', args: { query: 'readme' } })).action, 'ask');
+    const blocked = makeSession();
+    blocked.beforeToolHook = async () => ({ action: 'block', reason: 'upstream' });
+    attachHostPolicy(blocked, { mode: 'review' });
+    assert.deepEqual(await blocked.beforeToolHook({ name: 'find', args: {} }), { action: 'block', reason: 'upstream' });
+});
 // Bypass는 읽기·쓰기·셸·MCP를 질문 없이 전달하되 원래 차단과 호스트 제한을 유지한다.
 test('bypass skips approval for tools but preserves upstream denies and host restrictions', async () => {
     const session = makeSession();

@@ -292,17 +292,19 @@ try {
     await nativeEngine.action({ operation: 'redo', checkpointId, file,
         revision: undone.revision, confirmed: true });
     assert.equal(readFileSync(undoFile, 'utf8'), 'after\n');
-    // 메시지 되돌리기는 같은 턴 파일을 복구하고 실제 저장된 프롬프트부터 모델 대화를 자른다.
-    const rewound = await nativeEngine.action({ operation: 'rewind', scope: 'both', text: 'PASEODOG_UNDO_PROOF',
-        since: undoTurnStartedAt, confirmed: true });
-    assert.equal(readFileSync(undoFile, 'utf8'), 'before\n');
-    assert.equal(rewound.turns, 1);
+    // 메시지 되돌리기는 모델 기록만 자르고 파일은 명시적 체크포인트 Undo/Redo에 맡긴다.
+    await assert.rejects(nativeEngine.action({ operation: 'rewind', scope: 'both',
+        text: 'PASEODOG_UNDO_PROOF', since: undoTurnStartedAt, confirmed: true }), /턴별 Undo/);
+    const rewound = await nativeEngine.action({ operation: 'rewind', scope: 'conversation',
+        text: 'PASEODOG_UNDO_PROOF', confirmed: true });
+    assert.equal(readFileSync(undoFile, 'utf8'), 'after\n');
+    assert.equal(rewound.turns, 0);
     assert.ok(rewound.removed > 0);
     const remaining = await nativeEngine.action({ operation: 'context' });
     assert.ok(remaining.messages.every((message) => !message.text.includes('PASEODOG_UNDO_PROOF')));
     assert.equal(requests.length, requestsBeforeUndo, 'Undo/Redo/rewind must not invoke the model');
     console.log(JSON.stringify({ nativeTurnChanges: 'PASS', undo: true, redo: true, staleRevisionRejected: true,
-        rewindBoth: true, rewoundMessages: rewound.removed }));
+        rewindConversation: true, rewoundMessages: rewound.removed }));
     console.log(JSON.stringify({ status: 'PASS', model: 'local scripted HTTP provider (not a real LLM)',
         requests: requests.length, checks: ['native parallel spawn', 'child allow/deny',
             'same-tag followup', 'parent completion collection', 'native restore', 'cancel and stale approval',

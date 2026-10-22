@@ -109,13 +109,19 @@ export function SessionTools({ theme }: PluginSurfaceProps) {
             {result?.files?.map((file: any) => <View key={file.path} style={{ gap: 8 }}>
                 <Text selectable style={text}>{file.path} · {file.state || '변경됨'}</Text>
                 {button(`패치 보기 · ${file.path}`, () => void run({ sessionId, operation: 'changes', checkpointId, file: file.path }))}
-                {button(`Undo · ${file.path}`, () => confirm('undo', { checkpointId, file: file.path, revision: result.revision }))}
-                {button(`Redo · ${file.path}`, () => confirm('redo', { checkpointId, file: file.path, revision: result.revision }))}
+                {file.reason ? <Text style={text}>{file.reason}</Text> : null}
+                {button(`Undo · ${file.path}`, () => confirm('undo', { checkpointId, file: file.path, revision: result.revision }),
+                    unavailable || result.status !== 'ready' || file.revertable !== true || file.state === 'reverted')}
+                {button(`Redo · ${file.path}`, () => confirm('redo', { checkpointId, file: file.path, revision: result.revision }),
+                    unavailable || result.status !== 'ready' || file.revertable !== true || file.state !== 'reverted')}
             </View>)}
             {result?.patch ? <Text selectable style={{ ...text, fontFamily: 'monospace' }}>{result.patch}</Text> : null}
             {checkpointId && result?.files && <>
-                {button('선택한 턴 전체 Undo', () => confirm('undo', { checkpointId, revision: result.revision }))}
-                {button('선택한 턴 전체 Redo', () => confirm('redo', { checkpointId, revision: result.revision }))}
+                {result.reason ? <Text style={text}>{result.reason}</Text> : null}
+                {button('선택한 턴 전체 Undo', () => confirm('undo', { checkpointId, revision: result.revision }),
+                    unavailable || result.canUndo !== true)}
+                {button('선택한 턴 전체 Redo', () => confirm('redo', { checkpointId, revision: result.revision }),
+                    unavailable || result.canReapply !== true)}
             </>}
             {button('실제 모델 컨텍스트 보기', () => void run({ sessionId, operation: 'context', messageStart }))}
             {result?.messages?.map((message: any, index: number) => <View key={index} style={{ gap: 6 }}>

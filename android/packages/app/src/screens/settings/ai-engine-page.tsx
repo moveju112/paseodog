@@ -233,12 +233,6 @@ const bufferTokenOptions = [
   { value: "64000", label: "64,000 토큰 고정" },
 ] as const;
 
-const memoryTimeoutOptions = [
-  { value: "15000", label: "15초" },
-  { value: "30000", label: "30초 (기본)" },
-  { value: "60000", label: "60초" },
-] as const;
-
 const languageOptions = [
   { value: "", label: "자동 (시스템 기본)" },
   { value: "ko", label: "한국어 (ko)" },
@@ -1811,10 +1805,6 @@ function TokensSection({ snapshot, disabled, request }: SectionProps) {
     (value: string) => send({ action: "compaction", summaryModel: value || "" }),
     [send],
   );
-  const setMemoryTimeout = useCallback(
-    (value: string) => send({ action: "compaction", memoryTimeoutMs: Number(value) }),
-    [send],
-  );
   const setAutoClear = useCallback(
     (enabled: boolean) => send({ action: "autoClear", enabled }),
     [send],
@@ -1907,23 +1897,11 @@ function TokensSection({ snapshot, disabled, request }: SectionProps) {
             />
           </SettingRow>
           <SettingRow
-            title="메모리 추출 제한 시간"
-            hint="압축 시 장기 기억 추출에 허용할 최대 시간"
-          >
-            <Select
-              title="메모리 추출 제한 시간"
-              disabled={disabled}
-              value={String(snapshot.compaction.memoryTimeoutMs ?? 30000)}
-              options={memoryTimeoutOptions}
-              onChange={setMemoryTimeout}
-            />
-          </SettingRow>
-          <SettingRow
-            title="세션 복귀 요약 (Recap)"
-            hint="세션 재개 시 이전 작업 요약본을 자동으로 제공"
+            title="백그라운드 메모리 (Recap)"
+            hint="백그라운드 메모리 정리·요약 사이클을 사용"
           >
             <Switch
-              accessibilityLabel="세션 복귀 요약"
+              accessibilityLabel="백그라운드 메모리"
               disabled={disabled}
               value={snapshot.recap ?? true}
               onValueChange={setRecap}

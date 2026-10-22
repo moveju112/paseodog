@@ -7,8 +7,8 @@ import { agentMessageSource } from './agent-message.mjs';
 import { compactionNotice, projectCompaction } from './compaction.mjs';
 
 export const CAPABILITIES = ['prompt.message', 'prompt.image', 'prompt.command', 'prompt.steer', 'session.configure', 'session.persistence', 'session.list',
-    'session.revert.conversation', 'session.revert.files', 'session.revert.both', 'permission'];
-const REVERT_CAPABILITIES = ['session.revert.conversation', 'session.revert.files', 'session.revert.both'];
+    'session.revert.conversation', 'permission'];
+const REVERT_CAPABILITIES = ['session.revert.conversation'];
 // 계승 목록과 세션 도구에서 같은 첫 사용자 지시로 대상을 구분한다.
 function sessionDescription(row) {
     const prompt = row.items.find(({ item }) => item.type === 'user_message'
@@ -231,6 +231,8 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             record = input.persistence ? store.load(bridgeId) : store.create(bridgeId, config.cwd, promptHash);
             if (record.cwd !== config.cwd) throw new Error('Restored journal belongs to another working directory');
             if (record.promptHash !== promptHash) throw new Error('System prompt changed; start a new session instead of reusing old context');
+            if (record.pendingRevert)
+                throw new Error('이전 되돌리기 결과가 불확실해요. 자동 재실행하지 않았어요. 기록 확인 전에는 이 세션을 재개할 수 없어요.');
             if (record.effortSettings) {
                 config.settings.autoEffort = record.effortSettings.autoEffort;
                 if (record.effortSettings.effort) config.thinkingOption = record.effortSettings.effort;
@@ -828,24 +830,38 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         const index = session.record.items.findIndex(({ item }) => item.id === messageId);
         const row = session.record.items[index];
         if (index < 0 || !revertTokenFor(session, row.item)) throw new Error('이 메시지는 되돌릴 수 없어요.');
-        const conversation = input.scope !== 'files';
-        // 원본은 같은 텍스트의 마지막 사용자 메시지에서 자르므로 이후 중복이 있으면 위치를 확정할 수 없다.
-        if (conversation && session.record.items.slice(index + 1).some(({ item }) =>
-            item.type === 'user_message' && item.text.trim() === row.item.text.trim()))
-            throw new Error('같은 내용의 이후 메시지가 있어 되돌릴 위치를 확정할 수 없어요.');
+        const receipt = session.record.receipts[messageId.slice('user:'.length)];
+        if (receipt.state !== 'completed') throw new Error('정상 완료된 메시지만 되돌릴 수 있어요.');
+        if (session.record.historyTruncated) throw new Error('일부 기록이 없는 세션은 안전하게 되돌릴 수 없어요.');
+        // 이전 정상 턴·실패 턴과 중복된 본문도 네이티브 메시지 위치를 증명하지 못한다.
+        if (session.record.items.some(({ item }) => item.id !== messageId
+            && item.type === 'user_message' && item.text.trim() === row.item.text.trim()))
+            throw new Error('같은 내용의 메시지가 있어 되돌릴 위치를 확정할 수 없어요.');
         session.configuring = true;
         try {
+            // 압축·누락처럼 변경 전 확인 가능한 거부는 세션을 불확실 상태로 만들지 않는다.
             await session.engine.action({ operation: 'rewind', scope: input.scope, text: row.item.text,
-                since: Date.parse(row.timestamp), confirmed: true });
-            if (conversation) {
-                session.record.items.splice(index);
-                // 잘린 턴의 quota 재개는 더 이상 이어갈 대화가 없다.
-                clearTimeout(session.resumeTimer);
-                session.lastQuota = null;
-                session.record.quotaResume = null;
-                try { flush(session); }
-                catch (error) { containAfterJournalFailure(session, error); throw error; }
+                confirmed: true, validateOnly: true });
+            // 네이티브 저장과 저널 저장 사이의 종료를 감지하고 불확실한 변경은 재생하지 않는다.
+            session.record.pendingRevert = { messageId, scope: input.scope };
+            flush(session);
+            await session.engine.action({ operation: 'rewind', scope: input.scope, text: row.item.text,
+                confirmed: true });
+            session.record.items.splice(index);
+            // 잘린 턴의 quota 재개는 더 이상 이어갈 대화가 없다.
+            clearTimeout(session.resumeTimer);
+            session.lastQuota = null;
+            session.record.quotaResume = null;
+            delete session.record.pendingRevert;
+            try { flush(session); }
+            catch (error) {
+                session.record.pendingRevert = { messageId, scope: input.scope };
+                containAfterJournalFailure(session, error); throw error;
             }
+        } catch (error) {
+            if (!session.record.pendingRevert) throw error;
+            session.broken = true;
+            throw new Error(`되돌리기 결과 확인이 필요해요. 자동 재시도하지 않았어요: ${errorText(error)}`);
         } finally { session.configuring = false; }
         emit({ type: 'request.completed', requestId: input.requestId });
     }

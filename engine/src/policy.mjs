@@ -1,6 +1,6 @@
 // Tool-policy guard, not an OS sandbox. Shell approval authorizes its whole command.
 import { createHash } from 'node:crypto';
-const READ_TOOLS = new Set(['read', 'head', 'tail', 'grep', 'glob', 'list', 'tree', 'find_files', 'diff', 'code_graph']);
+const READ_TOOLS = new Set(['read', 'head', 'tail', 'grep', 'glob', 'list', 'tree', 'find', 'find_files', 'diff', 'code_graph']);
 const MARKER = Symbol('paseodog-policy');
 const PROMPT_TAG = 'paseodog_host_prompt_v1';
 export function mapMcpServers(servers = {}) {
