@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { chmod, copyFile, cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,6 +14,30 @@ const runtimeFiles = [
     'scripts/configure.mjs', 'scripts/paths.mjs', 'scripts/desktop-profile.mjs', 'scripts/patch-mixdog.mjs',
     'patches/effort-usage.mjs', 'patches/default-output-style.mjs',
 ];
+
+// 잠금 파일의 해시로 Windows 데스크톱 네이티브 패키지를 검증해 산출물에만 설치한다.
+async function prepareWindowsDesktopDependencies(resources) {
+    const lock = JSON.parse(await readFile(join(root, 'android/package-lock.json'), 'utf8'));
+    const cache = await mkdtemp(join(tmpdir(), 'paseodog-win-natives-'));
+    try {
+        const archives = [];
+        for (const name of ['@esbuild/win32-x64', 'sherpa-onnx-win-x64']) {
+            const entry = lock.packages[`node_modules/${name}`];
+            const result = spawnSync('npm', ['pack', entry.resolved, '--json', '--pack-destination', cache],
+                { encoding: 'utf8', shell: process.platform === 'win32' });
+            if (result.status !== 0) throw new Error(`Native package download failed: ${result.stderr}`);
+            const archive = join(cache, JSON.parse(result.stdout)[0].filename);
+            const integrity = 'sha512-' + createHash('sha512').update(await readFile(archive)).digest('base64');
+            if (integrity !== entry.integrity) throw new Error(`Native package integrity mismatch: ${name}`);
+            archives.push(archive);
+        }
+        const result = spawnSync('npm', ['install', '--prefix', resources, '--ignore-scripts',
+            '--no-save', '--package-lock=false', '--os=win32', '--cpu=x64', ...archives],
+        { stdio: 'inherit', shell: process.platform === 'win32' });
+        if (result.error) throw result.error;
+        if (result.status !== 0) throw new Error(`Windows desktop native install failed: ${result.status}`);
+    } finally { await rm(cache, { recursive: true }); }
+}
 
 // 잠금 파일로 대상 OS 의존성을 설치하고 해시 검증 패치·대상 네이티브 도구를 묶는다.
 export async function prepareDesktopRuntime({ output, platform, arch }) {
@@ -49,6 +74,7 @@ export async function prepareDesktopRuntime({ output, platform, arch }) {
         await import(pathToFileURL(join(mixdog, 'scripts/prune-embedding-runtime.mjs')).href);
     await pruneEmbeddingRuntime(mixdog, { platform, arch });
     patch(mixdog, { check: true });
+    if (platform === 'win32') await prepareWindowsDesktopDependencies(dirname(output));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
