@@ -1,6 +1,6 @@
 import { processEngineFactory } from './process-engine.mjs';
 import { createJsonLineDecoder, encodeFrame } from './json-lines.mjs';
-import { deadline } from './util.mjs';
+import { deadline, engineEnvironment } from './util.mjs';
 import { createQuotaRefreshPolicy } from './quota-refresh.mjs';
 
 // 상주형 제어 프로세스와 통신하는 경량 JSONL 클라이언트를 생성한다.
@@ -150,11 +150,12 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
         },
         bind(value) {
             if (!value?.command) return;
-            if (launch && JSON.stringify(launch) !== JSON.stringify(value)) {
+            const next = { ...value, env: engineEnvironment(value) };
+            if (launch && JSON.stringify(launch) !== JSON.stringify(next)) {
                 controlDaemon?.close();
                 controlDaemon = null;
             }
-            launch = value;
+            launch = next;
         },
         register(connection) {
             connections.add(connection);

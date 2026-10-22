@@ -25,11 +25,13 @@ await writeFile(path.join(home, "config.json"), JSON.stringify({
 const harness = path.join(root, "first-run.cjs");
 const packagedExecutable = path.resolve(executable);
 const driver = createRequire(new URL("../package.json", import.meta.url))("electron");
+const testModule = createRequire(new URL("../package.json", import.meta.url)).resolve("playwright/test");
 await writeFile(harness, `
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { app, dialog } = require("electron");
+const { expect } = require(${JSON.stringify(testModule)});
 Object.defineProperty(process, "resourcesPath", { value: ${JSON.stringify(path.join(path.dirname(packagedExecutable), "resources"))} });
 Object.defineProperty(process, "execPath", { value: ${JSON.stringify(packagedExecutable)} });
 const getPath = app.getPath.bind(app);
@@ -52,12 +54,14 @@ app.whenReady().then(async () => {
     assert.equal(first.pid, same.pid);
     assert.equal(first.home, ${JSON.stringify(home)});
     assert.equal(confirmed, 1);
-    const providers = await cli.runExternalCliJsonCommand(["provider", "ls", "--home", first.home, "--json"]);
-    const provider = providers.find((entry) => entry.provider === "paseodog");
-    assert.equal(provider?.status, "available");
-    assert.equal(provider.defaultMode, "ask");
+    // 첫 카탈로그는 비동기로 준비되므로 고정 대기 대신 공개 상태의 완료를 기다린다.
+    await expect.poll(async () => {
+      const providers = await cli.runExternalCliJsonCommand(["provider", "ls", "--home", first.home, "--json"]);
+      return providers.find((entry) => entry.provider === "paseodog");
+    }, { timeout: 60_000 }).toMatchObject({ status: "available", defaultMode: "ask" });
     const before = await fs.readFile(path.join(first.home, "config.json"), "utf8");
-    await commands.start_desktop_daemon();
+    const repeated = await commands.start_desktop_daemon();
+    assert.equal(repeated.pid, first.pid, "Unchanged bundled runtime must reuse its running daemon");
     assert.equal(confirmed, 1);
     assert.equal(await fs.readFile(path.join(first.home, "config.json"), "utf8"), before);
     console.log("BUNDLED_PROVIDER_OK trust=once start=coalesced provider=available mode=ask restart=idempotent");
@@ -75,6 +79,7 @@ const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
   !["NODE_OPTIONS", "NODE_PATH", "ELECTRON_RUN_AS_NODE"].includes(key),
 ));
 let output = "";
+let succeeded = false;
 try {
   // 개발용 Electron은 검사 드라이버일 뿐이며 데몬·엔진은 패키징된 실행 파일로 띄운다.
   const child = spawn(driver, ["--no-sandbox", "--ozone-platform=headless", harness], {
@@ -87,10 +92,12 @@ try {
   });
   child.stdout.on("data", (data) => { output += data; });
   child.stderr.on("data", (data) => { output += data; });
-  const [code] = await once(child, "exit");
+  const [code] = await once(child, "close");
   assert.equal(code, 0, output.slice(-10000));
   assert.match(output, /BUNDLED_PROVIDER_OK/);
   console.log(output.split("\n").find((line) => line.includes("BUNDLED_PROVIDER_OK")));
+  succeeded = true;
 } finally {
-  await rm(root, { recursive: true });
+  if (succeeded) await rm(root, { recursive: true, maxRetries: 1, retryDelay: 100 });
+  else console.error(`First-run failure fixture retained: ${root}`);
 }

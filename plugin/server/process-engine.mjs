@@ -1,5 +1,5 @@
 import { createJsonLineDecoder, encodeFrame } from './json-lines.mjs';
-import { deferred, deadline, errorText } from './util.mjs';
+import { deferred, deadline, errorText, engineEnvironment } from './util.mjs';
 import { createProcessScope } from './process-scope.mjs';
 
 /**
@@ -34,6 +34,7 @@ export async function stopEngineProcessGroup(child, terminateProcess, graceMs = 
 
 export function processEngineFactory({ launch, spawnProcess, terminateProcess, timeoutMs = 60000, stopMs = 8000,
     scopeMode = 'strict', scopeFactory = createProcessScope }) {
+    launch = { ...launch, env: engineEnvironment(launch) };
     return {
         async create(args, { signal } = {}) {
             if (signal?.aborted) throw new Error('Engine startup canceled');

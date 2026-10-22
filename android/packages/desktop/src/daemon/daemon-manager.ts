@@ -343,7 +343,7 @@ async function startDaemonOnce(): Promise<DesktopDaemonStatus> {
   if (current.status === "running" || current.status === "starting") {
     if (bundled?.changed && current.desktopManaged && current.pid && current.startedAt) {
       await stopDesktopDaemon("manual_ipc", { pid: current.pid, startedAt: current.startedAt });
-    } else if (shouldRestartForVersion(current)) {
+    } else if (!bundled && shouldRestartForVersion(current)) {
       logDesktopDaemonLifecycle("daemon version mismatch, restarting", {
         appVersion: normalizeVersion(resolveDesktopAppVersion()),
         daemonVersion: normalizeVersion(current.version),

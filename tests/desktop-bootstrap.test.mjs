@@ -6,8 +6,18 @@ import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { configure } from '../scripts/configure.mjs';
 import { prepareDesktopRuntime } from '../scripts/prepare-desktop-runtime.mjs';
+import { engineEnvironment } from '../plugin/server/util.mjs';
 
 const require = createRequire(import.meta.url);
+
+test('only the self Electron engine restores Node mode after upstream environment sanitization', () => {
+    const launch = { command: '/bundle/PaseoDog.bin', env: { MIXDOG_HOME: '/dedicated/mixdog' } };
+    assert.deepEqual(engineEnvironment(launch, { isElectron: true, execPath: launch.command }),
+        { MIXDOG_HOME: '/dedicated/mixdog', ELECTRON_RUN_AS_NODE: '1' });
+    assert.deepEqual(launch.env, { MIXDOG_HOME: '/dedicated/mixdog' });
+    assert.deepEqual(engineEnvironment(launch, { isElectron: false, execPath: launch.command }), launch.env);
+    assert.deepEqual(engineEnvironment(launch, { isElectron: true, execPath: '/different/electron' }), launch.env);
+});
 
 test('desktop config uses its dedicated listener, Electron Node mode and absolute engine argv', (t) => {
     const root = mkdtempSync(join(tmpdir(), 'paseodog-desktop-config-'));

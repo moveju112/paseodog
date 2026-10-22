@@ -3,6 +3,13 @@ import release from '../shared/release.json' with { type: 'json' };
 
 export const VERSION = release.version;
 export const UPSTREAM_VERSIONS = release.paseodogUpstream;
+
+// 호스트의 환경 정리 뒤에도 자기 Electron 바이너리로 실행하는 엔진만 Node 모드를 복원한다.
+export function engineEnvironment(launch, { isElectron = Boolean(process.versions.electron), execPath = process.execPath } = {}) {
+    if (!isElectron || launch?.command !== execPath) return launch?.env;
+    return { ...launch.env, ELECTRON_RUN_AS_NODE: '1' };
+}
+
 export const DEFAULT_MODEL = 'mixdog-default';
 export const MAX_FRAME = 16 * 1024 * 1024;
 export const plainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
