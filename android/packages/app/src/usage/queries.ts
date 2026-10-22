@@ -35,6 +35,9 @@ import type { UsageReportEntry, UsageView } from "./types";
 // The daemon caches each report for five minutes, so re-reading it is cheap. Only
 // an explicit refresh passes `forceRefresh` and reaches the source's API.
 const REPORTS_STALE_TIME_MS = 60_000;
+// PaseoDog: 사이드바 쿼터는 usage_widget 폴링 주기(poll_seconds=120)처럼 보는 동안 2분마다 다시 읽는다.
+// 강제 갱신이 아니므로 실제 공급자 조회 빈도는 데몬의 5분 캐시가 호스트 전체에서 묶는다.
+const SIDEBAR_REFRESH_INTERVAL_MS = 120_000;
 
 /** Every report list of a host: its own and each agent's. */
 function hostUsageQueryKey(serverId: string) {
@@ -168,6 +171,7 @@ export function useUsageHostReports(serverId: string | null): UsageReportEntry[]
     queryFn: serverId ? () => listReports(queryClient, serverId) : skipToken,
     dataShape: "list",
     staleTimeMs: REPORTS_STALE_TIME_MS,
+    refetchInterval: SIDEBAR_REFRESH_INTERVAL_MS,
   });
   return useMemo(() => visibleUsageReports(query.data ?? NO_REPORTS), [query.data]);
 }

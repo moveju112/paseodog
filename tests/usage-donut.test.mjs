@@ -57,6 +57,11 @@ test('sidebar usage donut patch is hash gated, idempotent and reversible', () =>
     const labelEdit = edits.find(([before]) => before === '[{key:l.id,icon:l.icon??null,windows:s}]');
     const legacy = patched.replace(labelEdit[1], labelEdit[0]).replace('tooltipText:function usageTooltipText', 'legacy:function usageTooltipText');
     assert.equal(patchedComposerSource(legacy), patched);
+    // 사이드바 주기 갱신이 없던 이전 패치도 새 패치로 교체되고, 사이드바 쿼터 조회만 2분 주기를 갖는다.
+    const refreshEdit = edits.find(([, after]) => after.includes('refetchInterval:12e4'));
+    assert.equal(patchedComposerSource(patched.replace(refreshEdit[1], refreshEdit[0])), patched);
+    const hostReports = patched.slice(patched.indexOf('useUsageHostReports=function'), patched.indexOf('e.useAgentUsage=function'));
+    assert.ok(hostReports.includes(refreshEdit[1]));
 });
 
 test('bundle preferences keep donuts only and the setter stores the choice', () => {

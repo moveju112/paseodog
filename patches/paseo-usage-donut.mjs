@@ -137,6 +137,7 @@ export function usageDonutEdits(source) {
 
 const TRIGGER_PREFIX = 'const pdUsageTrigger=(';
 const TRIGGER_ANCHOR = 'function R(n,t){return n+t.windows.length}';
+const SIDEBAR_REFRESH_BEFORE = 'h={queryKey:f,queryFn:y,dataShape:"list",staleTimeMs:p}';
 
 const USAGE_DONUT_FIXED_EDITS = [
     // 설정 스키마: Donuts만 저장값으로 남기고 없거나 잘못된 값은 Bars로 읽는다.
@@ -157,9 +158,12 @@ const USAGE_DONUT_FIXED_EDITS = [
     ['percentText:f,tone:(0,o.windowTone)(s)}', 'percentText:f,tone:(0,o.windowTone)(s),resetsAt:s.resetsAt??null}'],
     ['[{key:l.id,icon:l.icon??null,windows:s}]', '[{key:l.id,sourceId:l.sourceId,label:l.sourceLabel+(l.account.label?" ("+l.account.label+")":""),icon:l.icon??null,windows:s}]'],
     ['h=(0,S.jsx)(P,{label:l,sources:b,onPress:u})', 'h=(0,S.jsx)(pdUsageTrigger,{label:l,sources:b,onPress:u})'],
+    // 사이드바 쿼터 조회(useUsageHostReports)는 usage_widget 폴링 주기처럼 보는 동안 2분마다 다시 읽는다(데몬 5분 캐시가 실제 조회를 묶는다).
+    [SIDEBAR_REFRESH_BEFORE, 'h={queryKey:f,queryFn:y,dataShape:"list",staleTimeMs:p,refetchInterval:12e4}'],
 ];
-// 이전 버전 패치에 없던 공급자 이름 편집의 위치
+// 이전 버전 패치에 없던 공급자 이름·사이드바 주기 갱신 편집의 위치
 const SOURCE_LABEL_EDIT = USAGE_DONUT_FIXED_EDITS.findIndex(([before]) => before === '[{key:l.id,icon:l.icon??null,windows:s}]');
+const SIDEBAR_REFRESH_EDIT = USAGE_DONUT_FIXED_EDITS.findIndex(([before]) => before === SIDEBAR_REFRESH_BEFORE);
 
 // 문자열 안 정확한 일치 횟수를 센다.
 function occurrences(source, text) {
@@ -179,7 +183,8 @@ export function withoutUsageDonut(source) {
     }
     const counts = USAGE_DONUT_FIXED_EDITS.map(([, after]) => occurrences(source, after));
     if (counts.some((count) => count > 1)) throw new Error('Paseo usage donut patch drift');
-    const required = [start >= 0 ? 1 : 0, ...counts.filter((_, index) => index !== SOURCE_LABEL_EDIT)];
+    const required = [start >= 0 ? 1 : 0,
+        ...counts.filter((_, index) => index !== SOURCE_LABEL_EDIT && index !== SIDEBAR_REFRESH_EDIT)];
     if (required.includes(0) && required.includes(1)) throw new Error('Partial Paseo usage donut patch');
     return USAGE_DONUT_FIXED_EDITS.reduce((result, [before, after]) => result.replace(after, () => before), source);
 }
