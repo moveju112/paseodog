@@ -392,7 +392,7 @@ test('startup failure has request.failed and no fake ready',async(t)=>{
     const f=fixture({}, {engineFactory:{async create(){throw new Error('No credentials');}}});t.after(()=>f.connection.close());await f.connection.send(f.open);await until(f.events,e=>e.type==='request.failed');assert.equal(f.events.some(e=>e.type==='session.ready'),false);
 });
 test('session list returns bridge records, filtered by cwd',async(t)=>{
-    const f=fixture();t.after(()=>f.connection.close());await f.ready();await f.connection.send({type:'sessions',requestId:'list',cwd:'/work'});const e=await until(f.events,e=>e.type==='sessions');assert.equal(e.sessions.length,1);assert.equal(e.sessions[0].persistence.version,2);
+    const f=fixture();t.after(()=>f.connection.close());await f.ready();await f.run();await f.connection.send({type:'sessions',requestId:'list',cwd:'/work'});const e=await until(f.events,e=>e.type==='sessions');assert.equal(e.sessions.length,1);assert.equal(e.sessions[0].persistence.version,2);
 });
 test('effective native model echoed by Paseo can be restored without a catalog alias',async(t)=>{
     const f=fixture();await f.ready();await f.run();const persistence=f.events.find(e=>e.type==='session.opened').persistence;await f.connection.close();

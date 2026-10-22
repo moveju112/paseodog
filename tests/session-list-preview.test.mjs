@@ -39,8 +39,7 @@ test('session previews normalize saved text and retain cwd, search and limit fil
     assert.equal(event.sessions[0].description, '장비 해제 오류 수정');
     await f.connection.send({ type: 'sessions', requestId: 'empty', cwd: '/work/empty' });
     const empty = await until(f.events, (row) => row.requestId === 'empty');
-    assert.equal(empty.sessions[0].title, 'empty');
-    assert.equal(empty.sessions[0].description, undefined);
+    assert.deepEqual(empty.sessions, []);
     await f.connection.send({ type: 'sessions', requestId: 'excluded', query: 'assistant-only' });
     assert.deepEqual((await until(f.events, (row) => row.requestId === 'excluded')).sessions, []);
 });

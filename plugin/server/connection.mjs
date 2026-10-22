@@ -848,7 +848,8 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                 if (!selected.includes('session.list')) throw new Error('Session listing not negotiated');
                 const limit = Math.max(1, Math.min(100, Number(input.limit) || 50));
                 const query = String(input.query || '').toLowerCase();
-                const rows = store.list().filter((row) => !input.cwd || row.cwd === input.cwd).map((row) => {
+                // 대화가 한 번도 저장되지 않은 빈 저널은 불러올 내용이 없으므로 목록에서 뺀다.
+                const rows = store.list().filter((row) => row.items.length && (!input.cwd || row.cwd === input.cwd)).map((row) => {
                     return { ...row, ...sessionDescription(row) };
                 }).filter((row) => !query || [row.cwd, row.title, row.description].some((value) => value?.toLowerCase().includes(query)))
                     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, limit);
