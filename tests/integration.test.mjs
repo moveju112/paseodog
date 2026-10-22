@@ -11,21 +11,41 @@ import { processEngineFactory } from '../plugin/server/process-engine.mjs';
 import { JournalStore } from '../plugin/server/journal.mjs';
 import { compactSummary } from '../engine/src/worker.mjs';
 import { validateEvent } from './contracts/provider-events.mjs';
-import { until, delay } from './helpers.mjs';
+import { until as waitUntil, delay } from './helpers.mjs';
 const worker=fileURLToPath(new URL('./fixtures/worker-fixture.mjs',import.meta.url));
-function fixture(t) {
+const rpcTimeoutMs = 2000;
+const bootMs = 3000;
+const maxTurnMs = 5000;
+// 실제 RPC·부팅·턴의 처리 예산보다 테스트 드라이버가 먼저 실패하지 않게 한다.
+const until = (events, predicate) => waitUntil(events, predicate, rpcTimeoutMs + bootMs + maxTurnMs);
+function fixture(t, env = {}) {
     const root=mkdtempSync(join(tmpdir(),'paseodog-integration-'));
     const log=join(root,'asks.log'); const connections=[];
     const store=new JournalStore(join(root,'journal'));
-    const factory=processEngineFactory({launch:{command:process.execPath,args:[worker],env:{...process.env}},spawnProcess:spawn,terminateProcess:(child)=>child.kill('SIGKILL'),timeoutMs:2000,stopMs:100,scopeMode:'test-only-process-group'});
-    function client(){const events=[];const connection=createProviderConnection({engineFactory:factory,store,bootMs:3000,stopMs:200,permissionMs:500,flushMs:5,maxTurnMs:5000});connection.onEvent(e=>events.push(e));connections.push({connection,events});return{connection,events};}
-    const config={cwd:root,env:{ASK_LOG:log},settings:{},mcpServers:{},persist:true};
+    const factory=processEngineFactory({launch:{command:process.execPath,args:[worker],env:{...process.env}},spawnProcess:spawn,terminateProcess:(child)=>child.kill('SIGKILL'),timeoutMs:rpcTimeoutMs,stopMs:100,scopeMode:'test-only-process-group'});
+    function client(){const events=[];const connection=createProviderConnection({engineFactory:factory,store,bootMs,stopMs:200,permissionMs:500,flushMs:5,maxTurnMs});connection.onEvent(e=>events.push(e));connections.push({connection,events});return{connection,events};}
+    const config={cwd:root,env:{ASK_LOG:log,...env},settings:{},mcpServers:{},persist:true};
     const open=(sessionId='p1',persistence)=>({type:'session.open',requestId:'open:'+sessionId,sessionId,config,persistence,history:persistence?'replay':'skip'});
     const prompt=(text='normal',clientMessageId='m1',sessionId='p1')=>({type:'session.prompt',sessionId,prompt:{clientMessageId,delivery:'auto',input:{type:'message',content:[{type:'text',text}]}}});
     t.after(async()=>{for(const c of connections) await c.connection.close();for(const c of connections)for(const e of c.events)validateEvent(e);rmSync(root,{recursive:true,force:true});});
     const askCount=()=>existsSync(log)?readFileSync(log,'utf8').trim().split('\n').filter(Boolean).length:0;
     return {root,client,open,prompt,askCount};
 }
+// 이미지 파트가 JSONL·실제 자식 프로세스를 지나도 순서와 바이트를 유지한다.
+// 각각 제한 안에 끝나는 open·status RPC의 합이 2초를 넘어도 정상 준비로 처리한다.
+test('readiness may span two valid RPC budgets without a premature driver timeout', async t => {
+    const rpcDelayMs = 1100;
+    assert.ok(rpcDelayMs < rpcTimeoutMs);
+    const f = fixture(t, { TEST_OPEN_DELAY_MS: String(rpcDelayMs), TEST_STATUS_DELAY_MS: String(rpcDelayMs) });
+    const a = f.client();
+    const started = performance.now();
+    await a.connection.send(f.open());
+    await until(a.events, event => event.type === 'session.ready');
+    assert.ok(performance.now() - started >= rpcDelayMs * 2);
+    assert.deepEqual(a.events.find(event => event.type === 'session.usage').usage,
+        { contextWindowMaxTokens: 1000, contextWindowUsedTokens: 40 });
+});
+
 // 이미지 파트가 JSONL·실제 자식 프로세스를 지나도 순서와 바이트를 유지한다.
 test('image content crosses the real worker transport without loss', async (t) => {
     const f = fixture(t), a = f.client();

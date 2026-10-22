@@ -18,7 +18,7 @@
     "clean": "node ../../scripts/clean-package-dist.mjs",
     "build": "node ../../scripts/build-package.mjs",
     "build:clean": "npm run clean && npm run build",
-    "prepack": "npm run build:clean",
+    "prepack": "npm run build",
     "typecheck": "tsgo --noEmit",
     "test": "npm run test:unit && npm run test:local",
     "test:unit": "vitest run src",

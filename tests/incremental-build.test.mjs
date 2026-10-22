@@ -151,6 +151,42 @@ test('desktop dependencies build each shared target once without unconditional c
     assert.deepEqual(calls.filter(call => call.startsWith('clean:')), []);
 });
 
+// 실제 npm prepack 경로도 증분 검증을 거치고 무조건적인 clean은 호출하지 않는다.
+test('package lifecycle preserves incremental compilation and daemon web export', context => {
+    const root = makeFixture(context);
+    const targets = ['cli', 'client', 'protocol', 'highlight', 'plugin', 'server'];
+    const logPath = join(root, 'calls.txt');
+    writeFileSync(join(root, 'record.cjs'),
+        `require('node:fs').appendFileSync(${JSON.stringify(logPath)}, process.argv[2] + '\\n');\n`);
+    writeFileSync(join(root, 'package.json'), JSON.stringify({
+        private: true, workspaces: ['packages/*'],
+        scripts: { 'build:daemon-web-ui': 'node record.cjs daemon-web' },
+    }));
+    for (const name of targets) {
+        const source = JSON.parse(readFileSync(new URL(`../android/packages/${name}/package.json`, import.meta.url), 'utf8'));
+        const directory = join(root, 'packages', name);
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, 'package.json'), JSON.stringify({
+            name: `@getpaseo/${name}`, version: '1.0.0',
+            scripts: {
+                prepack: source.scripts.prepack,
+                build: `node ../../record.cjs build:${name}`,
+                'build:clean': `node ../../record.cjs clean:${name}`,
+            },
+        }));
+    }
+    const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm',
+        ['run', 'prepack', '--workspaces'], {
+            cwd: root, encoding: 'utf8', shell: process.platform === 'win32',
+        });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const calls = readFileSync(logPath, 'utf8').trim().split('\n');
+    assert.deepEqual(calls.filter(call => call.startsWith('build:')).sort(),
+        targets.map(name => `build:${name}`).sort());
+    assert.deepEqual(calls.filter(call => call.startsWith('clean:')), []);
+    assert.equal(calls.filter(call => call === 'daemon-web').length, 1);
+});
+
 // 공유 출력 디렉터리의 두 컴파일과 자산을 함께 보존하고 삭제·복사 실패를 복구한다.
 test('multiple configs and assets share one complete success receipt', context => {
     const root = makeFixture(context);

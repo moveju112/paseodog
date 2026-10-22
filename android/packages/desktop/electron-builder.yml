@@ -26,6 +26,8 @@ files:
   - "!node_modules/@getpaseo/*/.tasks/**"
   - "!node_modules/@getpaseo/*/conversations/**"
   - "!node_modules/@getpaseo/*/test-results/**"
+  # afterPack에서 삭제하던 사용하지 않는 Claude 실행파일은 처음부터 복사하지 않는다.
+  - "!node_modules/@anthropic-ai/claude-agent-sdk-*/**"
 asarUnpack:
   - dist/daemon/node-entrypoint-runner.js
   - node_modules/@getpaseo/server/dist/server/terminal/shell-integration/**/*
@@ -66,6 +68,8 @@ mac:
     - dmg
     - zip
 linux:
+  files:
+    - "!node_modules/sherpa-onnx-{darwin,win}-*/**"
   category: Development
   icon: assets
   artifactName: "PaseoDog-${version}-${arch}.${ext}"
@@ -77,7 +81,6 @@ linux:
   target:
     - AppImage
     - deb
-    - tar.gz
 deb:
   afterInstall: scripts/linux-sandbox/after-install.tpl
 rpm:
@@ -87,6 +90,8 @@ appImage:
   executableArgs: ["--class=PaseoDog"]
   artifactName: "PaseoDog-${version}-${arch}.${ext}"
 win:
+  files:
+    - "!node_modules/sherpa-onnx-{darwin,linux}-*/**"
   artifactName: "PaseoDog-Setup-${version}-${arch}.${ext}"
   icon: assets/icon.ico
   signAndEditExecutable: false

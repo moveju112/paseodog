@@ -1,6 +1,11 @@
 import { appendFileSync } from 'node:fs';
 import { serveWorker } from '../../engine/src/worker.mjs';
+// 실제 IPC의 개별 제한 안에서 연속 RPC 지연을 재현하는 테스트 전용 설정이다.
+async function delayRpc(value) {
+    if (value) await new Promise(resolve => setTimeout(resolve, Number(value)));
+}
 const server=serveWorker({input:process.stdin,output:process.stdout,onExit:()=>process.exit(0),engineFactory:async(args,{emit})=>{
+    await delayRpc(args.config.env.TEST_OPEN_DELAY_MS);
     let aborted=false,release;
     const steering = [];
     const configuration = { autoEffort: args.config.settings?.autoEffort ?? true, effort: 'low' };
@@ -10,7 +15,7 @@ const server=serveWorker({input:process.stdin,output:process.stdout,onExit:()=>p
         // 테스트 세션의 다음 턴 선호값만 변경한다.
         async configure(changes) { Object.assign(configuration, changes); return { ...configuration }; },
         // 실제 JSONL 상태 조회를 통해 컨텍스트 표시 필드를 전달한다.
-        async status() { return { context: { usedTokens: 40, effectiveContextWindow: 1000 } }; },
+        async status() { await delayRpc(args.config.env.TEST_STATUS_DELAY_MS); return { context: { usedTokens: 40, effectiveContextWindow: 1000 } }; },
         // 계승 응답의 ID와 현재 워커 ID가 분리되는지 실제 IPC에서 확인한다.
         async action(request) {
             if (request.operation !== 'fork') throw new Error('Unknown fixture action');
