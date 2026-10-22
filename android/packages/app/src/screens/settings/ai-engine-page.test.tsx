@@ -226,6 +226,13 @@ const snapshot = {
   compaction: { auto: true, onModelChange: true, mainBufferPercent: 0.2, mainBufferRatio: 20 },
   autoClear: { enabled: false, idleMs: 3600000, idleMinutes: 60, minContextPercent: 50 },
   orchestration: "balanced",
+  agentDefinition: {
+    id: "worker",
+    name: "Worker",
+    description: "구현 담당",
+    body: "---\nname: worker\n---\n  들여쓰기 유지\n",
+    revision: "aaaaaaaaaaaaaaaaaaaaaaaa",
+  },
   models: [
     {
       id: "small",
@@ -667,6 +674,7 @@ describe("native host AI engine settings", () => {
     render(<AiEnginePage serverId="host-one" section="workflow" />);
     fireEvent.click(await screen.findByRole("button", { name: "에이전트 Worker" }));
     expect(screen.getByRole("dialog", { name: "에이전트 편집" })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("원본을 불러오는 중입니다.")).toBeNull());
     expect((screen.getByLabelText("에이전트 프롬프트 본문") as HTMLTextAreaElement).value).toBe(
       "---\nname: worker\n---\n  들여쓰기 유지\n",
     );
@@ -688,6 +696,7 @@ describe("native host AI engine settings", () => {
         "engine-controls",
         expect.objectContaining({
           action: "agentSave",
+          expectedRevision: "aaaaaaaaaaaaaaaaaaaaaaaa",
           agent: "worker",
           name: "Worker",
           description: "구현 담당",
@@ -700,6 +709,35 @@ describe("native host AI engine settings", () => {
         }),
       ),
     );
+  });
+  it("blocks saving until the original definition loads and keeps failure blocked", async () => {
+    let rejectRead: (error: Error) => void = () => {};
+    host.invokePluginRpc.mockImplementation((_plugin, _rpc, input) =>
+      input.action === "agentDefinition"
+        ? new Promise((_resolve, reject) => {
+            rejectRead = reject;
+          })
+        : Promise.resolve(snapshot),
+    );
+    render(<AiEnginePage serverId="host-one" section="agents" />);
+    fireEvent.click(await screen.findByRole("button", { name: "에이전트 Worker" }));
+    expect((screen.getByRole("button", { name: "저장" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => rejectRead(new Error("read failed")));
+    expect(await screen.findByText("원본을 읽지 못했습니다. 닫고 다시 열어 주세요.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    expect(
+      host.invokePluginRpc.mock.calls.some(([, , input]) => input.action === "agentSave"),
+    ).toBe(false);
+  });
+  it("does not offer automatic worktree settings", async () => {
+    render(<AiEnginePage serverId="host-one" section="workflow" />);
+    expect(
+      await screen.findByText(
+        "자동 Worktree 격리는 아직 지원하지 않습니다. 기존 작업 폴더에서 실행됩니다.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: "새 작업 시 Worktree 격리" })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "Worktree 자동 정리" })).toBeNull();
   });
   it("selects disabled workflow directly without opening or reading its document", async () => {
     host.invokePluginRpc.mockResolvedValue({

@@ -132,13 +132,19 @@ export function AttachmentLabel({ icon, title, subtitle }: AttachmentLabelProps)
 }
 
 /** Square image preview pill body. */
-export function AttachmentThumbnail({ metadata }: { metadata: AttachmentMetadata }) {
+export function AttachmentThumbnail({
+  metadata,
+  sent = false,
+}: {
+  metadata: AttachmentMetadata;
+  sent?: boolean;
+}) {
   const uri = useAttachmentPreviewUrl(metadata);
   const source = useMemo(() => ({ uri: uri ?? "" }), [uri]);
   if (!uri) {
-    return <View style={styles.thumbnailPlaceholder} />;
+    return <View style={[styles.thumbnailPlaceholder, sent && styles.sentThumbnail]} />;
   }
-  return <Image source={source} style={styles.thumbnail} />;
+  return <Image source={source} style={[styles.thumbnail, sent && styles.sentThumbnail]} />;
 }
 
 const ThemedX = withUnistyles(X);
@@ -188,6 +194,10 @@ const styles = StyleSheet.create((theme) => ({
     width: ATTACHMENT_CONTENT_HEIGHT,
     height: ATTACHMENT_CONTENT_HEIGHT,
     backgroundColor: theme.colors.surface1,
+  },
+  sentThumbnail: {
+    width: ATTACHMENT_CONTENT_HEIGHT * 2,
+    height: ATTACHMENT_CONTENT_HEIGHT * 2,
   },
   closeButton: {
     position: "absolute",

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
 import { AdaptiveTextInput } from "@/components/adaptive-text-input";
@@ -245,13 +245,6 @@ const experienceOptions = [
   { value: "beginner", label: "입문자 (상세한 설명)" },
   { value: "intermediate", label: "중급 개발자" },
   { value: "senior", label: "시니어·아키텍트 (핵심 위주)" },
-] as const;
-
-const branchPrefixOptions = [
-  { value: "paseodog/", label: "paseodog/" },
-  { value: "mixdog/", label: "mixdog/" },
-  { value: "feat/", label: "feat/" },
-  { value: "task/", label: "task/" },
 ] as const;
 
 const shellOptions = [
@@ -696,7 +689,7 @@ function AgentListRow({
 }
 
 // Mixdog 스타일 통합 워크플로우 화면 (작업 규칙 리스트+모달 · 기본 에이전트 · 서브에이전트 리스트+모달 · 오케스트레이션 · 실행 환경)
-function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
+function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
   // 작업 규칙(Workflow) 모달 상태
   const [workflowModalMode, setWorkflowModalMode] = useState<"edit" | "create" | null>(null);
   const [editingWorkflowId, setEditingWorkflowId] = useState("default");
@@ -728,6 +721,11 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
   const [agentFast, setAgentFast] = useState(false);
   const [agentFallbacks, setAgentFallbacks] = useState<FallbackRoute[]>([]);
   const [agentRevision, setAgentRevision] = useState(0);
+  const [agentReadState, setAgentReadState] = useState<"loading" | "loaded" | "ready" | "failed">(
+    "loading",
+  );
+  const [agentExpectedRevision, setAgentExpectedRevision] = useState<string | null>(null);
+  const agentReadSequence = useRef(0);
 
   // 서버에서 workflowPack 또는 agentDefinition 응답이 오면 열린 모달의 본문을 갱신한다.
   useEffect(() => {
@@ -745,15 +743,22 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
 
   useEffect(() => {
     if (
+      agentReadState === "loaded" &&
       agentModalMode === "edit" &&
       editingAgentId &&
       snapshot.agentDefinition &&
       snapshot.agentDefinition.id === editingAgentId
     ) {
-      setAgentBody(snapshot.agentDefinition.body || "");
+      if (!snapshot.agentDefinition.revision) {
+        setAgentReadState("failed");
+        return;
+      }
+      setAgentBody(snapshot.agentDefinition.body);
+      setAgentExpectedRevision(snapshot.agentDefinition.revision);
+      setAgentReadState("ready");
       setAgentRevision((r) => r + 1);
     }
-  }, [agentModalMode, editingAgentId, snapshot.agentDefinition]);
+  }, [agentReadState, agentModalMode, editingAgentId, snapshot.agentDefinition]);
 
   // 작업 규칙 클릭 -> 모달 편집기 오픈
   const openEditWorkflowModal = useCallback(
@@ -878,6 +883,9 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
   // 에이전트 행 클릭 -> 에이전트 편집 모달 오픈
   const openEditAgentModal = useCallback(
     (agent: EngineSnapshot["agents"][number]) => {
+      const sequence = ++agentReadSequence.current;
+      setAgentReadState("loading");
+      setAgentExpectedRevision(null);
       setEditingAgentId(agent.id);
       setAgentEnabled(!agent.disabled);
       setAgentName(agent.label || agent.id);
@@ -891,15 +899,18 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
       setAgentFallbacks(agent.route.fallbacks ? [...agent.route.fallbacks] : []);
       setAgentRevision((r) => r + 1);
       setAgentModalMode("edit");
-      if (!agent.body) {
-        void request({ action: "agentDefinition", agent: agent.id });
-      }
+      void request({ action: "agentDefinition", agent: agent.id }).then((loaded) => {
+        if (sequence === agentReadSequence.current) setAgentReadState(loaded ? "loaded" : "failed");
+        return loaded;
+      });
     },
     [request],
   );
 
   // + 버튼 클릭 -> 새 에이전트 모달 오픈
   const openCreateAgentModal = useCallback(() => {
+    agentReadSequence.current++;
+    setAgentExpectedRevision(null);
     const defaultModel = snapshot.models[0];
     setEditingAgentId(null);
     setNewAgentId("");
@@ -918,6 +929,8 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
   }, [snapshot.models, snapshot.route.model, snapshot.route.provider]);
 
   const closeAgentModal = useCallback(() => {
+    agentReadSequence.current++;
+    setAgentExpectedRevision(null);
     setAgentModalMode(null);
     setEditingAgentId(null);
   }, []);
@@ -994,6 +1007,12 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
 
   // 에이전트 모달 저장 (라우트 + 활성 여부 + AGENT.md 본문 통합 저장)
   const saveAgentModal = useCallback(async () => {
+    if (busy) return;
+    if (
+      agentModalMode === "edit" &&
+      (agentReadState !== "ready" || !agentExpectedRevision || !agentBody.trim())
+    )
+      return;
     const routePatch = {
       provider: agentProvider,
       model: agentModel,
@@ -1006,12 +1025,11 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
     if (agentModalMode === "edit" && editingAgentId) {
       const saved = await request({
         action: "agentSave",
+        expectedRevision: agentExpectedRevision!,
         agent: editingAgentId,
         name: agentName.trim() || editingAgentId,
         description: agentDesc.trim(),
-        body: agentBody.trim()
-          ? agentBody
-          : `---\nname: ${agentName.trim() || editingAgentId}\ndescription: ${agentDesc.trim()}\n---\n\nYou are the ${agentName.trim() || editingAgentId} agent.\n`,
+        body: agentBody,
         route: routePatch,
       });
       if (saved) closeAgentModal();
@@ -1038,6 +1056,9 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
       if (saved) closeAgentModal();
     }
   }, [
+    busy,
+    agentReadState,
+    agentExpectedRevision,
     agentAutoEffort,
     agentBody,
     agentDesc,
@@ -1329,46 +1350,12 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
         </View>
       </SettingsSection>
 
-      {/* 6. Git Worktree 및 실행 쉘 (기본값 OFF) */}
-      <SettingsSection title="Git Worktree 및 실행 쉘">
+      {/* 자동 Worktree 격리는 미지원이므로 실행 쉘만 제공한다. */}
+      <SettingsSection title="실행 쉘">
         <View style={settingsStyles.card}>
-          <SettingRow
-            title="새 작업 시 Worktree 격리 기본 사용"
-            hint="독립된 Git 워크트리에서 에이전트 작업을 안전하게 격리 (기본값: 꺼짐)"
-          >
-            <Switch
-              accessibilityLabel="새 작업 시 Worktree 격리"
-              disabled={disabled}
-              value={snapshot.worktree?.newTaskDefault === "worktree"}
-              onValueChange={(useWorktree) =>
-                void request({
-                  action: "preferences",
-                  worktree: { newTaskDefault: useWorktree ? "worktree" : "branch" },
-                })
-              }
-            />
-          </SettingRow>
-          <SettingRow title="Worktree 자동 정리" hint="작업 완료 후 임시 워크트리를 자동 정리">
-            <Switch
-              accessibilityLabel="Worktree 자동 정리"
-              disabled={disabled}
-              value={snapshot.worktree?.autoCleanup ?? true}
-              onValueChange={(autoCleanup) =>
-                void request({ action: "preferences", worktree: { autoCleanup } })
-              }
-            />
-          </SettingRow>
-          <SettingRow title="Worktree 브랜치 접두사" hint="자동 생성 브랜치 이름 규칙">
-            <Select
-              title="Worktree 브랜치 접두사"
-              disabled={disabled}
-              value={snapshot.worktree?.branchPrefix ?? "paseodog/"}
-              options={branchPrefixOptions}
-              onChange={(branchPrefix) =>
-                void request({ action: "preferences", worktree: { branchPrefix } })
-              }
-            />
-          </SettingRow>
+          <Text style={settingsStyles.rowHint}>
+            자동 Worktree 격리는 아직 지원하지 않습니다. 기존 작업 폴더에서 실행됩니다.
+          </Text>
           <SettingRow
             title="명령 실행 쉘"
             hint={
@@ -1696,6 +1683,13 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
           <View style={layout.fieldBlock}>
             <Text style={settingsStyles.rowTitle}>AGENT.md</Text>
             <Text style={settingsStyles.rowHint}>이 에이전트의 동작을 정의하는 지침입니다.</Text>
+            {agentModalMode === "edit" && agentReadState !== "ready" && (
+              <Text style={settingsStyles.rowHint}>
+                {agentReadState === "failed"
+                  ? "원본을 읽지 못했습니다. 닫고 다시 열어 주세요."
+                  : "원본을 불러오는 중입니다."}
+              </Text>
+            )}
             <AdaptiveTextInput
               accessibilityLabel="에이전트 프롬프트 본문"
               initialValue={agentBody}
@@ -1703,7 +1697,9 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
               onChangeText={setAgentBody}
               placeholder="이 에이전트의 시스템 프롬프트 지침을 입력하세요."
               multiline
-              editable={!disabled}
+              editable={
+                !disabled && !busy && (agentModalMode !== "edit" || agentReadState === "ready")
+              }
               style={[settingsStyles.rowTitle, inputStyle, layout.bodyInput]}
             />
           </View>
@@ -1728,6 +1724,9 @@ function WorkflowSection({ snapshot, disabled, request }: SectionProps) {
                 size="sm"
                 disabled={
                   disabled ||
+                  busy ||
+                  (agentModalMode === "edit" &&
+                    (agentReadState !== "ready" || !agentExpectedRevision || !agentBody.trim())) ||
                   (agentModalMode === "create" && !agentName.trim() && !newAgentId.trim())
                 }
                 onPress={saveAgentModal}

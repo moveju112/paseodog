@@ -32,7 +32,16 @@ export interface WorkRecordSession {
 export function createWorkRecordRenderer(deps: RendererDependencies) {
   // 웹 번들에도 함수 자체를 주입하므로 오류 상수는 이 함수 안에 둔다.
   const CONNECTION_CLOSED_TEXT = "[System Error] Provider connection closed";
-  const { React, View, Text, Pressable, StyleSheet, useTranslation, useAssistantNickname, getClient } = deps;
+  const {
+    React,
+    View,
+    Text,
+    Pressable,
+    StyleSheet,
+    useTranslation,
+    useAssistantNickname,
+    getClient,
+  } = deps;
   const copies: Record<
     string,
     {
@@ -203,13 +212,13 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
       fontSize: theme.fontSize.sm,
       marginBottom: theme.spacing[1],
     },
-    answerContainer: { paddingLeft: 40 },
+    answerContainer: { paddingLeft: { xs: 0, md: 40 } },
     answerHeader: {
       uni__dependencies: [0],
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
-      marginLeft: -40,
+      marginLeft: { xs: 0, md: -40 },
       marginBottom: 8,
     },
     avatar: {
@@ -278,25 +287,34 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
       React.createElement(
         Pressable,
         {
-          style: styles.header,
           testID: "assistant-work-record-toggle",
           accessibilityRole: "button",
           accessibilityLabel: copy.record,
           accessibilityState: { expanded },
           onPress: () => setExpanded(!expanded),
         },
-        React.createElement(Text, { style: styles.count, accessible: false }, expanded ? "⌄" : "›"),
-        React.createElement(Text, { style: styles.title }, copy.record),
-        React.createElement(Text, { style: styles.count }, String(record.count)),
-        record.active ? React.createElement(Text, { style: styles.active }, `● ${copy.working}`) : null,
-      ),
-      record.active && !expanded
-        ? React.createElement(
+        React.createElement(
+          View,
+          { style: styles.header },
+          React.createElement(
             Text,
-            { style: styles.preview, numberOfLines: 1 },
-            record.preview || copy.working,
-          )
-        : null,
+            { style: styles.count, accessible: false },
+            expanded ? "⌄" : "›",
+          ),
+          React.createElement(Text, { style: styles.title }, copy.record),
+          React.createElement(Text, { style: styles.count }, String(record.count)),
+          record.active
+            ? React.createElement(Text, { style: styles.active }, `● ${copy.working}`)
+            : null,
+        ),
+        record.active && !expanded
+          ? React.createElement(
+              Text,
+              { style: styles.preview, numberOfLines: 1 },
+              record.preview || copy.working,
+            )
+          : null,
+      ),
       expanded
         ? React.createElement(
             View,
@@ -358,7 +376,11 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
           { style: styles.avatar, accessible: false },
           React.createElement(Text, { style: styles.avatarText }, Array.from(nickname)[0]),
         ),
-        React.createElement(Text, { style: styles.answer, accessibilityRole: "header", numberOfLines: 1 }, nickname),
+        React.createElement(
+          Text,
+          { style: styles.answer, accessibilityRole: "header", numberOfLines: 1 },
+          nickname,
+        ),
       ),
       children,
     );

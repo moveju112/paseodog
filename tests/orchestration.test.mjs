@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createOrchestrationBridge } from '../engine/src/orchestration.mjs';
 import { attachHostPolicy } from '../engine/src/policy.mjs';
 import { patchedAgentSource, gitBlob, AGENT_PATCHES } from '../scripts/patch-mixdog.mjs';
@@ -231,8 +232,10 @@ test('same-tag queue and route changes use native APIs, no work is admitted afte
 
 test('agent patch rejects drift and partial patches, accepts only exact idempotent output', () => {
     for (const spec of AGENT_PATCHES) {
-        const source = spec.edits.map(([before]) => before).join('\n');
-        const fixtureSpec = { ...spec, blob: gitBlob(source) };
+        const installed = readFileSync(new URL('../engine/node_modules/mixdog/' + spec.file, import.meta.url), 'utf8');
+        const source = [...spec.edits].reverse().reduce((text, [before, after]) => text.replace(after, () => before), installed);
+        assert.equal(gitBlob(source), spec.blob);
+        const fixtureSpec = spec;
         const patched = patchedAgentSource(source, fixtureSpec);
         assert.equal(patchedAgentSource(patched, fixtureSpec), patched);
         assert.throws(() => patchedAgentSource(source + 'drift', fixtureSpec), /hash mismatch/);

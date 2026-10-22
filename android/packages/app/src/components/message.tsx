@@ -429,7 +429,7 @@ function UserMessageImagePill({ image, onOpen, accessibilityLabel }: UserMessage
   }, [onOpen, image]);
   return (
     <AttachmentFrame onPress={handlePress} accessibilityLabel={accessibilityLabel}>
-      <AttachmentThumbnail metadata={image} />
+      <AttachmentThumbnail metadata={image} sent />
     </AttachmentFrame>
   );
 }

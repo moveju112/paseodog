@@ -40,6 +40,7 @@ export const agentDefinitionSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   body: z.string(),
+  revision: z.string().optional(),
   custom: z.boolean().optional(),
   userOverride: z.boolean().optional(),
 });
@@ -233,6 +234,7 @@ export type EngineCommand =
   | { action: "agentDefinition"; agent: string }
   | {
       action: "agentSave";
+      expectedRevision: string;
       agent?: string;
       name?: string;
       description?: string;

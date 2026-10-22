@@ -5,12 +5,14 @@ import { fileURLToPath } from 'node:url';
 import { EFFORT_USAGE_PATCHES } from '../patches/effort-usage.mjs';
 import { DEFAULT_OUTPUT_STYLE_PATCHES } from '../patches/default-output-style.mjs';
 import { COMPACTION_SUMMARY_ROUTE_PATCH } from '../patches/compaction-summary-route.mjs';
+import { AGENT_ROUTE_SAFETY_EDITS, AGENT_EDITOR_SAFETY_PATCHES } from '../patches/agent-editor-safety.mjs';
 export const PIN = '1.3.1';
 export const ORIGINAL_BLOB = '6de5147ccdce6c9b3aa5f48dc740af439834b7b1';
 export const ANCHOR = '      const turnContext = await dispatchPromptSubmit(turn, session0, prompt, options);';
 export const ADDITION = '\n      // PaseoDog host-policy boundary v1 (local Apache-2.0 modification).\n      if (typeof options.beforeSessionAsk === \'function\') {\n        await options.beforeSessionAsk(session0);\n      }';
 export const MARKER = 'PaseoDog host-policy boundary v1';
 export const AGENT_PATCHES = [
+    ...AGENT_EDITOR_SAFETY_PATCHES,
     COMPACTION_SUMMARY_ROUTE_PATCH,
     ...EFFORT_USAGE_PATCHES,
     ...DEFAULT_OUTPUT_STYLE_PATCHES,
@@ -301,7 +303,9 @@ export const AGENT_PATCHES = [
                 '    if (!clean(requested.provider)) return clearOverride(id);',
                 '    if (!clean(requested.provider)) {\n      if (next?.disabled === false) saveDisabled(id, false);\n      return clearOverride(id);\n    }',
             ],
+            ...AGENT_ROUTE_SAFETY_EDITS,
         ],
+        previousEditCount: 2,
     },
     {
         file: 'src/runtime/agent/orchestrator/config-storage.mjs',
@@ -394,6 +398,12 @@ export function patchedSource(text, expectedBlob = ORIGINAL_BLOB) {
     return original.replace(ANCHOR, ANCHOR + ADDITION);
 }
 export function patch(root, { check = false } = {}) {
+    // 같은 파일을 여러 spec으로 쓰면 앞 패치가 유실되므로 읽기·쓰기 전에 차단한다.
+    const files = new Set(['src/session-runtime/turn/turn-run.mjs']);
+    for (const { file } of AGENT_PATCHES) {
+        if (files.has(file)) throw new Error(`Duplicate Mixdog patch target: ${file}`);
+        files.add(file);
+    }
     const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
     if (manifest.version !== PIN) throw new Error(`Mixdog ${PIN} required; found ${manifest.version}`);
     // 모든 원본을 먼저 검사해 미검토 파일이 있으면 쓰기 전에 중단한다.

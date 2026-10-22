@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { configure } from '../scripts/configure.mjs';
-import { prepareDesktopRuntime } from '../scripts/prepare-desktop-runtime.mjs';
+import { prepareDesktopRuntime, runtimeFiles } from '../scripts/prepare-desktop-runtime.mjs';
 import { engineEnvironment } from '../plugin/server/util.mjs';
 
 const require = createRequire(import.meta.url);
@@ -37,6 +38,18 @@ test('desktop config uses its dedicated listener, Electron Node mode and absolut
 
 test('runtime packager rejects unsupported targets before writing files', async () => {
     await assert.rejects(prepareDesktopRuntime({ platform: 'win32', arch: 'arm64' }), /Unsupported/);
+});
+
+test('packaged patch entry point imports with only the declared runtime scripts and patches', async (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'paseodog-runtime-import-'));
+    t.after(() => rmSync(root, { recursive: true }));
+    for (const name of runtimeFiles.filter((name) => /^(scripts|patches)\//.test(name))) {
+        const target = join(root, name);
+        mkdirSync(dirname(target), { recursive: true });
+        cpSync(new URL('../' + name, import.meta.url), target);
+    }
+    const bundled = await import(pathToFileURL(join(root, 'scripts/patch-mixdog.mjs')).href);
+    assert.equal(typeof bundled.patch, 'function');
 });
 
 test('Android user-facing version can follow the common release version without losing its fallback', () => {

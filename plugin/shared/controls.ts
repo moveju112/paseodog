@@ -177,6 +177,7 @@ export const engineControls = defineRpc({
         name: z.string().max(120).optional(),
         description: z.string().max(500).optional(),
         body: z.string().max(200000).optional(),
+        expectedRevision: z.string().regex(/^[a-f0-9]{24}$/).optional(),
         activate: z.boolean().optional(),
         mode: z.enum(['none', 'swarm']).optional(),
     }).strict(),

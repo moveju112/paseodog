@@ -1639,13 +1639,13 @@ const stylesheet = StyleSheet.create((theme) => ({
     width: "100%",
     maxWidth: theme.contentMaxWidth,
     alignSelf: "center",
-    paddingHorizontal: theme.spacing[2],
+    paddingHorizontal: { xs: theme.spacing[1], md: theme.spacing[2] },
   },
   listContentContainer: {
     paddingVertical: 0,
     flexGrow: 1,
     paddingHorizontal: {
-      xs: theme.spacing[3],
+      xs: theme.spacing[1],
       md: theme.spacing[4],
     },
   },
@@ -1660,7 +1660,7 @@ const stylesheet = StyleSheet.create((theme) => ({
     width: "100%",
     maxWidth: theme.contentMaxWidth,
     alignSelf: "center",
-    paddingHorizontal: theme.spacing[2],
+    paddingHorizontal: { xs: theme.spacing[1], md: theme.spacing[2] },
   },
   emptyState: {
     flex: 1,

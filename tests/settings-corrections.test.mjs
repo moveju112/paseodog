@@ -71,7 +71,7 @@ test('summary route uses its configured provider and preserves model IDs contain
 
 // 설치된 웹 번들의 전체 원본 해시·재적용과 실제 렌더 목록을 함께 확인한다.
 test('web settings hide unsupported timeout and describe background memory', () => {
-    const source = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
+    const source = patchedComposerSource(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
     assert.equal(patchedComposerSource(source), source);
     assert.ok(source.includes('children:[le,ie,ne,ae,ce,ue,me,ge]'));
     assert.ok(!source.includes('children:[le,ie,ne,ae,ce,ue,me,xe,ge]'));

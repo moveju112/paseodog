@@ -141,9 +141,12 @@ test('work record renderer is collapsed by default, expands on press and collaps
     await act(async () => { tree = create(render(row, body)); });
     assert.equal(tree.root.findAllByType('body').length, 0);
     assert.equal(button('assistant-work-record-toggle')[0].props.accessibilityState.expanded, false);
+    const preview = tree.root.findAll((node) => node.type === 'text' && node.props.numberOfLines === 1)[0];
+    assert.ok(button('assistant-work-record-toggle')[0].findAllByType('text').includes(preview));
     assert.equal(button('assistant-work-record-collapse').length, 0);
     await act(async () => button('assistant-work-record-toggle')[0].props.onPress());
     assert.deepEqual(tree.root.findAllByType('body').map((node) => node.props.id), ['thought', 'p']);
+    assert.equal(button('assistant-work-record-toggle')[0].findAllByType('body').length, 0);
     // 펼친 기록 맨 아래의 접기 버튼도 기록을 접는다.
     const [collapse] = button('assistant-work-record-collapse');
     assert.deepEqual(collapse.findAllByType('text').map((node) => node.props.children), ['⌃', '접기']);
@@ -157,6 +160,8 @@ test('work record renderer is collapsed by default, expands on press and collaps
     let answer;
     await act(async () => { answer = create(render({ item: { kind: 'assistant_message', id: 'a', text: '본문', answerStart: true } }, body)); });
     assert.equal(answer.root.findAll((node) => node.type === 'text' && node.props.accessibilityRole === 'header')[0].props.children, 'Dog');
+    const answerContainer = answer.root.find((node) => node.type === 'view' && node.props.testID === 'assistant-answer');
+    assert.deepEqual(answerContainer.props.style.paddingLeft, { xs: 0, md: 40 });
     await act(async () => answer.unmount());
     await act(async () => tree.unmount());
     delete globalThis.IS_REACT_ACT_ENVIRONMENT;

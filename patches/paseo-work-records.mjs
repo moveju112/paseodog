@@ -84,6 +84,7 @@ const LEGACY_PROJECTION_HASHES = new Map([
 
 // 검토한 이전 렌더러 주입본 ("답변" 제목 판, 하단 접기만 있고 이어서 진행 버튼 이전 판)
 const LEGACY_RENDERER_HASHES = new Set([
+    '2fcf0441de798a53c15d4b69e5398b45658dda805dead05d7b4ca3cb62c397d2',
     'bbee3a381966f4353b33b9bd23508dffab9f0b04bf789cabf78a36bed78e9e17',
     '024f9bc387a66785f68f082e69a2584d85c0027f48b754227c3caa9e3feb8954',
     '8f7df87fbd7357758d76d470875751ec1f55882e7c8008bd5ad09aa23e150c3e',

@@ -7,12 +7,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { patch } from './patch-mixdog.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const runtimeFiles = [
+export const runtimeFiles = [
     'package.json', 'LICENSE', 'NOTICE', 'engine/package.json', 'engine/package-lock.json',
     'engine/bin', 'engine/src', 'plugin/package.json', 'plugin/paseo-plugin.json',
     'plugin/index.server.ts', 'plugin/index.client.tsx', 'plugin/server', 'plugin/client', 'plugin/shared',
     'scripts/configure.mjs', 'scripts/paths.mjs', 'scripts/desktop-profile.mjs', 'scripts/patch-mixdog.mjs',
     'patches/effort-usage.mjs', 'patches/default-output-style.mjs', 'patches/compaction-summary-route.mjs',
+    'patches/agent-editor-safety.mjs',
 ];
 
 // 잠금 파일의 해시로 Windows 데스크톱 네이티브 패키지를 검증해 산출물에만 설치한다.

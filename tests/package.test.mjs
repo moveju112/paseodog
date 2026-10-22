@@ -20,7 +20,10 @@ test('source allowlist includes required runtime modules and release commands', 
         'scripts/check-upstream.mjs', 'scripts/live-acceptance.mjs',
         'android/scripts/build-package.mjs', 'android/scripts/clean-package-dist.mjs',
         'android/scripts/is-main-module.mjs', 'tests/incremental-build.test.mjs',
-        'android/scripts/build-daemon-web-ui.mjs', 'tests/web-compression.test.mjs'])
+        'android/scripts/build-daemon-web-ui.mjs', 'tests/web-compression.test.mjs',
+        'patches/agent-editor-safety.mjs', 'patches/paseo-agent-editor-safety.mjs',
+        'tests/agent-editor-safety.test.mjs', 'patches/paseo-chat-usability.mjs',
+        'android/packages/app/src/usage/pin-compatibility.ts', 'tests/chat-usability.test.mjs'])
         assert.ok(entries.has(path), `Required release source missing: ${path}`);
 });
 test('source archive has valid hashes, safe paths and no runtime state or dependencies',t=>{

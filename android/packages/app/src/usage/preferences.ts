@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { displayPercent } from "./model";
+import { restoreClaudeUsagePins } from "./pin-compatibility";
 import type { UsageReportEntry } from "./types";
 
 /** Whether percentages read as the share used or the share left. */
@@ -61,7 +62,7 @@ export function effectiveUsagePins(
   preferences: UsagePreferences,
   reports: readonly UsageReportEntry[],
 ): UsagePin[] {
-  if (preferences.pins !== null) return preferences.pins;
+  if (preferences.pins !== null) return restoreClaudeUsagePins(preferences.pins, reports);
   const pins: UsagePin[] = [];
   for (const entry of reports) {
     if (entry.report.status !== "available") continue;

@@ -114,11 +114,17 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
     } else if (action === 'agentDefinition') {
         if (!(await runtime.listAgents()).some((row) => row.id === request.agent)) throw new Error('Unknown agent');
         if (typeof runtime.getAgentDefinition !== 'function') throw new Error('Agent definition inspection not supported');
-        const { id, name, description, body, custom, userOverride } = await runtime.getAgentDefinition(request.agent);
-        agentDefinition = { id, name, description, body, custom, userOverride };
+        const { id, name, description, body, custom, userOverride, revision } = await runtime.getAgentDefinition(request.agent);
+        agentDefinition = { id, name, description, body, custom, userOverride, revision };
     } else if (action === 'agentSave' || action === 'agentCreate') {
         if (typeof runtime.saveAgentDefinition !== 'function') throw new Error('Agent save not supported');
         const currentAgent = request.agent ? (await runtime.listAgents()).find((row) => row.id === request.agent) : null;
+        if (action === 'agentCreate' && currentAgent) throw new Error('Agent already exists; choose a different id');
+        if (action === 'agentSave') {
+            if (!currentAgent) throw new Error('Unknown agent');
+            if (typeof request.expectedRevision !== 'string' || !/^[a-f0-9]{24}$/.test(request.expectedRevision))
+                throw new Error('Reload the original agent definition before saving');
+        }
         const selectedRoute = { ...currentAgent?.route, ...request.route };
         if (!selectedRoute?.provider || !selectedRoute?.model) throw new Error('Select an agent model before saving');
         const name = typeof request.name === 'string' ? request.name.trim().slice(0, 120) : '';
@@ -131,6 +137,7 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             name: name || id,
             description: typeof request.description === 'string' ? request.description.trim().slice(0, 500) : undefined,
             body: request.body,
+            ...(action === 'agentCreate' ? { createOnly: true } : { expectedRevision: request.expectedRevision }),
             ...(request.route ? { route: request.route } : {}),
         });
         if (request.route?.provider === '' && typeof request.route?.disabled === 'boolean') {
@@ -143,6 +150,7 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             body: saved.body,
             custom: saved.custom,
             userOverride: saved.userOverride,
+            revision: saved.revision,
         };
     } else if (action === 'agentDelete') {
         if (typeof request.agent !== 'string' || !request.agent || request.agent.length > 100)
@@ -251,6 +259,8 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             await runtime.setWebSearchRoute?.(request.webSearchRoute);
         }
     } else if (action === 'preferences') {
+        if (request.worktree !== undefined)
+            throw new Error('PaseoDog automatic worktree isolation is not supported');
         if (request.outputStyle !== undefined) {
             if (typeof request.outputStyle !== 'string') throw new Error('Invalid outputStyle');
             await runtime.setOutputStyle?.(request.outputStyle);
@@ -266,10 +276,6 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         if (request.shellCommand !== undefined) {
             if (typeof request.shellCommand !== 'string') throw new Error('Invalid shellCommand');
             await runtime.setSystemShell?.({ command: request.shellCommand });
-        }
-        if (request.worktree !== undefined) {
-            if (!request.worktree || typeof request.worktree !== 'object') throw new Error('Invalid worktree');
-            await runtime.setWorktreeSettings?.(request.worktree);
         }
         if (request.disabledSkills !== undefined) {
             if (!Array.isArray(request.disabledSkills)) throw new Error('Invalid disabledSkills');

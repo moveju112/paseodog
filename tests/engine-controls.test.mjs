@@ -115,7 +115,7 @@ test('agent definition cannot be saved without an explicitly selected model', as
     const { value, calls } = runtime();
     value.listAgents = () => [{ id: 'worker', route: {}, disabled: true }];
     value.saveAgentDefinition = () => { throw new Error('must not save'); };
-    await assert.rejects(controlRuntime(value, { action: 'agentSave', agent: 'worker', body: '# Worker' }),
+    await assert.rejects(controlRuntime(value, { action: 'agentSave', agent: 'worker', body: '# Worker', expectedRevision: 'a'.repeat(24) }),
         /Select an agent model/);
     assert.deepEqual(calls, []);
 });
@@ -126,6 +126,7 @@ test('agent definition inspection preserves native body bytes and only returns e
     const expected = {
         id: 'worker', name: ' Native Worker ', description: ' Original description\n',
         body: ' \r\n# Original 한글\r\nKeep spacing.  \r\n', custom: true, userOverride: false,
+        revision: 'a'.repeat(24),
     };
     const inspections = [];
     value.getAgentDefinition = async (id) => {
@@ -313,7 +314,6 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
         profile: { title: 'Staff Eng', language: 'ko', experienceLevel: 'senior' },
         aiSessionTitles: true,
         shellCommand: '/bin/zsh',
-        worktree: { newTaskDefault: 'branch', branchPrefix: 'paseodog/', autoCleanup: true },
         disabledSkills: ['legacy-skill'],
         hookAction: 'add',
         hookRule: { event: 'PreToolUse', matcher: 'Bash', command: 'echo ok' },
@@ -321,6 +321,7 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
     await controlRuntime(value, {
         action: 'agentSave',
         agent: 'worker',
+        expectedRevision: 'a'.repeat(24),
         name: 'Worker Pro',
         description: 'Custom worker',
         body: '# Worker Prompt',
@@ -347,7 +348,6 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
         ['profile', { title: 'Staff Eng', language: 'ko', experienceLevel: 'senior' }],
         ['aiSessionTitles', true],
         ['shell', { command: '/bin/zsh' }],
-        ['worktree', { newTaskDefault: 'branch', branchPrefix: 'paseodog/', autoCleanup: true }],
         ['disabledSkills', ['legacy-skill']],
         ['addHook', { event: 'PreToolUse', matcher: 'Bash', command: 'echo ok' }],
         ['flushHooks'],
@@ -356,6 +356,7 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
             name: 'Worker Pro',
             description: 'Custom worker',
             body: '# Worker Prompt',
+            expectedRevision: 'a'.repeat(24),
             route: { fallbacks: [{ provider: 'subscription', model: 'small', effort: 'low' }] },
         }],
         ['agentSave', {
@@ -363,6 +364,7 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
             name: 'QA Bot',
             description: 'Tests code',
             body: '# QA Prompt',
+            createOnly: true,
             route: { provider: 'subscription', model: 'small' },
         }],
         ['agentDelete', 'worker'],
