@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, openSync, closeSync, readSync, writeSync, fstatSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, openSync, closeSync, readSync, writeSync, fstatSync, mkdirSync, lstatSync, realpathSync } from 'node:fs';
 import { resolve, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -136,10 +136,25 @@ export function rewriteArchive(inputPath, outputPath, changes) {
     } finally { closeSync(input); closeSync(output); }
 }
 
+// 산출물 디렉터리 검증 (실경로 -> 본인 소유·타인 쓰기 불가 -> 상위 경로도 root/본인 소유이거나 sticky)
+// root 권한 설치(--apply) 전에 다른 로컬 사용자가 산출물을 바꿔치기할 수 없게 한다.
+function privateOutputDirectory(output) {
+    mkdirSync(output, { recursive: true, mode: 0o700 });
+    const target = realpathSync(output), uid = process.getuid();
+    for (let path = target; ; path = dirname(path)) {
+        const info = lstatSync(path), othersWrite = info.mode & 0o022;
+        const safe = path === target
+            ? info.isDirectory() && info.uid === uid && !othersWrite
+            : info.isDirectory() && [0, uid].includes(info.uid) && (!othersWrite || (info.mode & 0o1000));
+        if (!safe) throw new Error(`Unsafe desktop release output path: ${path}`);
+        if (dirname(path) === path) return target;
+    }
+}
+
 // 매 업데이트마다 검토한 원본 위에 제품 버전·입력 패치·업데이트 정책을 함께 적용한다.
 export function prepareDesktopRelease({ source = '/opt/PaseoDog/resources', output }) {
     if (!output || resolve(output) === resolve(source)) throw new Error('Separate output directory required');
-    mkdirSync(output, { recursive: true });
+    output = privateOutputDirectory(output);
     // 실행 창 아이콘 설치 (기존 PaseoDog 브랜드 자산 -> Electron resources/icon.png)
     const icon = readFileSync(new URL('../android/packages/app/assets/images/paseodog-icon.png', import.meta.url));
     writeFileSync(join(output, 'icon.png'), icon);
