@@ -1768,17 +1768,13 @@ function SessionUsage({ sessions }: { sessions: EngineSnapshot["sessions"] }) {
   );
 }
 
-// 토큰 절감 설정 (자동 추론·자동 압축·유휴 세션 비우기·세션 리캡) 즉시 저장
+// 토큰 절감 설정 (자동 압축·유휴 세션 비우기·세션 리캡) 즉시 저장
 function TokensSection({ snapshot, disabled, request }: SectionProps) {
   const send = useCallback(
     (command: EngineCommand) => {
       void request(command);
     },
     [request],
-  );
-  const setAutoEffort = useCallback(
-    (autoEffort: boolean) => send({ action: "main", route: { autoEffort } }),
-    [send],
   );
   const setContextPercent = useCallback(
     (value: string) => send({ action: "main", route: { contextPercent: Number(value) } }),
@@ -1838,17 +1834,6 @@ function TokensSection({ snapshot, disabled, request }: SectionProps) {
     <>
       <SettingsSection title="Mixdog 토큰 절감 기술">
         <View style={settingsStyles.card}>
-          <SettingRow
-            title="자동 추론 조절 (Auto-Effort)"
-            hint="단순 작업엔 낮은 추론, 복잡한 작업엔 높은 추론을 자동 배정"
-          >
-            <Switch
-              accessibilityLabel="토큰절감 자동 추론 조절"
-              disabled={disabled}
-              value={snapshot.route.autoEffort}
-              onValueChange={setAutoEffort}
-            />
-          </SettingRow>
           <SettingRow
             title="메인 컨텍스트 한도 비율"
             hint="모델 최대 컨텍스트 중 사용할 상한 비율을 제한해 과도한 과금 방지"

@@ -489,16 +489,11 @@ describe("native host AI engine settings", () => {
   });
   it("sends token-saving changes from the token section", async () => {
     render(<AiEnginePage serverId="host-one" section="tokens" />);
-    fireEvent.click(await screen.findByRole("checkbox", { name: "토큰절감 자동 추론 조절" }));
-    await waitFor(() =>
-      expect(host.invokePluginRpc).toHaveBeenLastCalledWith(
-        "paseodog-provider",
-        "engine-controls",
-        { action: "main", route: { autoEffort: true } },
-      ),
-    );
-    await screen.findByText("저장했어요. 실시간으로 반영돼요.");
-    fireEvent.click(screen.getByRole("checkbox", { name: "자동 압축" }));
+    const compaction = await screen.findByRole("checkbox", { name: "자동 압축" });
+    expect(screen.queryByText("자동 추론 조절 (Auto-Effort)")).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "토큰절감 자동 추론 조절" })).toBeNull();
+    expect(host.invokePluginRpc.mock.calls.every(([, , input]) => input.action === "read")).toBe(true);
+    fireEvent.click(compaction);
     await waitFor(() =>
       expect(host.invokePluginRpc).toHaveBeenLastCalledWith(
         "paseodog-provider",
