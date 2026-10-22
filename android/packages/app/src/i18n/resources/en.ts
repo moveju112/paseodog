@@ -1852,6 +1852,11 @@ export const en = {
     },
     device: {
       loadingOffer: "Loading pairing offer...",
+      generateLink: "Generate link",
+      passwordLabel: "Relay password (set on first use)",
+      passwordRequired: "Enter the relay password.",
+      passwordSecurity:
+        "Connecting requires both the link and the relay password. Share them separately.",
       failedToLoadOffer: "Failed to load pairing offer.",
       relayDisabled: "Relay is not enabled. Enable relay to pair a device.",
       enableTitle: "Enable relay?",

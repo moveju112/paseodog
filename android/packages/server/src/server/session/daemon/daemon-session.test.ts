@@ -292,6 +292,7 @@ describe("DaemonSession", () => {
     await subsystem.handleGetPairingOfferRequest({
       type: "daemon.get_pairing_offer.request",
       requestId: "p-2",
+      password: "relay-test-password",
     });
 
     expect(emitted).toHaveLength(1);
@@ -330,6 +331,7 @@ describe("DaemonSession", () => {
     await subsystem.handleGetPairingOfferRequest({
       type: "daemon.get_pairing_offer.request",
       requestId: "enabled",
+      password: "relay-test-password",
     });
 
     const pairingResponses = emitted.filter(

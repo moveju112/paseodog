@@ -1836,6 +1836,11 @@ export const ko: TranslationResources = {
     },
     device: {
       loadingOffer: "페어링 정보 불러오는 중...",
+      generateLink: "주소 발급",
+      passwordLabel: "릴레이 비밀번호 (첫 발급 시 설정)",
+      passwordRequired: "릴레이 비밀번호를 입력하세요.",
+      passwordSecurity:
+        "주소와 릴레이 비밀번호가 모두 있어야 연결할 수 있어요. 각각 따로 전달하세요.",
       failedToLoadOffer: "페어링 정보를 불러오지 못했습니다.",
       relayDisabled:
         "릴레이가 활성화되어 있지 않습니다. 기기를 페어링하려면 릴레이를 활성화하세요.",

@@ -220,6 +220,7 @@ export class DaemonSession {
       const pairing = await generateLocalPairingOffer({
         paseoHome: this.paseoHome,
         relayEnabled: relay?.enabled ?? false,
+        password: msg.password,
         relayEndpoint: relay?.endpoint,
         relayPublicEndpoint: relay?.publicEndpoint,
         relayUseTls: relay?.useTls,

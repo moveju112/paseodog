@@ -1807,6 +1807,10 @@ export const zhCN: TranslationResources = {
     },
     device: {
       loadingOffer: "正在加载配对 offer...",
+      generateLink: "生成链接",
+      passwordLabel: "中继密码（首次生成时设置）",
+      passwordRequired: "请输入中继密码。",
+      passwordSecurity: "连接需要同时提供链接和中继密码，请分别分享。",
       failedToLoadOffer: "加载配对 offer 失败。",
       relayDisabled: "Relay 未启用。启用 relay 后才能配对设备。",
       enableTitle: "启用中继？",

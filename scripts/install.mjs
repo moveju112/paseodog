@@ -9,7 +9,7 @@ import { ensureWindowsJobHelper, windowsCompilerPath } from '../plugin/server/wi
 
 // Upstream patches applied then verified at install, in this order.
 const PATCHES = ['mixdog', 'paseo-usage', 'paseo-steer', 'paseo-agent-messages', 'paseo-assistant-phase',
-    'paseo-workspace-name', 'paseo-session-titles', 'paseo-local-stt', 'paseo-composer'];
+    'paseo-workspace-name', 'paseo-session-titles', 'paseo-local-stt', 'paseo-relay-password', 'paseo-composer'];
 
 // 설치 단계 목록 (잠금 파일 의존성 -> 패치 적용·검증 -> 검사 -> 프로필 설정)
 export function installSteps(platform = process.platform) {

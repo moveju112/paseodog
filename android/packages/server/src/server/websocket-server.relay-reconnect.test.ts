@@ -22,6 +22,12 @@ import { APPLICATION_SOCKET_LEASE_MS } from "./websocket/physical-socket.js";
 
 type SocketListener = (...args: unknown[]) => void;
 
+vi.mock("./relay-password.js", () => ({
+  readRelayPasswordHash: vi.fn(
+    () => "$2b$12$OLxyuuP9uLK30Uzc4wQX0O6liuU/Q1t5P2b0Ebf36mULvpVK3DRZW",
+  ),
+}));
+
 const wsModuleMock = vi.hoisted(() => {
   class MockWebSocketServer {
     static instances: MockWebSocketServer[] = [];
@@ -402,6 +408,7 @@ function createHelloMessage(
     clientId,
     clientType: "cli" as const,
     protocolVersion: 1,
+    auth: { kind: "password" as const, password: "correct-password" },
     ...(options?.capabilities ? { capabilities: options.capabilities } : {}),
   };
 }
@@ -531,7 +538,7 @@ describe("relay external socket reconnect behavior", () => {
       await server.close();
     }
   });
-  test("admits a hello password and an old relay hello, but rejects a wrong password", async () => {
+  test("admits a relay password, but rejects legacy and wrong-password relay clients", async () => {
     const server = createServer({
       auth: {
         password: "$2b$12$OLxyuuP9uLK30Uzc4wQX0O6liuU/Q1t5P2b0Ebf36mULvpVK3DRZW",
@@ -552,8 +559,23 @@ describe("relay external socket reconnect behavior", () => {
 
       const legacySocket = new MockSocket();
       await server.attachExternalSocket(legacySocket, { transport: "relay" });
-      legacySocket.emit("message", JSON.stringify(createHelloMessage("relay-legacy")));
-      await vi.waitFor(() => expect(sentServerInfoEnvelopes(legacySocket)).toHaveLength(1));
+      legacySocket.emit(
+        "message",
+        JSON.stringify({
+          ...createHelloMessage("relay-legacy"),
+          auth: undefined,
+          capabilities: { [CLIENT_CAPS.helloRejection]: true },
+        }),
+      );
+      await vi.waitFor(() => expect(legacySocket.readyState).toBe(3));
+      expect(sentServerInfoEnvelopes(legacySocket)).toHaveLength(0);
+      expect(legacySocket.sent).toContain(
+        JSON.stringify({
+          type: "hello.rejected",
+          reason: "password_required",
+          accepts: ["password"],
+        }),
+      );
 
       const wrongSocket = new MockSocket();
       await server.attachExternalSocket(wrongSocket, { transport: "relay" });

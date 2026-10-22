@@ -25,8 +25,9 @@ import { withoutUsageDonut } from '../patches/paseo-usage-donut.mjs';
 import { withoutSidebarStatusShapes } from '../patches/paseo-sidebar-status-shapes.mjs';
 import { withoutWorkRecords } from '../patches/paseo-work-records.mjs';
 import { withoutExternalLinks } from '../patches/paseo-external-links.mjs';
+import { withoutRelayPassword } from '../patches/paseo-relay-password.mjs';
 // 사이드바 쿼터 패치 해제 (도넛 -> 고정 순서, 실제 composer 체인 순서)
-const withoutUsageOrder = (source) => withoutUsageOrderOnly(withoutUsageDonut(withoutSidebarStatusShapes(withoutWorkRecords(withoutExternalLinks(source)))));
+const withoutUsageOrder = (source) => withoutUsageOrderOnly(withoutUsageDonut(withoutSidebarStatusShapes(withoutWorkRecords(withoutExternalLinks(withoutRelayPassword(source))))));
 import { withoutHideReasoning } from '../patches/paseo-hide-reasoning.mjs';
 import { withoutImportCwd } from '../patches/paseo-import-cwd.mjs';
 import { withoutAgentsSettings } from '../patches/paseo-agents-settings.mjs';

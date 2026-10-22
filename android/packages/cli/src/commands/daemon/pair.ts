@@ -1,4 +1,4 @@
-import { confirm, isCancel, log } from "@clack/prompts";
+import { confirm, isCancel, log, password as passwordPrompt } from "@clack/prompts";
 import { Command } from "commander";
 import chalk from "chalk";
 import { generateLocalPairingOffer } from "@getpaseo/server/pairing";
@@ -70,12 +70,14 @@ export function pairCommand(): Command {
 export async function resolveLocalPairingOffer(options: {
   paseoHome: string;
   enableRelay?: boolean;
+  password?: string;
 }): Promise<PairingOffer> {
   const instance = await readDaemonInstance(options.paseoHome);
   if (instance)
     return resolveDaemonPairingOffer(
       { kind: "instance", home: options.paseoHome },
       options.enableRelay,
+      options.password,
     );
   if (options.enableRelay)
     editPersistedConfig(options.paseoHome, "daemon.relay.enabled", { value: true });
@@ -88,6 +90,7 @@ export async function resolveLocalPairingOffer(options: {
   return generateLocalPairingOffer({
     paseoHome: options.paseoHome,
     relayEnabled: config.relayEnabled,
+    password: options.password,
     relayEndpoint: config.relayEndpoint,
     relayPublicEndpoint: config.relayPublicEndpoint,
     relayUseTls: config.relayUseTls,
@@ -100,6 +103,7 @@ export async function resolveLocalPairingOffer(options: {
 async function resolveDaemonPairingOffer(
   target: DaemonTarget,
   enableRelay: boolean | undefined,
+  password: string | undefined,
 ): Promise<PairingOffer> {
   const client = await connectToDaemon({
     target,
@@ -111,9 +115,13 @@ async function resolveDaemonPairingOffer(
     if (serverInfo?.features?.daemonStatusRpc !== true) {
       throw new Error("Update the Paseo daemon before pairing from this command.");
     }
+    if (password !== undefined && serverInfo.features.relayPasswordAuth !== true) {
+      throw new Error("Update the PaseoDog daemon before password-protected relay pairing.");
+    }
 
     let offer = await client.getDaemonPairingOffer({
       timeout: PAIRING_DAEMON_RPC_TIMEOUT_MS,
+      password,
     });
     if (!offer.relayEnabled && enableRelay) {
       if (serverInfo.features.relayConfig !== true) {
@@ -121,7 +129,10 @@ async function resolveDaemonPairingOffer(
       }
       await client.patchDaemonConfig({ relay: { enabled: true } });
       try {
-        offer = await client.getDaemonPairingOffer({ timeout: PAIRING_DAEMON_RPC_TIMEOUT_MS });
+        offer = await client.getDaemonPairingOffer({
+          timeout: PAIRING_DAEMON_RPC_TIMEOUT_MS,
+          password,
+        });
       } catch (error) {
         throw new Error(
           `Relay configuration was saved, but fetching the pairing offer failed: ${String(error)}`,
@@ -158,12 +169,20 @@ export function printDirectConnectionGuidance(): void {
 }
 
 export async function runPairCommand(options: PairOptions): Promise<void> {
+  if (!process.stdin.isTTY) {
+    throw new Error("Relay pairing needs an interactive terminal to read the password.");
+  }
+  const password = await passwordPrompt({ message: "Relay password (set on first use)" });
+  if (isCancel(password)) throw new Error("Relay pairing cancelled");
+  if (!password || Buffer.byteLength(password, "utf8") > 72) {
+    throw new Error("Relay password must contain 1–72 UTF-8 bytes");
+  }
   const output = createProcessOutput();
   const target = options.daemonTarget;
   const resolveOffer = (enableRelay: boolean) =>
     target.kind === "instance"
-      ? resolveLocalPairingOffer({ paseoHome: target.home, enableRelay })
-      : resolveDaemonPairingOffer(target, enableRelay);
+      ? resolveLocalPairingOffer({ paseoHome: target.home, enableRelay, password })
+      : resolveDaemonPairingOffer(target, enableRelay, password);
   const offline = target.kind === "instance" && !(await readDaemonInstance(target.home));
   const pairing = await resolveOffer(options.relay === true);
 

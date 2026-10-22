@@ -66,8 +66,12 @@ Windows는 `node scripts/service.mjs --install`로 로그인 시 자동 시작�
 ```bash
 ~/.local/bin/paseodog daemon config set daemon.relay.enabled true
 ~/.local/bin/paseodog daemon restart
-~/.local/bin/paseodog daemon pair    # QR 코드·링크
+~/.local/bin/paseodog daemon pair    # 릴레이 비밀번호 입력 후 QR 코드·링크 발급
 ```
+
+PC 앱의 **Pair Device**에서도 릴레이 비밀번호를 입력한 뒤 주소를 발급합니다.
+첫 발급에서 설정한 비밀번호는 재발급 때도 동일하게 입력해야 하며, 접속 기기는 주소와 비밀번호가 모두 필요합니다.
+비밀번호는 링크·QR에 포함되지 않습니다. `paseodog password`로 설정하는 로컬 접속 암호와는 별개입니다.
 
 APK는 공개 디버그 키 서명이며 Windows·Linux 설치파일에는 코드서명이 없습니다.
 다운로드 파일의 무결성은 릴리즈의 `SHA256SUMS`로 확인할 수 있습니다.

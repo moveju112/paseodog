@@ -86,6 +86,7 @@ import {
   type DaemonAuthConfig,
 } from "./auth.js";
 import { resolveSessionAdmission } from "./session-admission-auth.js";
+import { readRelayPasswordHash } from "./relay-password.js";
 import {
   WebSocketRuntimeMetricsWindow,
   type WebSocketRuntimeCounters,
@@ -1681,6 +1682,10 @@ export class VoiceAssistantWebSocketServer {
       const resolved = await resolveSessionAdmission({
         credential: message.auth,
         passwordHash: this.passwordHash,
+        relayPasswordHash:
+          pending.identity.transport === "relay"
+            ? readRelayPasswordHash(this.paseoHome)
+            : undefined,
         localCredential: this.credentialSource?.localCredential?.() ?? null,
         transport: pending.identity.transport === "relay" ? "relay" : "direct",
       });
@@ -1827,6 +1832,7 @@ export class VoiceAssistantWebSocketServer {
         ...(this.advertiseDaemonStatusRpc ? { daemonStatusRpc: true } : {}),
         // COMPAT(daemonConfigReload): added in v0.4.0, remove gate after 2027-02-14.
         daemonConfigReload: true,
+        relayPasswordAuth: true,
         // COMPAT(relayConfig): added in v0.2.6, remove gate after 2027-01-31.
         ...(this.advertiseRelayConfig ? { relayConfig: true } : {}),
         // COMPAT(pushTokenRevocation): added in v0.3.2, remove gate after 2027-02-10.

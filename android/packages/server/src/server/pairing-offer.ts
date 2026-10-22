@@ -4,6 +4,7 @@ import { createConnectionOfferV2, encodeOfferToFragmentUrl } from "./connection-
 import { loadOrCreateDaemonKeyPair } from "./daemon-keypair.js";
 import { renderPairingQr } from "./pairing-qr.js";
 import { getOrCreateServerId } from "./server-id.js";
+import { requireRelayPassword } from "./relay-password.js";
 
 export interface LocalPairingOffer {
   relayEnabled: boolean;
@@ -20,6 +21,7 @@ export async function generateLocalPairingOffer(args: {
   relayPublicUseTls?: boolean;
   appBaseUrl?: string;
   includeQr?: boolean;
+  password?: string;
   logger?: Logger;
 }): Promise<LocalPairingOffer> {
   const relayEnabled = args.relayEnabled ?? true;
@@ -32,6 +34,10 @@ export async function generateLocalPairingOffer(args: {
   }
 
   const relayEndpoint = args.relayEndpoint ?? "relay.paseo.sh:443";
+  if (args.password === undefined) {
+    return { relayEnabled: true, url: null, qr: null };
+  }
+  await requireRelayPassword(args.paseoHome, args.password);
   const relayPublicEndpoint = args.relayPublicEndpoint ?? relayEndpoint;
   const relayUseTls = args.relayUseTls ?? relayEndpoint === "relay.paseo.sh:443";
   const relayPublicUseTls = args.relayPublicUseTls ?? relayUseTls;

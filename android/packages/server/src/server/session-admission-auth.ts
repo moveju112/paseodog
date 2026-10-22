@@ -11,18 +11,24 @@ type AdmissionResolution = { admission: SessionAdmission } | { rejection: Admiss
 export async function resolveSessionAdmission(input: {
   credential: WSHelloMessage["auth"];
   passwordHash: string | undefined;
+  relayPasswordHash?: string;
   localCredential: string | null;
   transport: "direct" | "relay";
 }): Promise<AdmissionResolution> {
   const { credential, passwordHash, localCredential, transport } = input;
+  if (transport === "relay") {
+    if (!input.relayPasswordHash || !credential) return { rejection: "password_required" };
+    if (credential.kind !== "password" || Buffer.byteLength(credential.password, "utf8") > 72) {
+      return { rejection: "incorrect_password" };
+    }
+    return (await compare(credential.password, input.relayPasswordHash))
+      ? { admission: { principalId: "owner", permissions: OWNER_PERMISSIONS } }
+      : { rejection: "incorrect_password" };
+  }
   if (!passwordHash) {
     return { admission: { principalId: "owner", permissions: OWNER_PERMISSIONS } };
   }
   if (!credential) {
-    // COMPAT(relayPasswordOptional): added in v0.9.1, remove once release N mobile builds are live on App Store and Play.
-    if (transport === "relay") {
-      return { admission: { principalId: "owner", permissions: OWNER_PERMISSIONS } };
-    }
     return { rejection: "password_required" };
   }
   if (credential.kind === "localCredential") {

@@ -1861,6 +1861,10 @@ export const ptBR: TranslationResources = {
     },
     device: {
       loadingOffer: "Carregando oferta de pareamento...",
+      generateLink: "Gerar link",
+      passwordLabel: "Senha do relay (definida no primeiro uso)",
+      passwordRequired: "Digite a senha do relay.",
+      passwordSecurity: "A conexão exige o link e a senha do relay. Compartilhe-os separadamente.",
       failedToLoadOffer: "Falha ao carregar oferta de pareamento.",
       relayDisabled: "Relay não está ativado. Ative o relay para parear um dispositivo.",
       enableTitle: "Ativar o relay?",

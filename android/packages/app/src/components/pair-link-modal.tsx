@@ -114,7 +114,6 @@ function PairLinkModalContent({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [password, setPassword] = useState("");
-  const [needsPassword, setNeedsPassword] = useState(passwordRequired !== undefined);
   const [passwordResetKey, resetPasswordInput] = useReducer((key: number) => key + 1, 0);
 
   const clearInput = useCallback(() => {
@@ -122,7 +121,6 @@ function PairLinkModalContent({
     targetTracker.current = new PairingTargetTracker();
     inputRef.current?.replaceText("");
     setPassword("");
-    setNeedsPassword(false);
     resetPasswordInput();
   }, []);
 
@@ -157,6 +155,10 @@ function PairLinkModalContent({
         setErrorMessage(t("pairing.link.errors.missingOffer"));
         return;
       }
+      if (!password) {
+        setErrorMessage(t("pairing.device.passwordRequired"));
+        return;
+      }
 
       try {
         setIsSaving(true);
@@ -172,7 +174,6 @@ function PairLinkModalContent({
           error instanceof Error ? error.message : t("pairing.link.errors.unableToPair");
         setErrorMessage(message);
         if (getConnectionAuthFailureReason(error)) {
-          setNeedsPassword(true);
           return;
         }
         if (!isMobile) {
@@ -188,7 +189,6 @@ function PairLinkModalContent({
   const handleChangeOfferUrl = useCallback((next: string) => {
     if (targetTracker.current.changeUrl(next)) {
       setPassword("");
-      setNeedsPassword(false);
       resetPasswordInput();
       setErrorMessage("");
     }
@@ -230,21 +230,19 @@ function PairLinkModalContent({
         {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
       </View>
 
-      {needsPassword ? (
-        <View style={styles.field}>
-          <Text style={styles.label}>
-            {t("pairing.hostPassword.title", { host: parsedHostLabel(offerUrlRef.current) })}
-          </Text>
-          <AdaptiveTextInput
-            testID="pair-link-password-input"
-            resetKey={`pair-link-password-${passwordResetKey}`}
-            accessibilityLabel={t("pairing.hostPassword.label")}
-            onChangeText={setPassword}
-            secureTextEntry
-            style={styles.input}
-          />
-        </View>
-      ) : null}
+      <View style={styles.field}>
+        <Text style={styles.label}>
+          {t("pairing.hostPassword.title", { host: parsedHostLabel(offerUrlRef.current) })}
+        </Text>
+        <AdaptiveTextInput
+          testID="pair-link-password-input"
+          resetKey={`pair-link-password-${passwordResetKey}`}
+          accessibilityLabel={t("pairing.hostPassword.label")}
+          onChangeText={setPassword}
+          secureTextEntry
+          style={styles.input}
+        />
+      </View>
 
       <View style={styles.actions}>
         <Button

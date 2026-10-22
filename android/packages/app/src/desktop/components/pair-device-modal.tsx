@@ -28,7 +28,7 @@ export function PairDeviceModal({ serverId, visible, onClose, testID }: PairDevi
       desktopMaxWidth={480}
       testID={testID}
     >
-      <PairDeviceSection serverId={serverId} onClose={onClose} />
+      {visible ? <PairDeviceSection key={serverId} serverId={serverId} onClose={onClose} /> : null}
     </AdaptiveModalSheet>
   );
 }

@@ -1827,6 +1827,10 @@ export const ar: TranslationResources = {
     },
     device: {
       loadingOffer: "جارٍ تحميل عرض الإقران...",
+      generateLink: "إنشاء رابط",
+      passwordLabel: "كلمة مرور الترحيل (تُضبط عند أول استخدام)",
+      passwordRequired: "أدخل كلمة مرور الترحيل.",
+      passwordSecurity: "يتطلب الاتصال الرابط وكلمة مرور الترحيل معًا. شاركهما بشكل منفصل.",
       failedToLoadOffer: "فشل تحميل عرض الاقتران.",
       relayDisabled: "لم يتم تمكين التتابع. تمكين التتابع لإقران جهاز.",
       enableTitle: "تمكين التتابع؟",

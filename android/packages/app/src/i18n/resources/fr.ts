@@ -1872,6 +1872,11 @@ export const fr: TranslationResources = {
     },
     device: {
       loadingOffer: "Chargement de l’offre d’association…",
+      generateLink: "Créer un lien",
+      passwordLabel: "Mot de passe du relais (défini à la première utilisation)",
+      passwordRequired: "Saisissez le mot de passe du relais.",
+      passwordSecurity:
+        "La connexion nécessite le lien et le mot de passe du relais. Partagez-les séparément.",
       failedToLoadOffer: "Impossible de charger l’offre d’association.",
       relayDisabled: "Le relais n’est pas activé. Activez-le pour associer un appareil.",
       enableTitle: "Activer le relais ?",

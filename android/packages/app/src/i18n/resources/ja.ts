@@ -1845,6 +1845,11 @@ export const ja: TranslationResources = {
     },
     device: {
       loadingOffer: "ペアリングオファーを読み込み中...",
+      generateLink: "リンクを発行",
+      passwordLabel: "リレーパスワード（初回発行時に設定）",
+      passwordRequired: "リレーパスワードを入力してください。",
+      passwordSecurity:
+        "接続にはリンクとリレーパスワードの両方が必要です。別々に共有してください。",
       failedToLoadOffer: "ペアリングオファーの読み込みに失敗しました。",
       relayDisabled:
         "リレーが有効になっていません。デバイスをペアリングするにはリレーを有効にしてください。",

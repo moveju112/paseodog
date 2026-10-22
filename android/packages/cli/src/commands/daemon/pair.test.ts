@@ -14,7 +14,11 @@ test("offline pairing requires relay consent and saves it in the selected home",
       url: null,
     });
     expect(existsSync(home)).toBe(false);
-    const offer = await resolveLocalPairingOffer({ paseoHome: home, enableRelay: true });
+    const offer = await resolveLocalPairingOffer({
+      paseoHome: home,
+      enableRelay: true,
+      password: "relay-test-password",
+    });
     expect(offer.relayEnabled).toBe(true);
     expect(offer.url).toContain("offer=");
     expect(

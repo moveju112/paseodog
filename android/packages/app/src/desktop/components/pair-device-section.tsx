@@ -46,9 +46,12 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
     runtimeSnapshot?.connectionStatus === "error";
   const { patchConfig } = useDaemonConfig(serverId);
   const [copied, setCopied] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordResetKey, setPasswordResetKey] = useState(0);
   const serverFeatures = client?.getLastServerInfoMessage()?.features;
   const supportsPairingRpc = serverFeatures?.daemonStatusRpc === true;
   const canConfigureRelay = supportsPairingRpc && serverFeatures?.relayConfig === true;
+  const supportsRelayPassword = serverFeatures?.relayPasswordAuth === true;
 
   const pairingQuery = useFetchQuery({
     queryKey: daemonPairingOfferQueryKey(serverId),
@@ -63,6 +66,7 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
   });
 
   const enableRelay = useMutation({
+    retry: false,
     mutationFn: async () => {
       if (client?.getLastServerInfoMessage()?.features?.relayConfig !== true) {
         throw new Error(t("pairing.device.updateRequired"));
@@ -73,26 +77,40 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
     },
   });
 
+  const issueOffer = useMutation({
+    retry: false,
+    mutationFn: async () => {
+      if (!client || !supportsRelayPassword) throw new Error(t("pairing.device.updateRequired"));
+      if (!password) throw new Error(t("pairing.device.passwordRequired"));
+      return client.getDaemonPairingOffer({ password });
+    },
+    onSuccess: () => {
+      setPassword("");
+      setPasswordResetKey((key) => key + 1);
+    },
+  });
+  const offer = issueOffer.data ?? pairingQuery.data;
+
   const qrQuery = useFetchQuery({
-    queryKey: ["daemon-pairing-offer-qr", pairingQuery.data?.url],
+    queryKey: ["daemon-pairing-offer-qr", offer?.url],
     queryFn: () =>
-      QRCode.toString(pairingQuery.data?.url ?? "", {
+      QRCode.toString(offer?.url ?? "", {
         type: "svg",
         errorCorrectionLevel: "M",
         margin: 1,
         width: 480,
       }),
-    enabled: Boolean(pairingQuery.data?.url),
+    enabled: Boolean(offer?.url),
     dataShape: "value",
     staleTimeMs: 5 * 60 * 1000,
   });
 
   const handleCopyLink = useCallback(async () => {
-    if (!pairingQuery.data?.url) return;
-    await Clipboard.setStringAsync(pairingQuery.data.url);
+    if (!offer?.url) return;
+    await Clipboard.setStringAsync(offer.url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [pairingQuery.data?.url]);
+  }, [offer?.url]);
   const handleCopyPress = useCallback(() => {
     void handleCopyLink();
   }, [handleCopyLink]);
@@ -102,16 +120,30 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
   const handleEnableRelay = useCallback(() => {
     enableRelay.mutate();
   }, [enableRelay]);
+  const handleGenerate = useCallback(() => {
+    issueOffer.mutate();
+  }, [issueOffer]);
 
   const qrSvg = useMemo(() => qrQuery.data ?? null, [qrQuery.data]);
 
   return (
     <View testID="pair-device-content">
+      <RelayPasswordForm
+        offer={offer}
+        connected={isConnected}
+        supported={supportsRelayPassword}
+        password={password}
+        resetKey={passwordResetKey}
+        pending={issueOffer.isPending}
+        error={issueOffer.error}
+        onPasswordChange={setPassword}
+        onGenerate={handleGenerate}
+      />
       <PairDeviceBody
         isPending={supportsPairingRpc && pairingQuery.isPending}
         isDisconnected={isDisconnected}
         error={pairingQuery.error}
-        offer={pairingQuery.data}
+        offer={offer}
         canConfigureRelay={canConfigureRelay}
         enablePending={enableRelay.isPending}
         enableError={enableRelay.error}
@@ -123,6 +155,52 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
         onClose={onClose}
         onCopy={handleCopyPress}
       />
+    </View>
+  );
+}
+
+interface RelayPasswordFormProps {
+  offer: { relayEnabled: boolean; url: string } | undefined;
+  connected: boolean;
+  supported: boolean;
+  password: string;
+  resetKey: number;
+  pending: boolean;
+  error: Error | null;
+  onPasswordChange: (password: string) => void;
+  onGenerate: () => void;
+}
+
+// 주소가 없는 릴레이에서만 암호 입력·발급·검증 오류를 표시한다.
+function RelayPasswordForm(props: RelayPasswordFormProps) {
+  const { t } = useTranslation();
+  if (!props.offer?.relayEnabled || props.offer.url || !props.connected) return null;
+  return (
+    <View style={styles.consent}>
+      <Text style={styles.consentTitle}>{t("pairing.device.passwordLabel")}</Text>
+      <TextInput
+        key={`relay-password-${props.resetKey}`}
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        accessibilityLabel={t("pairing.device.passwordLabel")}
+        testID="pair-device-password"
+        style={styles.linkInput}
+        onChangeText={props.onPasswordChange}
+        readOnly={props.pending}
+      />
+      <Button
+        onPress={props.onGenerate}
+        loading={props.pending}
+        disabled={!props.password || !props.supported || props.pending}
+        testID="pair-device-generate"
+      >
+        {t("pairing.device.generateLink")}
+      </Button>
+      {!props.supported ? (
+        <Alert size="sm" variant="warning" description={t("pairing.device.updateRequired")} />
+      ) : null}
+      {props.error ? <Alert size="sm" variant="error" description={props.error.message} /> : null}
     </View>
   );
 }
@@ -161,7 +239,7 @@ function PairDeviceBody(props: PairDeviceBodyProps) {
     return <RelayConsent {...props} />;
   }
   if (!props.offer.url) {
-    return <Text style={styles.stateLine}>{t("pairing.device.unavailable")}</Text>;
+    return null;
   }
   return <PairingOffer {...props} offer={props.offer} />;
 }
@@ -264,7 +342,7 @@ function PairingOffer(props: PairDeviceBodyProps & { offer: { url: string } }) {
           {props.copied ? t("pairing.device.copied") : t("pairing.device.copy")}
         </Button>
       </View>
-      <Alert size="sm" variant="warning" description={t("pairing.device.securityWarning")} />
+      <Alert size="sm" variant="warning" description={t("pairing.device.passwordSecurity")} />
     </View>
   );
 }

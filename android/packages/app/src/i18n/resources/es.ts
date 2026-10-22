@@ -1876,6 +1876,11 @@ export const es: TranslationResources = {
     },
     device: {
       loadingOffer: "Cargando oferta de maridaje...",
+      generateLink: "Generar enlace",
+      passwordLabel: "Contraseña del relé (se establece en el primer uso)",
+      passwordRequired: "Introduce la contraseña del relé.",
+      passwordSecurity:
+        "La conexión requiere el enlace y la contraseña del relé. Compártelos por separado.",
       failedToLoadOffer: "No se pudo cargar la oferta de emparejamiento.",
       relayDisabled: "El relé no está habilitado. Habilite el relé para emparejar un dispositivo.",
       enableTitle: "¿Habilitar el relé?",

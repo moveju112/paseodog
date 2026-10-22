@@ -748,6 +748,7 @@ export interface DaemonStatusOptions {
 export interface DaemonPairingOfferOptions {
   requestId?: string;
   timeout?: number;
+  password?: string;
 }
 type DaemonUpdateResponse = z.infer<typeof DaemonUpdateResponseSchema>;
 type FetchAgentsPayload = Extract<
@@ -5164,6 +5165,7 @@ export class DaemonClient {
       requestId: options?.requestId,
       message: {
         type: "daemon.get_pairing_offer.request",
+        ...(options?.password !== undefined ? { password: options.password } : {}),
       },
       responseType: "daemon.get_pairing_offer.response",
       timeout: options?.timeout,
