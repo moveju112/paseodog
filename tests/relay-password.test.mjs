@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, statSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, statSync, mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -58,6 +58,9 @@ test('relay issuance stores only a private hash, confirms reissue, and never emb
     assert.deepEqual(await module.generateLocalPairingOffer(args), { relayEnabled: true, url: null, qr: null });
     await assert.rejects(module.generateLocalPairingOffer({ ...args, password: '' }), /1–72/);
     await assert.rejects(module.generateLocalPairingOffer({ ...args, password: '가'.repeat(25) }), /1–72/);
+    // 바이트가 아닌 글자 수로 새 암호 길이를 판단한다(4글자·12바이트 거부).
+    await assert.rejects(module.generateLocalPairingOffer({ ...args, password: '짧은암호' }), /at least 8 characters/);
+    assert.equal(existsSync(join(home, 'relay-password')), false);
     const password = '별도 relay password';
     const offer = await module.generateLocalPairingOffer({ ...args, password });
     const hash = readFileSync(join(home, 'relay-password'), 'utf8');
@@ -93,6 +96,37 @@ test('relay admission fails closed without configuration, requires the exact pas
         ...base, relayPasswordHash, credential: { kind: 'password', password: 'relay-secret' },
     })).admission.principalId, 'owner');
     assert.equal((await module.resolveSessionAdmission({ ...base, transport: 'direct', credential: undefined })).admission.principalId, 'owner');
+});
+
+test('existing short relay passwords still verify while new short passwords are refused', async (t) => {
+    const home = privateHome(t);
+    const { module: helper } = await loadSource(relayPasswordModule(), new URL('relay-password.js', serverRoot));
+    await assert.rejects(helper.requireRelayPassword(home, 'short'), /at least 8 characters/);
+    const { hashSync } = await import(new URL('../tools/node_modules/bcryptjs/index.js', import.meta.url).href);
+    writeFileSync(join(home, 'relay-password'), `${hashSync('short', 12)}\n`, { mode: 0o600 });
+    await helper.requireRelayPassword(home, 'short');
+    await assert.rejects(helper.requireRelayPassword(home, 'shorter'), /Incorrect relay password/);
+});
+
+test('relay admission throttles failed and in-flight guesses without counting successful logins', async (t) => {
+    const home = privateHome(t);
+    const { module: helper } = await loadSource(relayPasswordModule(), new URL('relay-password.js', serverRoot));
+    await helper.requireRelayPassword(home, 'relay-secret');
+    const spec = RELAY_PASSWORD_PATCHES.find((spec) => spec.file.endsWith('/session-admission-auth.js'));
+    // 다른 테스트와 모듈 상태(시도 기록)를 공유하지 않도록 별도 URL로 불러온다.
+    const { module } = await loadSource(patchedRelayPasswordSource(installed(spec), spec) + '\n// throttle test\n',
+        new URL('session-admission-auth.js', serverRoot));
+    const input = { transport: 'relay', passwordHash: undefined, localCredential: null,
+        relayPasswordHash: helper.readRelayPasswordHash(home) };
+    const login = (password) => module.resolveSessionAdmission({ ...input, credential: { kind: 'password', password } });
+    for (let index = 0; index < 11; index++) assert.ok('admission' in await login('relay-secret'));
+    const guesses = await Promise.all(Array.from({ length: 11 }, () => login('wrong')));
+    assert.ok(guesses.every((result) => result.rejection === 'incorrect_password'));
+    assert.deepEqual(await login('relay-secret'), { rejection: 'incorrect_password' });
+    const realNow = Date.now;
+    Date.now = () => realNow() + 10 * 60_000;
+    try { assert.ok('admission' in await login('relay-secret')); }
+    finally { Date.now = realNow; }
 });
 
 test('web issuance and address/password entry remain hash gated and reversible', () => {

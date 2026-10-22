@@ -25,6 +25,10 @@ export async function requireRelayPassword(home: string, password: string): Prom
   }
   let hash = readRelayPasswordHash(home);
   if (!hash) {
+    // 새 암호만 온라인 대입을 버티도록 8자 이상을 요구하고 기존 암호 확인은 그대로 둔다.
+    if (Array.from(password).length < 8) {
+      throw new Error("New relay password must contain at least 8 characters");
+    }
     ensurePrivateDirectory(home);
     const created = hashDaemonPassword(password);
     try {

@@ -8,8 +8,10 @@ import { gitBlob } from './patch-mixdog.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const sourceRoot = resolve(root, 'android/packages');
 export const RELAY_PASSWORD_PATCHES = [
+    // previous: 이전에 배포한 PaseoDog 결과물 blob. 검토된 업그레이드 경로로만 허용한다.
     { package: 'server', file: 'dist/server/server/session-admission-auth.js',
-        blob: '95030cbe6f06c782953a68d5db06c53d8ca3b5c5', source: 'server/src/server/session-admission-auth.ts' },
+        blob: '95030cbe6f06c782953a68d5db06c53d8ca3b5c5', source: 'server/src/server/session-admission-auth.ts',
+        previous: ['ad35d4a821a7862b783f8c253ec3288dc39aa2d7'] },
     { package: 'server', file: 'dist/server/server/pairing-offer.js',
         blob: '3c6d163a523a6b0403980557c7b5456e3f83427a', source: 'server/src/server/pairing-offer.ts' },
     { package: 'cli', file: 'dist/commands/daemon/pair.js',
@@ -54,7 +56,8 @@ export function relayPasswordModule() {
 export function patchedRelayPasswordSource(source, spec) {
     if (spec.source) {
         const result = stripTypeScriptTypes(readFileSync(resolve(sourceRoot, spec.source), 'utf8'));
-        if (source !== result && gitBlob(source) !== spec.blob) throw new Error(`Paseo relay password hash mismatch: ${spec.file}`);
+        if (source !== result && gitBlob(source) !== spec.blob && !spec.previous?.includes(gitBlob(source)))
+            throw new Error(`Paseo relay password hash mismatch: ${spec.file}`);
         return result;
     }
     let original = source;
@@ -81,7 +84,9 @@ export function patchPaseoRelayPassword(base = resolve(root, 'tools/node_modules
     const helperPath = resolve(base, 'server/dist/server/server/relay-password.js');
     const before = existsSync(helperPath) ? readFileSync(helperPath, 'utf8') : undefined;
     const after = relayPasswordModule();
-    if (before !== undefined && before !== after) throw new Error('Paseo relay password helper drift');
+    // 이전 PaseoDog 헬퍼 결과물만 교체를 허용하고 그 밖의 변경은 거부한다.
+    if (before !== undefined && before !== after && !['9021b6d4d426481e6ca13efdd0dc56721079299e'].includes(gitBlob(before)))
+        throw new Error('Paseo relay password helper drift');
     changes.push({ path: helperPath, before, after });
     if (check && changes.some((file) => file.before !== file.after)) throw new Error('Paseo relay password patch is missing');
     for (const file of changes) if (!check && file.before !== file.after) writeFileSync(file.path, file.after);
