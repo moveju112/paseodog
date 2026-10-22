@@ -2324,6 +2324,8 @@ export const ru: TranslationResources = {
           ghostty: "Ghostty",
           pureBlack: "Абсолютно чёрная",
           white2: "White2",
+          neutralPearl: "Neutral Pearl",
+          softLinen: "Soft Linen",
           auto: "Системная",
         },
       },

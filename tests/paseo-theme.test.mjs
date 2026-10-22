@@ -8,6 +8,7 @@ import { brotliCompressSync, gzipSync, constants as zlibConstants } from 'node:z
 import { gitBlob } from '../scripts/patch-mixdog.mjs';
 import { COMPOSER_FILE, patchedComposerSource, patchPaseoComposer, withoutWorktreeSetupTip } from '../scripts/patch-paseo-composer.mjs';
 import { WHITE2_LABELS, WHITE2_OPTION, withoutWhite2Theme, withWhite2Theme } from '../scripts/patch-paseo-theme.mjs';
+import { SOFT_LIGHT_EDITS, SOFT_LIGHT_SURFACE_EDITS, withoutSoftLightThemes } from '../patches/paseo-soft-light-themes.mjs';
 import { withoutCollaboration } from '../patches/paseo-collaboration.mjs';
 import { withoutAutoEffort } from '../patches/paseo-auto-effort.mjs';
 import { withoutAgentProgress } from '../patches/paseo-agent-progress.mjs';
@@ -69,6 +70,22 @@ function composerPresentation(source, theme) {
     };
 }
 
+// 실제 번들의 말풍선·입력창 스타일 식을 실행해 테마별 색상과 기존 폴백을 확인한다.
+function chatSurfacePresentation(source, theme) {
+    const bubble = source.match(/bubble:\{backgroundColor:([^,]+),borderRadius:16/);
+    const composer = source.match(/backgroundColor:([^,]+),borderWidth:e\.borderWidth\[1\],borderColor:([^,]+),borderRadius:16,paddingTop/);
+    return [bubble[1], composer[1], composer[2]].map((expression) => new Function('e', `return ${expression}`)(theme));
+}
+
+// sRGB 전경·배경을 선형 휘도로 바꿔 작은 글자의 WCAG 대비를 확인한다.
+function contrastRatio(foreground, background) {
+    const values = [foreground, background].map((hex) => hex.slice(1).match(/../g)
+        .map((channel) => parseInt(channel, 16) / 255)
+        .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+        .reduce((total, value, index) => total + value * [0.2126, 0.7152, 0.0722][index], 0));
+    return (Math.max(...values) + 0.05) / (Math.min(...values) + 0.05);
+}
+
 // 실제 설치된 zod와 번들 테마·저장 키 모듈로 앱 설정을 저장 -> 저장소 원문 -> 재로딩한 theme 값을 반환
 async function persistTheme(source, theme) {
     const keys = evaluateModule(source, 3214, []);
@@ -93,7 +110,7 @@ test('White2 improves secondary contrast without changing existing themes or lig
     assert.equal(patched.split(lightPalette).length, 2);
     const before = themeModule(original), after = themeModule(patched);
     assert.deepEqual(after.THEME_OPTIONS.map((option) => option.name),
-        [...before.THEME_OPTIONS.map((option) => option.name), 'white2']);
+        [...before.THEME_OPTIONS.map((option) => option.name), 'white2', 'neutralPearl', 'softLinen']);
     for (const [name, theme] of Object.entries(before.REGISTERED_THEMES)) {
         assert.deepEqual(after.REGISTERED_THEMES[name], theme);
     }
@@ -110,7 +127,9 @@ test('White2 improves secondary contrast without changing existing themes or lig
     assert.equal(after.THEME_TO_UNISTYLES.light, 'light');
     assert.equal(after.THEME_SWATCHES.white2, '#ffffff');
     assert.equal(after.getNextThemePreference('pureBlack'), 'white2');
-    assert.equal(after.getNextThemePreference('white2'), 'light');
+    assert.equal(after.getNextThemePreference('white2'), 'neutralPearl');
+    assert.equal(after.getNextThemePreference('neutralPearl'), 'softLinen');
+    assert.equal(after.getNextThemePreference('softLinen'), 'light');
 });
 
 test('White2 fixes faint composer text while every existing theme keeps its original presentation', () => {
@@ -131,10 +150,41 @@ test('White2 persists through the native settings schema and has localized label
     assert.deepEqual(await persistTheme(patched, 'light'), ['light', 'light']);
     assert.deepEqual(await persistTheme(patched, 'white3'), ['white3', 'auto']);
     assert.equal(patched.split(WHITE2_OPTION).length, 2);
-    const labels = [...patched.matchAll(/pureBlack:"[^"]*",white2:("[^"]*"),auto:"/g)].map((match) => JSON.parse(match[1]));
+    const labels = [...patched.matchAll(/pureBlack:"[^"]*",white2:("[^"]*"),neutralPearl:"[^"]*",softLinen:"[^"]*",auto:"/g)].map((match) => JSON.parse(match[1]));
     assert.equal(labels.length, WHITE2_LABELS.length);
     assert.equal(labels.filter((label) => label === '화이트2').length, 1);
-    assert.equal(patched.includes('pureBlack:"\\uc21c\\uc218 \\uac80\\uc815",white2:"\\ud654\\uc774\\ud2b82",auto:"'), true);
+    assert.equal(patched.includes('white2:"\\ud654\\uc774\\ud2b82",neutralPearl:"\\ub274\\ud2b8\\ub7f4 \\ud384",softLinen:"\\uc18c\\ud504\\ud2b8 \\ub9b0\\ub128",auto:"'), true);
+});
+
+test('soft light themes persist, reproduce approved palettes and preserve existing chat surfaces', async () => {
+    const previous = withoutSoftLightThemes(withoutSoftLightThemes(installed, SOFT_LIGHT_SURFACE_EDITS));
+    const before = themeModule(previous), after = themeModule(patched);
+    for (const [name, theme] of Object.entries(before.REGISTERED_THEMES)) {
+        assert.deepEqual(chatSurfacePresentation(patched, after.REGISTERED_THEMES[name]), chatSurfacePresentation(previous, theme));
+    }
+    for (const [name, registered, background, foreground, bubble, composer, border, accent] of [
+        ['neutralPearl', 'lightNeutralPearl', '#F3F4F4', '#343A3B', '#E3EAE8', '#F7F8F7', '#A6B2AF', '#42675F'],
+        ['softLinen', 'lightSoftLinen', '#F4F1EC', '#3B3732', '#E7E1D7', '#F8F5F0', '#B4A797', '#756049'],
+    ]) {
+        const theme = after.REGISTERED_THEMES[registered], colors = theme.colors;
+        assert.deepEqual(await persistTheme(patched, name), [name, name]);
+        assert.equal(after.THEME_TO_UNISTYLES[name], registered);
+        assert.equal(after.THEME_SWATCHES[name], background);
+        assert.deepEqual([colors.surface0, colors.foreground, colors.accent, colors.tabSelectedForeground], [background, foreground, accent, accent]);
+        assert.deepEqual(chatSurfacePresentation(patched, theme), [bubble, composer, border]);
+        assert.equal(composerPresentation(patched, theme).placeholderTextColor, colors.foregroundMuted);
+        assert.equal(composerPresentation(patched, theme).opacity, 1);
+        assert.equal(colors.terminal.background, background);
+        assert.equal(colors.conversationBackground, background);
+        for (const [text, surface] of [
+            [foreground, background], [foreground, bubble], [colors.foregroundMuted, colors.surface2],
+            [colors.foregroundMuted, composer], [accent, '#FFFFFF'],
+        ]) assert.ok(contrastRatio(text, surface) >= 4.5, `${name}: ${text}/${surface}`);
+    }
+    for (const [, afterEdit] of [...SOFT_LIGHT_EDITS, ...SOFT_LIGHT_SURFACE_EDITS]) {
+        assert.throws(() => patchedComposerSource(patched.replace(afterEdit, '')), /Partial Paseo/);
+    }
+    assert.equal(patchedComposerSource(withoutSoftLightThemes(patched)), patched);
 });
 
 test('White2 keeps the strict upstream gate and is idempotent', () => {
@@ -145,7 +195,7 @@ test('White2 keeps the strict upstream gate and is idempotent', () => {
     assert.throws(() => withWhite2Theme(patched), /anchor mismatch/);
     assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
     const partial = patched.replace(WHITE2_OPTION, '').replace('},],ee="plugin"', '}],ee="plugin"');
-    assert.throws(() => patchedComposerSource(partial), /Partial Paseo White2/);
+    assert.throws(() => patchedComposerSource(partial), /Partial Paseo (White2|soft light)/);
 });
 
 test('the original White2 bundle upgrades without weakening the reviewed upstream gate', () => {

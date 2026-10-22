@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { darkHighlightColors, lightHighlightColors } from "@getpaseo/highlight";
+import { softLightPalettes } from "./soft-light-palettes";
 
 export const baseColors = {
   // Base colors
@@ -766,7 +767,15 @@ const lightShadow = {
   },
 } as const;
 
-export function buildLightTheme(semanticColors: ReturnType<typeof buildLightSemanticColors>) {
+export function buildLightTheme(
+  semanticColors: Omit<ReturnType<typeof buildLightSemanticColors>, "tabSelectedForeground"> & {
+    tabSelectedForeground: string;
+    conversationBackground?: string;
+    userMessageBackground?: string;
+    composerBackground?: string;
+    composerBorder?: string;
+  },
+) {
   return {
     colorScheme: "light" as const,
     colors: {
@@ -795,6 +804,16 @@ export const lightWhite2Theme = buildLightTheme({
 
 // Keep compatibility with existing code
 export const theme = darkTheme;
+
+export const lightNeutralPearlTheme = buildLightTheme({
+  ...buildLightSemanticColors(softLightPalettes.neutralPearl.config),
+  ...softLightPalettes.neutralPearl.overrides,
+});
+
+export const lightSoftLinenTheme = buildLightTheme({
+  ...buildLightSemanticColors(softLightPalettes.softLinen.config),
+  ...softLightPalettes.softLinen.overrides,
+});
 
 export const THEME_OPTIONS = [
   {
@@ -853,6 +872,20 @@ export const THEME_OPTIONS = [
     unistylesName: "lightWhite2",
     theme: lightWhite2Theme,
     swatch: "#ffffff",
+  },
+  {
+    name: "neutralPearl",
+    group: "variant",
+    unistylesName: "lightNeutralPearl",
+    theme: lightNeutralPearlTheme,
+    swatch: "#F3F4F4",
+  },
+  {
+    name: "softLinen",
+    group: "variant",
+    unistylesName: "lightSoftLinen",
+    theme: lightSoftLinenTheme,
+    swatch: "#F4F1EC",
   },
 ] as const;
 

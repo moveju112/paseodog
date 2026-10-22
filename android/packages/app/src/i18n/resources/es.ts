@@ -2338,6 +2338,8 @@ export const es: TranslationResources = {
           ghostty: "fantasmal",
           pureBlack: "Negro puro",
           white2: "White2",
+          neutralPearl: "Neutral Pearl",
+          softLinen: "Soft Linen",
           auto: "Sistema",
         },
       },

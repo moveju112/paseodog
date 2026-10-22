@@ -1917,9 +1917,13 @@ const styles = StyleSheet.create((theme: Theme) => ({
     flexShrink: 1,
     flexDirection: "column",
     gap: theme.spacing[3],
-    backgroundColor: theme.colorScheme === "light" ? "#ffffff" : theme.colors.surface1,
+    backgroundColor:
+      ("composerBackground" in theme.colors ? theme.colors.composerBackground : undefined) ??
+      (theme.colorScheme === "light" ? "#ffffff" : theme.colors.surface1),
     borderWidth: theme.borderWidth[1],
-    borderColor: theme.colorScheme === "light" ? "#dce3dd" : theme.colors.borderAccent,
+    borderColor:
+      ("composerBorder" in theme.colors ? theme.colors.composerBorder : undefined) ??
+      (theme.colorScheme === "light" ? "#dce3dd" : theme.colors.borderAccent),
     borderRadius: 16,
     paddingTop: {
       xs: theme.spacing[2],

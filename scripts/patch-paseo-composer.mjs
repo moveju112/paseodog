@@ -55,6 +55,7 @@ export function patchedComposerSource(source) {
     source = withoutSettingsCorrections(source);
     source = withoutOfferLink(source);
     const withoutSetupTip = withoutWorktreeSetupTip(withoutImportCwd(withoutAgentsSettings(withoutSidebarStatusShapes(withoutWorkRecords(withoutExternalLinks(withoutRelayPassword(withoutConversationFocus(withoutCompactionBuffer(source)))))))));
+    // 테마 체인은 뉴트럴 펄·소프트 린넨 -> White2 순서로 해제하고 아래에서 역순으로 적용한다.
     const base = withoutHideReasoning(withoutUsageOrder(withoutUsageDonut(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutSetupTip))))))))));
     let original = base;
     for (const [before, after] of [...edits].reverse()) original = original.replace(after, before);

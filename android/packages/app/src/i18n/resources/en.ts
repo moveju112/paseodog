@@ -2441,6 +2441,8 @@ export const en = {
           ghostty: "Ghostty",
           pureBlack: "Pure black",
           white2: "White2",
+          neutralPearl: "Neutral Pearl",
+          softLinen: "Soft Linen",
           auto: "System",
         },
       },

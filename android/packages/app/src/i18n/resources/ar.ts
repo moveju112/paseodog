@@ -2284,6 +2284,8 @@ export const ar: TranslationResources = {
           ghostty: "شبحي",
           pureBlack: "أسود خالص",
           white2: "White2",
+          neutralPearl: "Neutral Pearl",
+          softLinen: "Soft Linen",
           auto: "نظام",
         },
       },

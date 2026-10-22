@@ -2335,6 +2335,8 @@ export const fr: TranslationResources = {
           ghostty: "Ghostty",
           pureBlack: "Noir pur",
           white2: "White2",
+          neutralPearl: "Neutral Pearl",
+          softLinen: "Soft Linen",
           auto: "Système",
         },
       },

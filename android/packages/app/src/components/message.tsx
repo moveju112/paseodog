@@ -349,7 +349,9 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
     marginBottom: theme.spacing[4],
   },
   bubble: {
-    backgroundColor: theme.colorScheme === "light" ? "#eaf0eb" : theme.colors.surface3,
+    backgroundColor:
+      ("userMessageBackground" in theme.colors ? theme.colors.userMessageBackground : undefined) ??
+      (theme.colorScheme === "light" ? "#eaf0eb" : theme.colors.surface3),
     borderRadius: 16,
     borderBottomRightRadius: 4,
     paddingHorizontal: theme.spacing[4],

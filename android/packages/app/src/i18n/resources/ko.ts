@@ -2328,6 +2328,8 @@ export const ko: TranslationResources = {
           ghostty: "Ghostty",
           pureBlack: "순수 검정",
           white2: "화이트2",
+          neutralPearl: "뉴트럴 펄",
+          softLinen: "소프트 린넨",
           auto: "시스템",
         },
       },

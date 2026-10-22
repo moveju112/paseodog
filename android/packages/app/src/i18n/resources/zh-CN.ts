@@ -2256,6 +2256,8 @@ export const zhCN: TranslationResources = {
           ghostty: "Ghostty",
           pureBlack: "纯黑",
           white2: "White2",
+          neutralPearl: "Neutral Pearl",
+          softLinen: "Soft Linen",
           auto: "系统",
         },
       },

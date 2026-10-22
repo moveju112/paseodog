@@ -6,6 +6,8 @@ import {
   getNextThemePreference,
   lightTheme,
   lightWhite2Theme,
+  lightNeutralPearlTheme,
+  lightSoftLinenTheme,
   REGISTERED_THEMES,
   THEME_OPTIONS,
   THEME_SWATCHES,
@@ -40,10 +42,14 @@ describe("Theme catalog", () => {
       "ghostty",
       "pureBlack",
       "white2",
+      "neutralPearl",
+      "softLinen",
     ]);
     expect(getNextThemePreference("dark")).toBe("auto");
     expect(getNextThemePreference("pureBlack")).toBe("white2");
-    expect(getNextThemePreference("white2")).toBe("light");
+    expect(getNextThemePreference("white2")).toBe("neutralPearl");
+    expect(getNextThemePreference("neutralPearl")).toBe("softLinen");
+    expect(getNextThemePreference("softLinen")).toBe("light");
   });
 });
 
@@ -76,11 +82,65 @@ describe("White2 theme", () => {
 
   it("preserves the composer contrast defaults for every other theme", () => {
     for (const option of THEME_OPTIONS) {
-      if (option.name === "auto" || option.name === "white2") continue;
+      if (
+        option.name === "auto" ||
+        option.name === "white2" ||
+        option.name === "neutralPearl" ||
+        option.name === "softLinen"
+      )
+        continue;
       expect(option.theme.colors.composerPlaceholder).toBe(option.theme.colors.surface4);
       expect(option.theme.colors.composerFocusHintOpacity).toBe(0.5);
     }
   });
+});
+
+describe("Soft light themes", () => {
+  it.each([
+    [
+      "neutralPearl",
+      "lightNeutralPearl",
+      lightNeutralPearlTheme,
+      "#F3F4F4",
+      "#343A3B",
+      "#E3EAE8",
+      "#F7F8F7",
+      "#42675F",
+    ],
+    [
+      "softLinen",
+      "lightSoftLinen",
+      lightSoftLinenTheme,
+      "#F4F1EC",
+      "#3B3732",
+      "#E7E1D7",
+      "#F8F5F0",
+      "#756049",
+    ],
+  ] as const)(
+    "registers %s with its approved background, bubble and composer",
+    (name, registered, value, background, foreground, bubble, composer, accent) => {
+      expect(THEME_TO_UNISTYLES[name]).toBe(registered);
+      expect(REGISTERED_THEMES[registered]).toBe(value);
+      expect(THEME_SWATCHES[name]).toBe(background);
+      expect(value.colorScheme).toBe("light");
+      expect(value.colors).toMatchObject({
+        surface0: background,
+        background,
+        conversationBackground: background,
+        foreground,
+        userMessageBackground: bubble,
+        composerBackground: composer,
+        accent,
+        tabSelectedForeground: accent,
+        composerFocusHintOpacity: 1,
+        terminal: { background, foreground },
+      });
+      expect(value.colors.composerPlaceholder).toBe(value.colors.foregroundMuted);
+      expect(value.colors.composerBorder).toBe(value.colors.borderAccent);
+      expect(value.colors.primaryForeground).toBe("#FFFFFF");
+    },
+  );
 });
 
 describe("Pure black theme", () => {
