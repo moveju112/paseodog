@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -17,12 +18,22 @@ const port = listener.address().port;
 await new Promise((resolve) => listener.close(resolve));
 assert.ok(port !== 6767 && port !== 6768);
 await mkdir(home, { recursive: true });
+// 실제 전용 데몬 포트와 충돌하지 않도록 테스트의 리스너만 임시 포트로 고정한다.
+await writeFile(path.join(home, "config.json"), JSON.stringify({
+  version: 1, daemon: { listen: `127.0.0.1:${port}`, relay: { enabled: false } },
+}));
 const harness = path.join(root, "first-run.cjs");
+const packagedExecutable = path.resolve(executable);
+const driver = createRequire(new URL("../package.json", import.meta.url))("electron");
 await writeFile(harness, `
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { app, dialog } = require("electron");
+Object.defineProperty(process, "resourcesPath", { value: ${JSON.stringify(path.join(path.dirname(packagedExecutable), "resources"))} });
+Object.defineProperty(process, "execPath", { value: ${JSON.stringify(packagedExecutable)} });
+const getPath = app.getPath.bind(app);
+app.getPath = (name) => name === "exe" ? process.execPath : getPath(name);
 Object.defineProperty(app, "isPackaged", { get: () => true });
 app.getVersion = () => ${JSON.stringify(version)};
 app.setPath("userData", ${JSON.stringify(path.join(root, "user-data"))});
@@ -65,7 +76,8 @@ const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
 ));
 let output = "";
 try {
-  const child = spawn(path.resolve(executable), ["--no-sandbox", "--ozone-platform=headless", harness], {
+  // 개발용 Electron은 검사 드라이버일 뿐이며 데몬·엔진은 패키징된 실행 파일로 띄운다.
+  const child = spawn(driver, ["--no-sandbox", "--ozone-platform=headless", harness], {
     env: {
       ...env, HOME: root, USERPROFILE: root, PASEODOG_HOME: path.join(root, "state"),
       PASEO_HOME: home, PASEO_LISTEN: `127.0.0.1:${port}`,

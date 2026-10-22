@@ -20,7 +20,6 @@ async function prepareWindowsDesktopDependencies(resources) {
     const lock = JSON.parse(await readFile(join(root, 'android/package-lock.json'), 'utf8'));
     const cache = await mkdtemp(join(tmpdir(), 'paseodog-win-natives-'));
     try {
-        const archives = [];
         for (const name of ['@esbuild/win32-x64', 'sherpa-onnx-win-x64']) {
             const entry = lock.packages[`node_modules/${name}`];
             const result = spawnSync('npm', ['pack', entry.resolved, '--json', '--pack-destination', cache],
@@ -29,13 +28,14 @@ async function prepareWindowsDesktopDependencies(resources) {
             const archive = join(cache, JSON.parse(result.stdout)[0].filename);
             const integrity = 'sha512-' + createHash('sha512').update(await readFile(archive)).digest('base64');
             if (integrity !== entry.integrity) throw new Error(`Native package integrity mismatch: ${name}`);
-            archives.push(archive);
+            // 호스트 OS에서 실행하지 않는 대상 바이너리는 설치 스크립트 없이 산출물로 푼다.
+            const destination = join(resources, 'node_modules', name);
+            await mkdir(destination, { recursive: true });
+            const extracted = spawnSync('tar', ['-xzf', archive, '-C', destination, '--strip-components=1'],
+                { stdio: 'inherit' });
+            if (extracted.error) throw extracted.error;
+            if (extracted.status !== 0) throw new Error(`Windows native extraction failed: ${name}`);
         }
-        const result = spawnSync('npm', ['install', '--prefix', resources, '--ignore-scripts',
-            '--no-save', '--package-lock=false', '--os=win32', '--cpu=x64', ...archives],
-        { stdio: 'inherit', shell: process.platform === 'win32' });
-        if (result.error) throw result.error;
-        if (result.status !== 0) throw new Error(`Windows desktop native install failed: ${result.status}`);
     } finally { await rm(cache, { recursive: true }); }
 }
 

@@ -36,6 +36,7 @@ extraResources:
     filter:
       - "**/*"
       - "!copilot-usage-source/**"
+      - "!claude-usage-source/**"
   - from: ../app/dist
     to: app-dist
     filter:

@@ -11,12 +11,14 @@ import { createTestPaseoDaemon } from "../../test-utils/paseo-daemon.js";
 import { BuiltinPluginLoader, builtinPlugins, resolveBuiltinPluginsRoot } from "./index.js";
 
 const roots: string[] = [];
-test("PaseoDog skips Copilot collection while retaining Codex and Claude", async () => {
+test("PaseoDog skips Copilot and Mixdog-owned Claude collection while retaining Codex", async () => {
   const loaded: string[] = [];
-  await new BuiltinPluginLoader().load(async ({ id }) => { loaded.push(id); });
+  await new BuiltinPluginLoader().load(async ({ id }) => {
+    loaded.push(id);
+  });
   expect(loaded).not.toContain("copilot-usage-source");
   expect(loaded).toContain("codex-usage-source");
-  expect(loaded).toContain("claude-usage-source");
+  expect(loaded).not.toContain("claude-usage-source");
 });
 
 afterEach(async () => {

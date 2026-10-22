@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const builtinPlugins = [
-  "claude-usage-source",
+  // Claude 사용량은 Mixdog 공급자가 등록하므로 중복 내장 수집기는 제외한다.
   "codex-usage-source",
   "cursor-usage-source",
   "grok-usage-source",
