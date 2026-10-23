@@ -92,7 +92,7 @@ function createControlDaemon({ launch, spawnProcess, terminateProcess }) {
 }
 
 // 엔진 설정 호출을 직렬화하고 모델 카탈로그 캐시는 저장 후 갱신한다.
-export function createEngineControls({ execCommand, spawnProcess, terminateProcess }) {
+export function createEngineControls({ execCommand, spawnProcess, terminateProcess, engineFactory = processEngineFactory }) {
     let launch, queue = Promise.resolve();
     let authentication, authTimer, authQueue = Promise.resolve();
     let controlDaemon = null;
@@ -133,13 +133,28 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
             const operation = authQueue.then(async () => {
                 if (!launch?.env?.MIXDOG_HOME || !launch.env.MIXDOG_DATA_DIR) throw new Error('Dedicated engine profile required');
                 if (!authentication) {
-                    authentication = await processEngineFactory({ launch, spawnProcess, terminateProcess }).create({
+                    authentication = await engineFactory({ launch, spawnProcess, terminateProcess }).create({
                         config: { cwd: launch.env.MIXDOG_HOME, mode: 'review', env: {}, mcpServers: {}, settings: {}, persist: true },
                         route: {},
                     });
                 }
                 clearTimeout(authTimer);
-                authTimer = setTimeout(() => { void authentication?.close(); authentication = undefined; }, 660000);
+                const idleEngine = authentication;
+                const timer = setTimeout(() => {
+                    // 인증 요청과 정리를 같은 큐에 넣어 진행 중인 로그인이나 새 연결을 잘못 종료하지 않는다.
+                    const cleanup = authQueue.then(async () => {
+                        if (authTimer !== timer || authentication !== idleEngine) return;
+                        authentication = undefined;
+                        authTimer = undefined;
+                        await idleEngine.close();
+                    });
+                    // 타이머에는 Promise 소비자가 없다. 정리 실패를 기록하고 큐를 회복하되 성공으로 위장하지 않는다.
+                    // 원본 오류에는 인증값이 섞일 수 있으므로 고정 문구만 출력한다.
+                    authQueue = cleanup.catch(() => {
+                        process.stderr.write('[paseodog] authentication cleanup failed; inspect process scopes\n');
+                    });
+                }, 660000);
+                authTimer = timer;
                 authTimer.unref?.();
                 try {
                     const result = await authentication.auth(input);

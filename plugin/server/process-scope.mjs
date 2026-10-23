@@ -45,6 +45,19 @@ export function createProcessScope({ launch, platform = process.platform, mode =
     const options = { env, timeout: 4500, maxBuffer: 64 * 1024, windowsHide: true };
     const control = (args) => runCommand('/usr/bin/systemctl', ['--user', ...args], options);
     let hasRequestedStop = false;
+    let killOptionPromise;
+
+    // 배포판의 백포트를 고려해 버전 숫자 대신 실제 지원 옵션을 읽고, 실행 전에 종료 가능 여부를 보장한다.
+    function resolveKillOption() {
+        killOptionPromise ??= control(['--help']).then(({ stdout }) => {
+            const help = String(stdout || '');
+            if (/--kill-whom(?:=|\s)/.test(help)) return '--kill-whom=all';
+            if (/--kill-who(?:=|\s)/.test(help)) return '--kill-who=all';
+            // 안전한 전체 cgroup 종료 수단이 없으면 워커를 시작하지 않는다.
+            throw new Error('systemctl must support --kill-whom or --kill-who to stop the complete process scope');
+        });
+        return killOptionPromise;
+    }
 
     async function showControlGroup() {
         try {
@@ -88,14 +101,15 @@ export function createProcessScope({ launch, platform = process.platform, mode =
                     + 'Connect via a systemd-backed SSH session or configure user lingering. '
                     + commandError(error).slice(0, 450));
             }
+            await resolveKillOption();
         },
         async stop() {
-            // A stop job owns the complete cgroup, including shells that moved
-            // into separate process groups. A process-only signal is unsafe.
+            const killOption = await resolveKillOption();
+            // 개별 PID가 아닌 전체 cgroup을 정리해야 별도 프로세스 그룹으로 이탈한 자식 셸도 종료된다.
             try { await control(['stop', '--no-block', unitName]); }
             catch (error) { if (!NOT_LOADED.test(commandError(error))) throw error; }
             hasRequestedStop = true;
-            try { await control(['kill', '--kill-whom=all', '--signal=SIGKILL', unitName]); }
+            try { await control(['kill', killOption, '--signal=SIGKILL', unitName]); }
             catch (error) { if (!NOT_LOADED.test(commandError(error))) throw error; }
             await waitForEmptyScope();
         },
