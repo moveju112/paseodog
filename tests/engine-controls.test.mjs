@@ -407,7 +407,7 @@ test('control daemon stdin failures reject uncertain writes without retrying mut
         const old = children[0], fresh = children[1];
         old.emit('exit', 1);
         old.stdout.emit('error', new Error('old stdout error'));
-        fresh.stdout.write(JSON.stringify({ id: 'ctl_2', ok: true, value: { saved: true } }) + '\n');
+        fresh.stdout.write(JSON.stringify({ id: 'ctl_1', ok: true, value: { saved: true } }) + '\n');
         assert.deepEqual(await next, { saved: true });
         assert.equal(fallbacks, 0);
     } finally {
