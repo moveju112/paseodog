@@ -849,8 +849,9 @@ function DesktopSidebar({
 }
 
 function WorkspacesSectionHeader() {
+  const isCompact = useIsCompactFormFactor();
   return (
-    <View style={styles.workspacesSectionHeader}>
+    <View style={styles.workspacesSectionHeader(isCompact)}>
       <Text style={styles.workspacesSectionTitle}>Workspaces</Text>
       <View style={styles.workspacesSectionActions}>
         <Tooltip delayDuration={300}>
@@ -895,7 +896,7 @@ const styles = StyleSheet.create((theme) => ({
   sidebarHeaderGroupBelowChrome: {
     paddingTop: 0,
   },
-  workspacesSectionHeader: {
+  workspacesSectionHeader: (isCompact: boolean) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -904,10 +905,11 @@ const styles = StyleSheet.create((theme) => ({
     // lands at spacing[2] left to align with project icons. Settings2's painted path stops
     // inside its 14px SVG, so 4px aligns the ink rather than the SVG box to the row rail.
     paddingLeft: theme.spacing[2],
-    paddingRight: 4,
+    // Reserve the floating close button's width, right margin and hitSlop on mobile.
+    paddingRight: isCompact ? theme.spacing[2] + 1.5 + 32 + 8 : 4,
     paddingTop: theme.spacing[1],
     paddingBottom: theme.spacing[1],
-  },
+  }),
   workspacesSectionTitle: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,

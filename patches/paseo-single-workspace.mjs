@@ -44,8 +44,20 @@ for (const [label, single] of labels) {
     SINGLE_WORKSPACE_EDITS.push([before, `${before}single:${JSON.stringify(single)},`]);
 }
 
+// 기존 단일 워크스페이스 패치도 복원할 수 있게 모바일 진입점 수정은 별도로 검사한다.
+export const WORKSPACE_HEADER_EDITS = [
+    ['function we(){const e=(0,n.c)(3);let s,l,c;',
+        'function we(){const isCompact=(0,A.useIsCompactFormFactor)(),e=(0,n.c)(4);let s,l,c;'],
+    ['e[2]===Symbol.for("react.memo_cache_sentinel")?(c=(0,oe.jsxs)(t.View,{style:Re.workspacesSectionHeader,',
+        'e[3]!==isCompact||e[2]===Symbol.for("react.memo_cache_sentinel")?(c=(0,oe.jsxs)(t.View,{style:Re.workspacesSectionHeader(isCompact),'],
+    ['}),e[2]=c):c=e[2],c}const xe=(0,oe.jsx)(we,{})',
+        '}),e[3]=isCompact,e[2]=c):c=e[2],c}const xe=(0,oe.jsx)(we,{})'],
+    ['workspacesSectionHeader:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:e.spacing[2],paddingLeft:e.spacing[2],paddingRight:4,paddingTop:e.spacing[1],paddingBottom:e.spacing[1],uni__dependencies:[0]}',
+        'workspacesSectionHeader:isCompact=>({flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:e.spacing[2],paddingLeft:e.spacing[2],paddingRight:isCompact?e.spacing[2]+1.5+32+8:4,paddingTop:e.spacing[1],paddingBottom:e.spacing[1],uni__dependencies:[0]})'],
+];
+
 export function withSingleWorkspace(source) {
-    for (const [before, after] of SINGLE_WORKSPACE_EDITS) {
+    for (const [before, after] of [...SINGLE_WORKSPACE_EDITS, ...WORKSPACE_HEADER_EDITS]) {
         if (source.split(before).length !== 2 || source.includes(after))
             throw new Error('Paseo single workspace anchor mismatch');
         source = source.replace(before, () => after);
@@ -54,10 +66,12 @@ export function withSingleWorkspace(source) {
 }
 
 export function withoutSingleWorkspace(source) {
-    const counts = SINGLE_WORKSPACE_EDITS.map(([, after]) => source.split(after).length - 1);
-    if (counts.some((count) => count > 1)) throw new Error('Paseo single workspace drift');
-    if (counts.includes(0) && counts.includes(1)) throw new Error('Partial Paseo single workspace patch');
-    for (const [before, after] of [...SINGLE_WORKSPACE_EDITS].reverse())
-        source = source.replace(after, () => before);
+    for (const edits of [WORKSPACE_HEADER_EDITS, SINGLE_WORKSPACE_EDITS]) {
+        const counts = edits.map(([, after]) => source.split(after).length - 1);
+        if (counts.some((count) => count > 1)) throw new Error('Paseo single workspace drift');
+        if (counts.includes(0) && counts.includes(1)) throw new Error('Partial Paseo single workspace patch');
+        for (const [before, after] of [...edits].reverse())
+            source = source.replace(after, () => before);
+    }
     return source;
 }
