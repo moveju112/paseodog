@@ -10,6 +10,8 @@ Only for an explicit build/release request. Read ignored `config/rules.local.md`
 4. The preparer starts the independent user-systemd delivery service. The lower-level `deliver:release -- --config <absolute-config.json> --start` remains available when the dedicated source is already prepared. Do not invoke both paths for one request.
 5. End the initiating turn after confirming the service started. Report delivery as running, not complete. The service waits for active turns, including this one, before apply.
 
+This turn-ending exception applies only to the full delivery service above, whose remaining steps and failure state are already implemented. A standalone build, test, benchmark, or log watcher is not that service. If its result determines further analysis or code changes, use `task wait`, inspect the result and continue; do not end the turn merely because the command moved to the background. A completion notification does not schedule the next AI action.
+
 ## Exceptions only
 
 - Do not manually replay successful verification, build, upload, publication or apply stages. Do not ask for approval again within the existing scope; interruption, new credentials and destructive recovery remain separate boundaries.
