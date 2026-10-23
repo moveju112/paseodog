@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, statSync, mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,7 +9,9 @@ import {
     RELAY_PASSWORD_PATCHES, patchedRelayPasswordSource, relayPasswordModule,
 } from '../scripts/patch-paseo-relay-password.mjs';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { withoutRelayPassword } from '../patches/paseo-relay-password.mjs';
+import { RELAY_PASSWORD_WEB_EDITS, withoutRelayPassword } from '../patches/paseo-relay-password.mjs';
+import { en } from '../android/packages/app/src/i18n/resources/en.ts';
+import { pluginSettings } from '../android/packages/app/src/i18n/resources/plugin-settings.ts';
 
 const packageRoot = new URL('../tools/node_modules/@getpaseo/', import.meta.url);
 const serverRoot = new URL('server/dist/server/server/', packageRoot);
@@ -188,4 +190,66 @@ test('web issuance and address/password entry remain hash gated and reversible',
     for (const marker of ['pair-device-reset-toggle', 'reset:reset', '...(e?.reset?{reset:!0}:{})', 'resetToggle:"\\ube44']) assert.ok(patched.includes(marker), marker);
     assert.ok(!patched.includes('try{if(!O){U(R("pairing.hostPassword.label"));return}'));
     assert.ok(patched.includes('const e=await z.submit(n,O||void 0)'));
+});
+
+test('pairing UI looks up links and explains stable links and password resets on desktop and mobile', () => {
+    const koSource = stripTypeScriptTypes(readFileSync(new URL('../android/packages/app/src/i18n/resources/ko.ts', import.meta.url), 'utf8'))
+        .replace(/^import .*$/gm, '').replace('export const ko', 'const ko');
+    const ko = new Function('en', 'pluginSettings', `${koSource};return ko;`)(en, pluginSettings);
+    const source = RELAY_PASSWORD_WEB_EDITS.find(([before]) => before.startsWith('e.PairDeviceSection='))[1];
+    const webTranslations = RELAY_PASSWORD_WEB_EDITS
+        .filter(([before]) => before.startsWith('device:{loadingOffer:'))
+        .map(([, after]) => new Function(`return ({${after.slice('device:{'.length)}});`)());
+    const element = (type, props) => ({ type, props });
+    for (const resource of [en, ko]) {
+        const web = webTranslations.find((device) => device.loadingOffer === resource.pairing.device.loadingOffer);
+        for (const key of ['generateLink', 'linkHelpLabel', 'linkHelp', 'passwordLabel']) {
+            assert.equal(web[key], resource.pairing.device[key], key);
+        }
+        const translate = (key) => key.split('.').reduce((value, part) => value[part], resource);
+        for (const resetMode of [false, true]) {
+            for (const url of [null, 'https://example.test/#offer=existing']) {
+                let stateIndex = 0, queryIndex = 0, mutationIndex = 0;
+                const client = { getLastServerInfoMessage: () => ({ features: {
+                    relayPasswordAuth: true, daemonStatusRpc: true, relayConfig: true,
+                } }) };
+                const deps = {
+                    e: {}, y: { useTranslation: () => ({ t: translate }) },
+                    w: { useHostRuntimeClient: () => client, useHostRuntimeSnapshot: () => ({ connectionStatus: 'online' }) },
+                    S: { useDaemonConfig: () => ({ patchConfig: () => {} }) },
+                    s: { useState: () => [[false, 'existing-password', 0, resetMode][stateIndex++], () => {}] },
+                    j: { useFetchQuery: () => queryIndex++ === 0 ? { data: { relayEnabled: true, url } } : {} },
+                    _: { daemonPairingOfferQueryKey: () => [] },
+                    u: { useMutation: () => mutationIndex++ === 0 ? {} : { isPending: false } },
+                    n: { View: 'View' }, t: { Text: 'Text' }, C: { jsx: element, jsxs: element },
+                    H: {}, R: { EditingTextInput: 'Input' }, b: { Button: 'Button' }, h: { Alert: 'Alert' },
+                    I: 'PairDeviceBody',
+                    r: () => ({ Tooltip: 'Tooltip', TooltipTrigger: 'TooltipTrigger', TooltipContent: 'TooltipContent' }),
+                    _d: [],
+                };
+                const render = new Function(...Object.keys(deps), `${source};return e.PairDeviceSection;`)(...Object.values(deps));
+                const tree = render({ serverId: 'test-server', onClose: () => {} });
+                const nodes = [];
+                const visit = (node) => {
+                    if (!node || typeof node !== 'object') return;
+                    nodes.push(node);
+                    const children = node.props?.children;
+                    for (const child of Array.isArray(children) ? children : [children]) visit(child);
+                };
+                visit(tree);
+                const tooltip = nodes.find((node) => node.type === 'Tooltip');
+                assert.equal(tooltip.props.enabledOnDesktop, true);
+                assert.equal(tooltip.props.enabledOnMobile, true);
+                assert.ok(nodes.some((node) => node.props?.children === resource.pairing.device.linkHelp));
+                const action = nodes.find((node) => node.props?.testID === 'pair-device-generate');
+                if (url) assert.equal(action, undefined);
+                else assert.equal(action.props.children, resetMode
+                    ? resource.pairing.device.resetAndGenerate : resource.pairing.device.generateLink);
+            }
+        }
+    }
+    assert.equal(ko.pairing.device.generateLink, '주소 조회');
+    assert.equal(en.pairing.device.generateLink, 'Look up link');
+    assert.match(ko.pairing.device.linkHelp, /다시 조회하거나 재시작해도 주소가 같아요/);
+    assert.match(ko.pairing.device.linkHelp, /비밀번호 재설정 시 주소도 바뀌며/);
 });

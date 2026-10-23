@@ -1872,7 +1872,10 @@ export const fr: TranslationResources = {
     },
     device: {
       loadingOffer: "Chargement de l’offre d’association…",
-      generateLink: "Créer un lien",
+      generateLink: "Consulter le lien",
+      linkHelpLabel: "À propos des liens d’association",
+      linkHelp:
+        "Définissez un mot de passe lors de la première consultation. Avec le même daemon et les mêmes réglages, consulter à nouveau le lien ou redémarrer ne le modifie pas. Réinitialiser le mot de passe change aussi le lien ; après le redémarrage, l’ancien lien et l’ancien mot de passe ne fonctionnent plus.",
       passwordLabel: "Mot de passe du relais (défini à la première utilisation)",
       passwordRequired: "Saisissez le mot de passe du relais.",
       resetToggle: "Mot de passe oublié ? Réinitialiser le mot de passe et le lien",

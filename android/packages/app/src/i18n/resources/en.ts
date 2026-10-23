@@ -1852,7 +1852,10 @@ export const en = {
     },
     device: {
       loadingOffer: "Loading pairing offer...",
-      generateLink: "Generate link",
+      generateLink: "Look up link",
+      linkHelpLabel: "About pairing links",
+      linkHelp:
+        "Set a password on the first lookup. With the same daemon and settings, looking up the link again or restarting keeps it unchanged. Resetting the password changes the link too; after restart, the previous link and password no longer work.",
       passwordLabel: "Relay password (set on first use)",
       passwordRequired: "Enter the relay password.",
       resetToggle: "Forgot the password? Reset password and link",

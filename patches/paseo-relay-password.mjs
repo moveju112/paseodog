@@ -73,7 +73,7 @@ const label=resetMode?translate("pairing.device.resetPasswordLabel"):translate("
 return(0,C.jsxs)(n.View,{testID:"pair-device-content",children:[offer?.relayEnabled&&!offer.url&&online?(0,C.jsxs)(n.View,{style:H.consent,children:[(0,C.jsx)(t.Text,{style:H.consentTitle,children:label}),resetMode?(0,C.jsx)(h.Alert,{size:"sm",variant:"warning",description:translate("pairing.device.resetWarning")}):null,(0,C.jsx)(R.EditingTextInput,{key:"relay-password-"+resetKey+"-"+(resetMode?"reset":"issue"),secureTextEntry:true,autoCapitalize:"none",autoCorrect:false,accessibilityLabel:label,testID:"pair-device-password",style:H.linkInput,onChangeText:setPassword,readOnly:issue.isPending}),(0,C.jsx)(b.Button,{onPress:()=>issue.mutate(resetMode),loading:issue.isPending,disabled:!password||!supported||issue.isPending,testID:"pair-device-generate",children:resetMode?translate("pairing.device.resetAndGenerate"):translate("pairing.device.generateLink")}),supported?(0,C.jsx)(b.Button,{variant:"ghost",size:"sm",onPress:()=>{issue.reset();setResetMode(mode=>!mode)},disabled:issue.isPending,testID:"pair-device-reset-toggle",children:resetMode?translate("pairing.device.cancelReset"):translate("pairing.device.resetToggle")}):null,!supported?(0,C.jsx)(h.Alert,{size:"sm",variant:"warning",description:translate("pairing.device.updateRequired")}):null,issue.error?(0,C.jsx)(h.Alert,{size:"sm",variant:"error",description:issue.error.message}):null]}):null,wasReset?(0,C.jsx)(h.Alert,{size:"sm",variant:"success",description:translate("pairing.device.resetDone")}):null,(0,C.jsx)(I,{isPending:true===features?.daemonStatusRpc&&status.isPending&&!issued,isDisconnected:("offline"===snapshot?.connectionStatus||"error"===snapshot?.connectionStatus)&&!issued,passwordProtected:supported,error:status.error,offer:offer,canConfigureRelay:true===features?.relayConfig,enablePending:enable.isPending,enableError:enable.error,qrSvg:qr.data??null,qrError:qr.isError,copied:copied,onRetry:()=>status.refetch(),onEnableRelay:()=>enable.mutate(),onClose:onClose,onCopy:async()=>{if(offer?.url){await l.setStringAsync(offer.url);setCopied(true);setTimeout(()=>setCopied(false),2000)}}})]})}`;
 
 const V1_EN_DEVICE = RELAY_PASSWORD_WEB_EDITS_V1[1][1];
-export const RELAY_PASSWORD_WEB_EDITS = [
+const RELAY_PASSWORD_WEB_EDITS_V2 = [
     RELAY_PASSWORD_WEB_EDITS_V1[0],
     [RELAY_PASSWORD_WEB_EDITS_V1[1][0], V1_EN_DEVICE + EN_DEVICE_KEYS],
     [KO_LOADING, KO_LOADING + KO_DEVICE_KEYS],
@@ -86,10 +86,39 @@ export const RELAY_PASSWORD_WEB_EDITS = [
     ...RELAY_PASSWORD_WEB_EDITS_V1.slice(5, -1),
 ];
 
-// 전체 번들 해시 검증 전에 현재(V2)와 이전(V1) 패치를 모두 되돌린다.
+// V3: 일반 동작은 주소 조회로 표시하고 주소 유지·암호 재설정 조건은 데스크톱 호버·모바일 탭 툴팁으로 설명한다.
+const EN_LINK_HELP = bundleKeys({
+    linkHelpLabel: 'About pairing links',
+    linkHelp: 'Set a password on the first lookup. With the same daemon and settings, looking up the link again or restarting keeps it unchanged. Resetting the password changes the link too; after restart, the previous link and password no longer work.',
+});
+const KO_LINK_HELP = bundleKeys({
+    linkHelpLabel: '페어링 주소 안내',
+    linkHelp: '첫 조회 시 비밀번호를 설정해요. 같은 데몬·설정에서는 다시 조회하거나 재시작해도 주소가 같아요. 비밀번호 재설정 시 주소도 바뀌며, 재시작 후 기존 주소·비밀번호는 무효가 돼요.',
+});
+const pairDeviceAfterV3 = pairDeviceAfterV2
+    .replace('const label=resetMode?', 'const relayTooltip=r(_d[23]);const label=resetMode?')
+    .replace('children:[offer?.relayEnabled', 'children:[supported&&offer?.relayEnabled?(0,C.jsx)(n.View,{style:{alignItems:"flex-end",marginBottom:8},children:(0,C.jsxs)(relayTooltip.Tooltip,{enabledOnDesktop:true,enabledOnMobile:true,children:[(0,C.jsx)(relayTooltip.TooltipTrigger,{accessibilityRole:"button",accessibilityLabel:translate("pairing.device.linkHelpLabel"),testID:"pair-device-link-help",children:(0,C.jsx)(t.Text,{style:H.hint,children:translate("pairing.device.linkHelpLabel")})}),(0,C.jsx)(relayTooltip.TooltipContent,{side:"bottom",align:"end",offset:6,children:(0,C.jsx)(t.Text,{style:[H.consentTitle,{fontWeight:"normal",maxWidth:320,lineHeight:22.4}],children:translate("pairing.device.linkHelp")})})]})}):null,offer?.relayEnabled');
+const pairDeviceDeps = '},5223,[897,898,455,36,234,146,4110,5224,1227,801,1219,56,855,4329,3220,3956,3221,3969,3795,4639,3762,3931,279]);';
+export const RELAY_PASSWORD_WEB_EDITS = [
+    ...RELAY_PASSWORD_WEB_EDITS_V2.map(([before, after]) => {
+        if (before === pairDeviceBefore) return [before, pairDeviceAfterV3];
+        if (before === RELAY_PASSWORD_WEB_EDITS_V1[1][0]) {
+            return [before, after.replace('generateLink:"Generate link",', 'generateLink:"Look up link",') + EN_LINK_HELP];
+        }
+        if (before === KO_LOADING) {
+            return [before, after
+                .replace(bundleText('주소 발급'), bundleText('주소 조회'))
+                .replace(bundleText('첫 발급 시 설정'), bundleText('첫 조회 시 설정')) + KO_LINK_HELP];
+        }
+        return [before, after];
+    }),
+    [pairDeviceDeps, pairDeviceDeps.replace(',279]);', ',279,3942]);')],
+];
+
+// 전체 번들 해시 검증 전에 현재(V3)와 이전(V2·V1) 패치를 모두 되돌린다.
 export function withoutRelayPassword(source) {
     const unwrap = (text, edits) => [...edits].reverse().reduce((value, [before, after]) => value.replace(after, () => before), text);
-    return unwrap(unwrap(source, RELAY_PASSWORD_WEB_EDITS), RELAY_PASSWORD_WEB_EDITS_V1);
+    return unwrap(unwrap(unwrap(source, RELAY_PASSWORD_WEB_EDITS), RELAY_PASSWORD_WEB_EDITS_V2), RELAY_PASSWORD_WEB_EDITS_V1);
 }
 
 // 검토된 앵커 하나씩만 바꾸고 부분 적용은 거부한다.

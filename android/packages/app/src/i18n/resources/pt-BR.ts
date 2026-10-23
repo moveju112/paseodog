@@ -1861,7 +1861,10 @@ export const ptBR: TranslationResources = {
     },
     device: {
       loadingOffer: "Carregando oferta de pareamento...",
-      generateLink: "Gerar link",
+      generateLink: "Consultar link",
+      linkHelpLabel: "Sobre os links de pareamento",
+      linkHelp:
+        "Defina uma senha na primeira consulta. Com o mesmo daemon e as mesmas configurações, consultar o link novamente ou reiniciar não o altera. Redefinir a senha também muda o link; após reiniciar, o link e a senha anteriores deixam de funcionar.",
       passwordLabel: "Senha do relay (definida no primeiro uso)",
       passwordRequired: "Digite a senha do relay.",
       resetToggle: "Esqueceu a senha? Redefinir senha e link",

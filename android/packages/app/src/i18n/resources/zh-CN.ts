@@ -1807,8 +1807,11 @@ export const zhCN: TranslationResources = {
     },
     device: {
       loadingOffer: "正在加载配对 offer...",
-      generateLink: "生成链接",
-      passwordLabel: "中继密码（首次生成时设置）",
+      generateLink: "查看链接",
+      linkHelpLabel: "配对链接说明",
+      linkHelp:
+        "首次查看时设置密码。同一守护进程和配置下，再次查看或重启不会改变链接。重置密码也会更改链接；重启后，旧链接和旧密码将失效。",
+      passwordLabel: "中继密码（首次查看时设置）",
       passwordRequired: "请输入中继密码。",
       resetToggle: "忘记密码？重置密码和链接",
       resetPasswordLabel: "新的中继密码（至少 8 个字符）",

@@ -1876,7 +1876,10 @@ export const es: TranslationResources = {
     },
     device: {
       loadingOffer: "Cargando oferta de maridaje...",
-      generateLink: "Generar enlace",
+      generateLink: "Consultar enlace",
+      linkHelpLabel: "Acerca de los enlaces de emparejamiento",
+      linkHelp:
+        "Establece una contraseña en la primera consulta. Con el mismo daemon y los mismos ajustes, volver a consultar el enlace o reiniciar no lo cambia. Restablecer la contraseña también cambia el enlace; tras reiniciar, el enlace y la contraseña anteriores dejan de funcionar.",
       passwordLabel: "Contraseña del relé (se establece en el primer uso)",
       passwordRequired: "Introduce la contraseña del relé.",
       resetToggle: "¿Olvidaste la contraseña? Restablecer contraseña y enlace",

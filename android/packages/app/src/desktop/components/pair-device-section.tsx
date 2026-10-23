@@ -11,6 +11,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ExternalLink } from "@/components/ui/external-link";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useFetchQuery } from "@/data/query";
 import { daemonPairingOfferQueryKey } from "@/data/daemon-pairing";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
@@ -114,6 +115,7 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
 
   return (
     <View testID="pair-device-content">
+      <RelayLinkHelp supported={supportsRelayPassword} offer={offer} />
       <RelayPasswordForm
         offer={offer}
         connected={isConnected}
@@ -150,7 +152,34 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
   );
 }
 
-// 릴레이 암호로 주소 발급·재설정 (입력 암호 -> 발급 요청 -> 성공 시 입력 초기화·재설정 모드 해제)
+function RelayLinkHelp({
+  supported,
+  offer,
+}: {
+  supported: boolean;
+  offer: { relayEnabled: boolean } | undefined;
+}) {
+  const { t } = useTranslation();
+  if (!supported || !offer?.relayEnabled) return null;
+  return (
+    <View style={styles.linkHelpRow}>
+      <Tooltip enabledOnDesktop enabledOnMobile>
+        <TooltipTrigger
+          accessibilityRole="button"
+          accessibilityLabel={t("pairing.device.linkHelpLabel")}
+          testID="pair-device-link-help"
+        >
+          <Text style={styles.hint}>{t("pairing.device.linkHelpLabel")}</Text>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="end" offset={6}>
+          <Text style={styles.linkHelpText}>{t("pairing.device.linkHelp")}</Text>
+        </TooltipContent>
+      </Tooltip>
+    </View>
+  );
+}
+
+// 릴레이 암호로 주소 조회·재설정 (성공 시 입력 초기화·재설정 모드 해제)
 function useRelayPasswordIssue(
   client: ReturnType<typeof useHostRuntimeClient>,
   supported: boolean,
@@ -444,6 +473,16 @@ const styles = StyleSheet.create((theme) => ({
   },
   consent: {
     gap: theme.spacing[4],
+  },
+  linkHelpRow: {
+    alignItems: "flex-end",
+    marginBottom: theme.spacing[2],
+  },
+  linkHelpText: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    maxWidth: 320,
+    lineHeight: theme.fontSize.base * 1.4,
   },
   hero: {
     alignItems: "flex-start",

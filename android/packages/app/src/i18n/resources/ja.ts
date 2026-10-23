@@ -1845,8 +1845,11 @@ export const ja: TranslationResources = {
     },
     device: {
       loadingOffer: "ペアリングオファーを読み込み中...",
-      generateLink: "リンクを発行",
-      passwordLabel: "リレーパスワード（初回発行時に設定）",
+      generateLink: "リンクを確認",
+      linkHelpLabel: "ペアリングリンクについて",
+      linkHelp:
+        "初回確認時にパスワードを設定します。同じデーモン・設定では、再確認や再起動でリンクは変わりません。パスワードを再設定するとリンクも変わり、再起動後は以前のリンクとパスワードが無効になります。",
+      passwordLabel: "リレーパスワード（初回確認時に設定）",
       passwordRequired: "リレーパスワードを入力してください。",
       resetToggle: "パスワードを忘れた場合: パスワードとリンクを再設定",
       resetPasswordLabel: "新しいリレーパスワード（8文字以上）",

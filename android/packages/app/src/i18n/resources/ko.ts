@@ -1836,8 +1836,11 @@ export const ko: TranslationResources = {
     },
     device: {
       loadingOffer: "페어링 정보 불러오는 중...",
-      generateLink: "주소 발급",
-      passwordLabel: "릴레이 비밀번호 (첫 발급 시 설정)",
+      generateLink: "주소 조회",
+      linkHelpLabel: "페어링 주소 안내",
+      linkHelp:
+        "첫 조회 시 비밀번호를 설정해요. 같은 데몬·설정에서는 다시 조회하거나 재시작해도 주소가 같아요. 비밀번호 재설정 시 주소도 바뀌며, 재시작 후 기존 주소·비밀번호는 무효가 돼요.",
+      passwordLabel: "릴레이 비밀번호 (첫 조회 시 설정)",
       passwordRequired: "릴레이 비밀번호를 입력하세요.",
       resetToggle: "비밀번호를 잊으셨나요? 비밀번호·주소 재설정",
       resetPasswordLabel: "새 릴레이 비밀번호 (8자 이상)",
