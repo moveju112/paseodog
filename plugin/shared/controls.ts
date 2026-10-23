@@ -119,15 +119,18 @@ export const nativeConfigView = defineRpc({
     output: z.unknown(),
 });
 
+import { MAX_TURN_MINUTES } from './turn-duration.mjs';
+
 export const engineControls = defineRpc({
     name: 'engine-controls',
     input: z.object({
         action: z.enum([
             'read', 'main', 'agent', 'agentDefinition', 'agentSave', 'agentCreate', 'agentDelete',
             'compaction', 'autoClear', 'workflow', 'workflowPack', 'workflowSave', 'workflowCreate', 'workflowDelete',
-            'orchestration', 'instructionFiles', 'features', 'preferences',
+            'orchestration', 'instructionFiles', 'features', 'preferences', 'turnDuration',
         ]).default('read'),
         refresh: z.boolean().optional(),
+        maxTurnMinutes: z.number().int().min(1).max(MAX_TURN_MINUTES).optional(),
         agent: z.string().max(100).optional(),
         route: z.object({
             provider: z.string().max(256).optional(), model: z.string().max(256).optional(),

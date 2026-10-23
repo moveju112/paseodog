@@ -78,6 +78,42 @@ async function loadClient(t) {
     return { settingsScreens, settings, screens, panels, liveScreen, footer, renderScreen };
 }
 
+test('workflow duration uses minutes, defaults to 120 and preserves errors on failed saves', async (t) => {
+    const { settings, renderScreen } = await loadClient(t);
+    let saved = 120, fail = false;
+    const writes = [];
+    globalThis.__paseodogTestRpc = async (input, name) => {
+        if (name === 'agent-message-policy') return { allowUnrelatedSessions: true };
+        if (input.action === 'turnDuration') {
+            writes.push(input);
+            if (fail) throw new Error('save failed');
+            saved = input.maxTurnMinutes;
+        }
+        return { route: {}, models: [], compaction: {}, workflows: [], agents: [], sessions: [],
+            orchestration: 'none', maxTurnMinutes: saved };
+    };
+    const screen = await renderScreen(settings('mixdog-workflow'));
+    const field = () => screen.tree.root.findByProps({ accessibilityLabel: '명령 최대 실행 시간 (분)' });
+    const save = () => screen.tree.root.findAllByType('pressable')
+        .find(node => node.findByType('text').children.join('') === '실행 시간 저장');
+    assert.equal(field().props.value, '120');
+    for (const invalid of ['', '0', '-1', '1.5', '35792', 'abc']) {
+        await act(async () => field().props.onChangeText(invalid));
+        assert.equal(save().props.disabled, true);
+    }
+    await act(async () => field().props.onChangeText('180'));
+    await screen.press('실행 시간 저장');
+    assert.deepEqual(writes, [{ action: 'turnDuration', maxTurnMinutes: 180 }]);
+    assert.match(JSON.stringify(screen.tree.toJSON()), /다음 명령부터 적용/);
+    fail = true;
+    await act(async () => field().props.onChangeText('240'));
+    await screen.press('실행 시간 저장');
+    assert.equal(saved, 180);
+    assert.match(JSON.stringify(screen.tree.toJSON()), /save failed/);
+    await screen.press('새로고침');
+    assert.equal(field().props.value, '180');
+});
+
 test('workflow message switch persists independently and never retries an uncertain save', async (t) => {
     const { settings, renderScreen } = await loadClient(t);
     const requests = [];

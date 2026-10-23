@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
+import { MAX_TURN_MINUTES } from '../plugin/shared/turn-duration.mjs';
 import { readFileSync } from 'node:fs';
 import { runInNewContext, Script } from 'node:vm';
 import { controlRuntime } from '../engine/src/controls.mjs';
@@ -16,8 +17,12 @@ test('zero token override resets the native budget through the actual RPC contra
     const require = createRequire(new URL('../plugin/package.json', import.meta.url));
     const source = stripTypeScriptTypes(readFileSync(new URL('../plugin/shared/controls.ts', import.meta.url), 'utf8'))
         .replace(/^import .*;\s*$/gm, '').replace(/export const /g, 'const ');
-    const { input } = new Function('defineRpc', 'z', source + '; return engineControls;')(
-        (value) => value, require('zod').z);
+    const { input } = new Function('defineRpc', 'z', 'MAX_TURN_MINUTES', source + '; return engineControls;')(
+        (value) => value, require('zod').z, MAX_TURN_MINUTES);
+    assert.equal(input.parse({ action: 'turnDuration', maxTurnMinutes: 120 }).maxTurnMinutes, 120);
+    for (const value of [0, -1, 1.5, '120', 35792]) {
+        assert.equal(input.safeParse({ action: 'turnDuration', maxTurnMinutes: value }).success, false);
+    }
     let config = { compaction: { mainBufferTokens: 32000, summaryModel: 'other/small' } };
     const session = { compaction: { ...config.compaction } };
     const native = createCompactionSettings({
