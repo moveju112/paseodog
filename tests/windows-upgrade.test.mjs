@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 import * as path from 'node:path';
 import { windowsInstallerScript, prepareWindowsInstaller } from '../scripts/patch-windows-installer.mjs';
 import { withWindowsExtraction, WINDOWS_INSTALLER_BLOBS, WINDOWS_INSTALLER_VERSION,
-    WINDOWS_UNINSTALLER_BLOB, WINDOWS_UNINSTALLER_MARKER, withWindowsUninstaller, withoutWindowsUninstaller } from '../patches/windows-installer.mjs';
+    WINDOWS_UNINSTALLER_BLOB, WINDOWS_UNINSTALLER_MARKER, withWindowsUninstaller, withoutWindowsUninstaller,
+    withWindowsUpgrade, withWindowsRemoval } from '../patches/windows-installer.mjs';
 import { gitBlob } from '../scripts/patch-mixdog.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -53,6 +54,133 @@ test('PaseoDog keeps standard uninstaller generation without changing other cust
             assert.equal(Object.hasOwn(defines, 'BUILD_UNINSTALLER'), false);
         }
     }
+});
+
+test('Windows upgrades use the current cleanup even when the installed uninstaller is broken', {
+    skip: !compiler || !runner ? 'Set PASEODOG_NSIS_BINARY and PASEODOG_WINDOWS_RUNNER' : false,
+    timeout: 120_000,
+}, t => {
+    const directory = mkdtempSync(join(tmpdir(), 'paseodog-upgrade-cleanup-'));
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const installed = join(directory, 'installed');
+    const data = join(directory, 'user-data.json');
+    const oldRan = join(directory, 'old-ran');
+    const completed = join(directory, 'completed');
+    const long = Array.from({ length: 9 }, (_, i) => `${i}-${'dependency'.repeat(3)}`).join('/');
+    const obsolete = join(installed, long, 'old.js');
+    mkdirSync(dirname(obsolete), { recursive: true });
+    writeFileSync(obsolete, 'old');
+    writeFileSync(data, '{"preserved":true}');
+    const registry = `Software\\PaseoDogUpgradeFixture${process.pid}`;
+
+    function compile(name, body) {
+        const source = join(directory, `${name}.nsi`);
+        const executable = join(directory, `${name}.exe`);
+        writeFileSync(source, `Unicode true
+!include "LogicLib.nsh"
+!include "FileFunc.nsh"
+OutFile "${executable}"
+RequestExecutionLevel user
+SilentInstall silent
+SilentUnInstall silent
+${body}`);
+        const result = spawnSync(compiler, ['-WX', '-V2', '-INPUTCHARSET', 'UTF8', source], {
+            encoding: 'utf8', timeout: 20_000,
+            env: { ...process.env, NSISDIR: dirname(dirname(compiler)) },
+        });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        return executable;
+    }
+    function run(executable) {
+        const result = spawnSync(runner, [executable], { encoding: 'utf8', timeout: 30_000 });
+        assert.ifError(result.error);
+        return result.status;
+    }
+    const old = compile('broken-old', `Section
+  FileOpen $0 "${win(oldRan)}" w
+  FileClose $0
+  SetErrorLevel 73
+SectionEnd`);
+    const removal = withWindowsRemoval(readFileSync(join(templates, 'uninstaller.nsh'), 'utf8'));
+    const functions = removal.slice(removal.indexOf('Function un.atomicRMDir'),
+        removal.indexOf('!ifndef UNINSTALL_SECTION_NAME'));
+    const cleanup = join(directory, 'current-uninstaller.exe');
+    const generate = compile('generate', `!define BUILD_UNINSTALLER
+!define PRODUCT_FILENAME "PaseoDogFixture"
+!define UNINSTALL_FILENAME "\\unused.exe"
+!include "${join(root, 'android/packages/desktop/scripts/installer.nsh')}"
+${functions}
+Section
+  WriteUninstaller "${win(cleanup)}"
+SectionEnd
+Section "Uninstall"
+  !insertmacro customCheckAppRunning
+  InitPluginsDir
+  CreateDirectory "$PLUGINSDIR\\old-install"
+  Push ""
+  Call un.atomicRMDir
+  Pop $R0
+  StrCmp $R0 0 +3
+    SetErrorLevel 1603
+    Quit
+  SetOutPath $TEMP
+  RMDir /r "\\\\?\\$INSTDIR"
+  IfFileExists "\\\\?\\$INSTDIR\\*.*" 0 +3
+    SetErrorLevel 1603
+    Quit
+SectionEnd`);
+    assert.equal(run(generate), 0);
+    const original = readFileSync(join(templates, 'include/installUtil.nsh'), 'utf8');
+    const header = `!define INSTALL_REGISTRY_KEY "${registry}"
+!define UNINSTALL_REGISTRY_KEY "${registry}"
+!define UNINSTALLER_OUT_FILE "${cleanup}"
+!macro fixtureGetParent output input
+  \${GetParent} "\${input}" \${output}
+!macroend
+!define StdUtils.GetParentPath "!insertmacro fixtureGetParent"
+!define isUpdated '0 == 0'
+!define isDeleteAppData '0 == 1'
+Var installMode
+Var appExe
+LangString appCannotBeClosed 1033 "Legacy cleanup failed"
+LangString uninstallFailed 1033 "Cleanup failed"
+`;
+    function parent(name, util, uninstaller = cleanup) {
+        return compile(name, `${header.replaceAll(cleanup, uninstaller)}
+${util}
+Section
+  InitPluginsDir
+  StrCpy $installMode "CurrentUser"
+  StrCpy $INSTDIR "${win(installed)}"
+  StrCpy $appExe "$INSTDIR\\PaseoDog.exe"
+  WriteRegStr HKCU "\${INSTALL_REGISTRY_KEY}" InstallLocation "$INSTDIR"
+  WriteRegStr HKCU "\${UNINSTALL_REGISTRY_KEY}" UninstallString '"${win(old)}"'
+  !insertmacro uninstallOldVersion HKEY_CURRENT_USER
+  StrCmp $R0 0 +3
+    SetErrorLevel 2
+    Quit
+  !insertmacro handleUninstallResult HKEY_CURRENT_USER
+  DeleteRegKey HKCU "\${INSTALL_REGISTRY_KEY}"
+  FileOpen $0 "${win(completed)}" w
+  FileClose $0
+SectionEnd`);
+    }
+    assert.equal(run(parent('legacy-upgrade', original)), 2,
+        'The old upgrade reports appCannotBeClosed for an unrelated cleanup failure');
+    assert.ok(existsSync(oldRan));
+    assert.equal(existsSync(completed), false);
+    rmSync(oldRan);
+    assert.equal(run(parent('fixed-upgrade', withWindowsUpgrade(original))), 0);
+    assert.equal(existsSync(oldRan), false, 'The installed uninstaller must not run again');
+    assert.ok(existsSync(completed));
+    assert.equal(existsSync(installed), false, 'Long-path obsolete files and their directories must be removed');
+    assert.equal(readFileSync(data, 'utf8'), '{"preserved":true}');
+
+    // 새 제거기 실패도 무시하거나 이전 제거기로 재시도해서는 안 된다.
+    rmSync(completed);
+    assert.equal(run(parent('failed-upgrade', withWindowsUpgrade(original), old)), 73);
+    assert.equal(existsSync(completed), false);
+    assert.equal(readFileSync(data, 'utf8'), '{"preserved":true}');
 });
 
 test('Windows installer generation gates every upstream input and check mode never writes', t => {

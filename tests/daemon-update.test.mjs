@@ -8,6 +8,7 @@ import { DAEMON_RELEASE } from '../plugin/server/util.mjs';
 import { daemonRelease } from '../plugin/shared/controls.ts';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import { withDaemonUpdate, withoutDaemonUpdate } from '../patches/paseo-daemon-update.mjs';
+import release from '../plugin/shared/release.json' with { type: 'json' };
 
 const require = createRequire(new URL('../plugin/package.json', import.meta.url));
 const React = require('react');
@@ -161,8 +162,7 @@ test('late reply from a disconnected host cannot replace a fresh release result'
 });
 
 test('daemon release RPC reports the loaded product release and rejects mutation inputs', () => {
-    assert.equal(DAEMON_RELEASE.versionCode, 11069);
-    assert.equal(DAEMON_RELEASE.version, '1.0.0-rc.7');
+    assert.deepEqual(DAEMON_RELEASE, { version: release.version, versionCode: release.versionCode });
     assert.ok(Object.isFrozen(DAEMON_RELEASE));
     assert.equal(daemonRelease.name, 'daemon-release');
     assert.deepEqual(daemonRelease.output.parse(DAEMON_RELEASE), DAEMON_RELEASE);
