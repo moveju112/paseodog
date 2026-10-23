@@ -8,6 +8,7 @@ import { AnalysisFooter } from './client/analysis-footer.js';
 import { NativeConfigView } from './client/native-config.js';
 import { SessionTools } from './client/session-tools.js';
 import { ResourceSettings } from './client/resource-settings.js';
+import { MessagePolicySettings } from './client/message-policy-settings.js';
 
 type Route = { provider: string; model: string; effort?: string; autoEffort: boolean; fast: boolean; contextPercent?: number | null };
 type AuthProvider = 'anthropic-oauth' | 'openai-oauth';
@@ -164,7 +165,7 @@ function applyOptimistic(prev: Snapshot | null, input: Record<string, any>): Sna
 }
 
 // 호스트별 엔진 설정을 조회하고 사용자가 선택한 항목만 저장한다 (섹션별로 해당 컨트롤만 표시).
-function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Section }) {
+function EngineSettings({ theme, host, section }: PluginSurfaceProps & { section: Section }) {
     const invoke = useRpc(engineControls);
     const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
     const [busy, setBusy] = useState(false);
@@ -365,6 +366,7 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
                 </View>}
             </Modal.Content>
         </Modal>}
+        {section === 'workflow' && <MessagePolicySettings key={host.id} theme={theme} />}
         {snapshot && section === 'workflow' && <>
             <Text style={{ ...text, fontSize: 18 }}>자동 오케스트레이터</Text>
             <Text style={text}>이 호스트 전체에 적용돼요. 열린 세션은 다음 요청부터 반영하며 도구 승인 설정은 바꾸지 않아요.</Text>

@@ -9,9 +9,12 @@ import { clientErrors } from './shared/client-errors.js';
 import { createClientErrorCollector } from './server/client-errors.mjs';
 import { daemonRelease } from './shared/controls.js';
 import { DAEMON_RELEASE } from './server/util.mjs';
+import { agentMessagePolicy } from './shared/message-policy.js';
+import { createMessagePolicyHandler } from './server/message-policy.mjs';
 // 전용 엔진의 설정과 현재 세션 상태를 Paseo 플러그인 RPC에 연결한다.
 export default function contribute(server: PluginServerContext) {
     server.handle(daemonRelease, () => DAEMON_RELEASE);
+    server.handle(agentMessagePolicy, createMessagePolicyHandler());
     const controls = createEngineControls({ execCommand, spawnProcess, terminateProcess });
     const clientErrorCollector = createClientErrorCollector();
     server.handle(clientErrors, (request) => clientErrorCollector.handle(request));

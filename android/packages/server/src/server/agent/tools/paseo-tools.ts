@@ -1,4 +1,7 @@
 import { stat } from "node:fs/promises";
+import * as messagePolicyFs from "node:fs/promises";
+import { join as messagePolicyJoin, isAbsolute as messagePolicyIsAbsolute } from "node:path";
+import { createAgentMessagePolicy } from "../agent-message-policy.js";
 import { z } from "zod";
 import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
@@ -575,6 +578,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     logger,
   } = options;
   const childLogger = logger.child({ module: "agent", component: "paseo-tool-catalog" });
+  const messagePolicy = createAgentMessagePolicy({
+    fs: messagePolicyFs,
+    join: messagePolicyJoin,
+    isAbsolute: messagePolicyIsAbsolute,
+    home: options.paseoHome ?? process.env.PASEO_HOME,
+  });
   const callerContext = callerAgentId ? (resolveCallerContext?.(callerAgentId) ?? null) : null;
 
   const parseToolInput = async (tool: PaseoToolDefinition, input: unknown): Promise<unknown> => {
@@ -1928,6 +1937,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         return true;
       }
 
+      await messagePolicy.authorize(callerAgentId, agentId, agentManager, agentStorage);
       const { disposition } = await sendPromptToAgent({
         agentManager,
         agentStorage,
@@ -2191,6 +2201,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       },
     },
     async ({ agentId, name, labels, settings }) => {
+      messagePolicy.assertLabelUpdate(callerAgentId, labels);
       if (settings?.modeId !== undefined) {
         await agentManager.setAgentMode(agentId, settings.modeId);
       }

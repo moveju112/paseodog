@@ -15,6 +15,7 @@ export const runtimeFiles = [
     'scripts/configure.mjs', 'scripts/paths.mjs', 'scripts/desktop-profile.mjs', 'scripts/patch-mixdog.mjs',
     'patches/effort-usage.mjs', 'patches/default-output-style.mjs', 'patches/compaction-summary-route.mjs',
     'patches/agent-editor-safety.mjs',
+    'android/packages/server/src/server/agent/agent-message-policy.ts',
 ];
 
 // 잠금 파일의 해시로 Windows 데스크톱 네이티브 패키지를 검증해 산출물에만 설치한다.

@@ -78,6 +78,46 @@ async function loadClient(t) {
     return { settingsScreens, settings, screens, panels, liveScreen, footer, renderScreen };
 }
 
+test('workflow message switch persists independently and never retries an uncertain save', async (t) => {
+    const { settings, renderScreen } = await loadClient(t);
+    const requests = [];
+    let allow = true, rejectWrite = false, finishWrite;
+    globalThis.__paseodogTestRpc = async (input, name) => {
+        if (name === 'engine-controls') return {
+            route: {}, models: [], compaction: {}, workflows: [], agents: [], sessions: [], orchestration: 'swarm',
+        };
+        assert.equal(name, 'agent-message-policy');
+        requests.push(input);
+        if (input.action === 'write') {
+            if (rejectWrite) throw new Error('uncertain');
+            await new Promise(resolve => { finishWrite = resolve; });
+            allow = input.allowUnrelatedSessions;
+        }
+        return { allowUnrelatedSessions: allow };
+    };
+    const screen = await renderScreen(settings('mixdog-workflow'));
+    const toggle = () => screen.tree.root.findByProps({ accessibilityLabel: '무관한 세션 간 메시지 허용' });
+    assert.equal(toggle().props.accessibilityState.checked, true);
+    await act(async () => {
+        toggle().props.onPress();
+        toggle().props.onPress();
+    });
+    assert.equal(toggle().props.disabled, true);
+    assert.equal(requests.filter(input => input.action === 'write').length, 1);
+    await act(async () => finishWrite());
+    assert.equal(toggle().props.accessibilityState.checked, false);
+    assert.ok(screen.labels().includes('✓ 에이전트 협업'));
+    rejectWrite = true;
+    await act(async () => toggle().props.onPress());
+    assert.equal(toggle().props.disabled, true);
+    assert.match(JSON.stringify(screen.tree.toJSON()), /자동 재시도하지/);
+    assert.equal(requests.filter(input => input.action === 'write').length, 2);
+    await screen.press('세션 메시지 설정 새로고침');
+    assert.equal(toggle().props.disabled, false);
+    assert.equal(toggle().props.accessibilityState.checked, false);
+    assert.equal(requests.filter(input => input.action === 'write').length, 2);
+});
+
 test('bottom sidebar icon opens analysis as a modal and releases it on close', async (t) => {
     const { footer, renderScreen } = await loadClient(t);
     const calls = [];
@@ -507,6 +547,7 @@ test('settings register separate sections without a main model picker and dispat
         : input.action === 'workflowPack' ? { ...snapshot, workflowPack: { id: 'default', name: 'Default', body: '# Flow' } }
             : input.action === 'preferences' && input.profile ? { ...snapshot, profile: input.profile } : snapshot;
     globalThis.__paseodogTestRpc = async (input, name) => {
+        if (name === 'agent-message-policy') return { allowUnrelatedSessions: true };
         assert.equal(name, 'engine-controls');
         calls.push(input);
         return reply(input);
