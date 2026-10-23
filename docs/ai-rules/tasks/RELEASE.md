@@ -2,6 +2,14 @@
 
 Read Git-ignored `config/rules.local.md` for default targets (S25 arm64-v8a APK + Linux .deb) and signing-key location. Release from the pushed commit.
 
+## Required Cloudflare Pages delivery
+
+Every requested build/release also includes the following web delivery after GitHub publication, without a separate approval loop. `npm run build:release` alone does not deploy Pages; the operator must complete these steps before reporting delivery complete.
+
+1. From the same pushed commit, export a separate browser bundle: `node scripts/build-web.mjs --hosting cloudflare --output <absolute-release-workspace>/web-cloudflare --metro-workers <local-rule-count>`. Follow section B's resource/cache rules. Do not upload the Electron bundle or the default GitHub Pages export.
+2. From `android/packages/app`, run `npx --no-install wrangler pages deploy <absolute-release-workspace>/web-cloudflare --project-name paseodog --branch main` using the existing Cloudflare login. This updates the existing `paseodog` Pages project serving `https://paseodog.choondoggy.com/`; no DNS change is needed for routine updates.
+3. Verify the production deployment succeeds, then check HTTPS access, the address/password connection UI, and a deep-link refresh at `https://paseodog.choondoggy.com/` in a real browser. Do not run billable inference for this check. Report Pages deployment separately from artifact publication and PC apply; authentication, deployment or browser-check failures leave web delivery incomplete.
+
 ## A. Version
 
 1. versionCode = latest release `paseodog-android-update.json` `versionCode` + 1 (also above `dpkg -s paseodog`). Pass it as `-PpaseodogVersionCode=<vc>`; do not edit the `app.config.js` offset (prebuild fallback only).
