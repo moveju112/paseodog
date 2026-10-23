@@ -1,5 +1,7 @@
-// 고정 번들의 미지원 시간 설정은 숨기고 Recap 설명을 실제 메모리 사이클에 맞춘다.
+// 고정 번들의 미지원 설정·릴리스 안내는 숨기고 Recap 설명을 실제 메모리 사이클에 맞춘다.
 const edits = [
+    ['children:[w,I,k,C]', 'children:[w,k,C]'],
+    ['children:[Q,be]', 'children:[be]'],
     ['children:[le,ie,ne,ae,ce,ue,me,xe,ge]', 'children:[le,ie,ne,ae,ce,ue,me,ge]'],
     [String.raw`\uc138\uc158 \ubcf5\uadc0 \uc694\uc57d (Recap)`, String.raw`\ubc31\uadf8\ub77c\uc6b4\ub4dc \uba54\ubaa8\ub9ac (Recap)`],
     [String.raw`\uc138\uc158 \uc7ac\uac1c \uc2dc \uc774\uc804 \uc791\uc5c5 \uc694\uc57d\ubcf8\uc744 \uc790\ub3d9\uc73c\ub85c \uc81c\uacf5`,
