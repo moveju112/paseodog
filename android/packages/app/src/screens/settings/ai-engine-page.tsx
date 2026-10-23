@@ -1773,6 +1773,7 @@ function SessionUsage({ sessions }: { sessions: EngineSnapshot["sessions"] }) {
 
 // 토큰 절감 설정 (자동 압축·유휴 세션 비우기·세션 리캡) 즉시 저장
 function TokensSection({ snapshot, disabled, request }: SectionProps) {
+  const hasMainModel = Boolean(snapshot.route.model?.trim());
   const send = useCallback(
     (command: EngineCommand) => {
       void request(command);
@@ -1780,8 +1781,10 @@ function TokensSection({ snapshot, disabled, request }: SectionProps) {
     [request],
   );
   const setContextPercent = useCallback(
-    (value: string) => send({ action: "main", route: { contextPercent: Number(value) } }),
-    [send],
+    (value: string) => {
+      if (hasMainModel) send({ action: "main", route: { contextPercent: Number(value) } });
+    },
+    [hasMainModel, send],
   );
   const setCompaction = useCallback(
     (enabled: boolean) => send({ action: "compaction", enabled }),
@@ -1835,12 +1838,18 @@ function TokensSection({ snapshot, disabled, request }: SectionProps) {
         <View style={settingsStyles.card}>
           <SettingRow
             title="메인 컨텍스트 한도 비율"
-            hint="모델 최대 컨텍스트 중 사용할 상한 비율을 제한해 과도한 과금 방지"
+            hint={
+              hasMainModel
+                ? "모델 최대 컨텍스트 중 사용할 상한 비율을 제한해 과도한 과금 방지"
+                : "새 대화 입력창에서 Main 모델을 먼저 선택해 주세요."
+            }
           >
             <Select
               title="메인 컨텍스트 한도 비율"
-              disabled={disabled}
-              value={String(snapshot.route.contextPercent ?? 100)}
+              disabled={disabled || !hasMainModel}
+              value={
+                hasMainModel ? String(snapshot.route.contextPercent ?? 100) : "Main 모델 선택 필요"
+              }
               options={contextPercentOptions}
               onChange={setContextPercent}
             />

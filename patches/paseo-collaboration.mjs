@@ -247,7 +247,12 @@ export function withoutCollaboration(source) {
     const hasRender = source.includes(render);
     const draftRender = source.includes(FAST_DRAFT_RENDER) ? FAST_DRAFT_RENDER : COLLABORATION_DRAFT_RENDER;
     const hasDraft = source.includes(draftRender);
-    const found = [{ version: 5, source: COLLABORATION_SOURCE, draft: true }, ...LEGACY_COLLABORATION_SOURCES]
+    const previousFastSource = COLLABORATION_SOURCE.replace('Boolean(value.route.model?.trim()) && ', '');
+    const found = [
+        { version: 5, source: COLLABORATION_SOURCE, draft: true },
+        { version: 5, source: previousFastSource, draft: true },
+        ...LEGACY_COLLABORATION_SOURCES,
+    ]
         .filter((entry) => source.includes(entry.source));
     if (!found.length && !hasRender && !hasDraft) return source;
     if (found.length !== 1 || !hasRender || found[0].draft !== hasDraft) throw new Error('Partial Paseo collaboration patch');

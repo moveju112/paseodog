@@ -171,7 +171,7 @@ const secondFastScope = { paseodogScope: "live" as const, agentId: "two" };
 // PC 패치가 허용하는 최소 RPC 응답을 만든다.
 function snapshot(autoEffort = false, orchestration = "none", supported = true, enabled = true) {
   return {
-    route: { autoEffort },
+    route: { autoEffort, model: "small" },
     orchestration,
     toolModules: { autoEffort: { supported, enabled } },
   };
@@ -205,6 +205,30 @@ afterEach(() => {
 });
 
 describe("native Effort list contract", () => {
+  it("keeps manual effort local until a Main model is configured", async () => {
+    runtime.client.invokePluginRpc.mockResolvedValue({
+      ...snapshot(true),
+      route: { autoEffort: true, model: "" },
+    });
+    const select = vi.fn();
+    const { result } = renderHook(() =>
+      usePaseodogAutoEffort({
+        provider: "paseodog",
+        scope: "draft",
+        serverId: "host",
+        thinkingOptions: options,
+        onSelectThinkingOption: select,
+      }),
+    );
+    await waitFor(() => expect(runtime.client.invokePluginRpc).toHaveBeenCalledTimes(1));
+    expect(result.current.thinkingOptions).toEqual(options);
+    act(() => result.current.onSelectThinkingOption("high"));
+    expect(select).toHaveBeenCalledExactlyOnceWith("high");
+    expect(runtime.client.invokePluginRpc.mock.calls.map((call) => call[2])).toEqual([
+      { action: "read" },
+    ]);
+  });
+
   it("uses only the live session feature and leaves manual selection on its existing path", async () => {
     const select = vi.fn();
     const props = {

@@ -22,7 +22,7 @@ export function createFastControl(client, agentId = null, modelId = null) {
       const model = value.models.find((item) => modelId && modelId !== "mixdog-default"
         ? `${item.provider}/${item.id}` === modelId
         : item.provider === value.route.provider && item.id === value.route.model);
-      publish({ enabled: value.route.fast, available: model?.fastCapable === true });
+      publish({ enabled: value.route.fast, available: Boolean(value.route.model?.trim()) && model?.fastCapable === true });
     }
   }
   // 결과가 불확실하면 다음 누름도 조회만 한다. 쓰기는 자동 재전송하지 않는다.

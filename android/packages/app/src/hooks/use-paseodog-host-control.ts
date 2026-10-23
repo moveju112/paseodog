@@ -72,7 +72,7 @@ export function createConfirmedHostControl<T>(
 }
 
 export const autoEffortSnapshotSchema = z.object({
-  route: z.object({ autoEffort: z.boolean() }),
+  route: z.object({ autoEffort: z.boolean(), model: z.string().optional() }),
   toolModules: z
     .object({
       autoEffort: z.object({ supported: z.boolean().optional(), enabled: z.boolean() }).optional(),
@@ -100,7 +100,9 @@ export function subscribePaseodogHostSettings(client: ControlClient, listener: (
   const listeners = settingsListeners.get(client) ?? new Set<() => void>();
   settingsListeners.set(client, listeners);
   listeners.add(listener);
-  return () => { listeners.delete(listener); };
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 // 설정 화면의 저장 성공·실패 모두 확정값을 조회하며 쓰기는 재전송하지 않는다.

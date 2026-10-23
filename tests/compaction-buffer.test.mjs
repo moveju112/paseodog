@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { compactionBufferRatio, migrateCompactionBuffer } from '../engine/src/compaction-buffer.mjs';
-import { COMPACTION_BUFFER, COMPACTION_BUFFER_ANCHOR, withCompactionBuffer, withoutCompactionBuffer } from '../patches/paseo-compaction-buffer.mjs';
+import { COMPACTION_BUFFER, COMPACTION_BUFFER_ANCHOR, CONTEXT_LIMIT, CONTEXT_LIMIT_ANCHOR, withCompactionBuffer, withoutCompactionBuffer } from '../patches/paseo-compaction-buffer.mjs';
 import { controlRuntime } from '../engine/src/controls.mjs';
 import { createNativeEngine } from '../engine/src/native-engine.mjs';
 import { resolveSessionCompactPolicy } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/session/context-compaction-policy.mjs';
@@ -75,11 +75,35 @@ test('web bundle buffer options match the shared app source', () => {
     const appOptions = options(app.slice(app.indexOf('const bufferOptions'), app.indexOf('] as const', app.indexOf('const bufferOptions'))));
     assert.deepEqual(options(decode(COMPACTION_BUFFER)), appOptions);
     assert.deepEqual(appOptions.map(([value]) => value), ['0.1', '0.2', '0.25']);
-    const bundle = `a=1,_=${COMPACTION_BUFFER_ANCHOR},b=2`;
+    const bundle = `a=1,_=${COMPACTION_BUFFER_ANCHOR},b=2;${CONTEXT_LIMIT_ANCHOR}`;
     const patched = withCompactionBuffer(bundle);
     assert.ok(patched.includes(COMPACTION_BUFFER) && !patched.includes(COMPACTION_BUFFER_ANCHOR));
     assert.equal(withoutCompactionBuffer(patched), bundle);
     assert.throws(() => withCompactionBuffer(patched), /compaction buffer anchor mismatch/);
+    assert.throws(() => withCompactionBuffer(bundle.replace(CONTEXT_LIMIT_ANCHOR, 'changed')), /context limit anchor mismatch/);
+    assert.throws(() => withCompactionBuffer(`${bundle};${CONTEXT_LIMIT_ANCHOR}`), /context limit anchor mismatch/);
+});
+
+test('web context limits require a Main model and resume saving after selection', () => {
+    const render = new Function('l', 's', 'y', 'M', 'C', 'I', 'D', `${CONTEXT_LIMIT};return ie;`);
+    const jsx = { jsx: (type, props) => ({ type, props }) };
+    const calls = [];
+    const onChange = (value) => calls.push(value);
+    for (const model of ['', '   ', undefined]) {
+        const row = render({ route: { model } }, false, onChange, [], jsx, 'row', 'select');
+        assert.equal(row.props.hint, '새 대화 입력창에서 Main 모델을 먼저 선택해 주세요.');
+        assert.equal(row.props.children.props.disabled, true);
+        assert.equal(row.props.children.props.value, 'Main 모델 선택 필요');
+        row.props.children.props.onChange('50');
+    }
+    assert.deepEqual(calls, []);
+    const configured = render({ route: { model: 'small', contextPercent: 70 } }, false, onChange, [], jsx, 'row', 'select');
+    assert.equal(configured.props.children.props.disabled, false);
+    assert.equal(configured.props.children.props.value, '70');
+    configured.props.children.props.onChange('50');
+    assert.deepEqual(calls, ['50']);
+    const busy = render({ route: { model: 'small' } }, true, onChange, [], jsx, 'row', 'select');
+    assert.equal(busy.props.children.props.disabled, true);
 });
 
 // 설정 화면에는 저장 표현과 무관하게 비율로 보여 준다.

@@ -374,6 +374,30 @@ function screenHelpers(tree) {
     return { tree, press, labels };
 }
 
+test('token settings require a Main model before saving a context limit', async (t) => {
+    const { settings, renderScreen } = await loadClient(t);
+    const calls = [];
+    let route = { provider: 'subscription', model: '', fast: false, autoEffort: true };
+    globalThis.__paseodogTestRpc = async (input) => {
+        calls.push(input);
+        return { route, models: [], compaction: { auto: true }, workflows: [], agents: [], sessions: [], orchestration: 'none' };
+    };
+    const screen = await renderScreen(settings('mixdog-tokens'));
+    const limits = () => screen.tree.root.findAllByType('pressable')
+        .filter((node) => node.findByType('text').children.join('').includes('컨텍스트 한도'));
+    assert.equal(limits().length, 4);
+    assert.ok(limits().every((node) => node.props.disabled && !node.props.accessibilityState.selected));
+    assert.match(JSON.stringify(screen.tree.toJSON()), /새 대화 입력창에서 Main 모델을 먼저 선택해 주세요/);
+    assert.deepEqual(calls, [{ action: 'read' }]);
+    await screen.press('자동 압축: 켜짐');
+    assert.deepEqual(calls.at(-1), { action: 'compaction', enabled: false });
+    route = { ...route, model: 'small' };
+    await screen.press('새로고침');
+    assert.ok(limits().every((node) => !node.props.disabled));
+    await screen.press('컨텍스트 한도 50%');
+    assert.deepEqual(calls.at(-1), { action: 'main', route: { contextPercent: 50 } });
+});
+
 test('monitor switches to native token and OAuth usage with period selection and refresh', async (t) => {
     const { liveScreen, renderScreen } = await loadClient(t);
     const calls = [];
