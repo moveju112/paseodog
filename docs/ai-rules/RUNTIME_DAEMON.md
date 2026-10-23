@@ -13,6 +13,8 @@ Build, signing and GitHub publish order: [tasks/RELEASE.md](tasks/RELEASE.md). T
 
 ## How to apply
 
+- Before reload, restart, installation or relaunch, identify the dedicated runtime and check whether the operation would interrupt active work. Apply automatically when safe under the existing authorization; otherwise finish independent build/publication work and wait for an idle boundary or explicit interruption approval. Report published, installed and running versions separately.
+
 - **MUST** after changing `plugin/`, the product version or upstream pins, reload the plugin on the dedicated daemon and confirm `available`.
   - why: the daemon keeps the `VERSION` it loaded; a newer disk version makes the provider unavailable.
   - ✅ `evidence: plugin/server/provider.ts:29` — `PaseoDog engine version mismatch`

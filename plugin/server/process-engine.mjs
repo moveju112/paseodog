@@ -182,7 +182,9 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
                 compact(callbacks = {}) { return send('compact', {}, { waitMs: 0, callbacks }); },
                 status() { return send('status', {}, { waitMs: 5000, fatalOnTimeout: false }); },
                 async configure(changes) {
-                    const result = await send('configure', changes);
+                    // 모델 선택은 네이티브 압축 추론을 포함한다. 수동 압축과 동일하게 RPC 시간 제한으로 죽이지 않는다.
+                    const switchesModel = changes.route?.provider !== undefined || changes.route?.model !== undefined;
+                    const result = await send('configure', changes, { waitMs: switchesModel ? 0 : timeoutMs });
                     if (result && Object.hasOwn(result, 'autoEffort')) configuration = result;
                     return result;
                 },

@@ -287,10 +287,6 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
     value.setSystemShell = (s) => calls.push(['shell', s]);
     value.setWorktreeSettings = (w) => calls.push(['worktree', w]);
     value.setDisabledSkills = (d) => calls.push(['disabledSkills', d]);
-    value.addHookRule = (r) => calls.push(['addHook', r]);
-    value.setHookRuleEnabled = (i, v) => calls.push(['toggleHook', i, v]);
-    value.deleteHookRule = (i) => calls.push(['deleteHook', i]);
-    value.flushHookRules = () => calls.push(['flushHooks']);
     value.saveAgentDefinition = (p) => { calls.push(['agentSave', p]); return { id: p.id, name: p.name || p.id, body: p.body }; };
     value.createAgentDefinition = (p) => { calls.push(['agentCreate', p]); return { id: 'qa-bot', name: p.name, body: p.body, custom: true }; };
     value.deleteAgentDefinition = (id) => calls.push(['agentDelete', id]);
@@ -317,8 +313,6 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
         aiSessionTitles: true,
         shellCommand: '/bin/zsh',
         disabledSkills: ['legacy-skill'],
-        hookAction: 'add',
-        hookRule: { event: 'PreToolUse', matcher: 'Bash', command: 'echo ok' },
     });
     await controlRuntime(value, {
         action: 'agentSave',
@@ -351,8 +345,6 @@ test('newly ported Mixdog settings (features, preferences, compaction extras, ag
         ['aiSessionTitles', true],
         ['shell', { command: '/bin/zsh' }],
         ['disabledSkills', ['legacy-skill']],
-        ['addHook', { event: 'PreToolUse', matcher: 'Bash', command: 'echo ok' }],
-        ['flushHooks'],
         ['agentSave', {
             id: 'worker',
             name: 'Worker Pro',

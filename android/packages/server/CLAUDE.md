@@ -16,7 +16,7 @@ Paseo is a mobile + CLI app for monitoring and controlling local AI coding agent
 npm run dev                          # Start daemon + Expo in Tmux
 npm run build:server                 # Build: highlight + relay + protocol + client + server + cli
 npm run typecheck                    # Broad typecheck; prefer the affected package when sufficient
-npm run test                         # Full monorepo suite: only when explicitly requested
+npm run test                         # Full suite when impact requires it; serialize heavy runs
 npm run format:files -- <paths>      # Format only this session's changed files
 ```
 

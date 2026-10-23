@@ -1179,6 +1179,7 @@ export const ru: TranslationResources = {
       heading: "Отображение",
       grouping: {
         label: "Группировка",
+        single: "Одно рабочее пространство",
         project: "Проект",
         status: "Статус",
         labels: "Метки",

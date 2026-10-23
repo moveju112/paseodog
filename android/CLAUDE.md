@@ -123,9 +123,9 @@ and updating `next`, integrating it after a release, and releasing a hotfix from
 - **NEVER assume a timeout means the service needs restarting** — timeouts can be transient.
 - **NEVER make default tests depend on real provider login, credentials or billable calls.** Use deterministic fixtures for authentication and authorization boundaries; keep regression tests for permission allow/deny, ownership and access control.
 - **Before changing app routes, startup routing, remembered workspace restore, or active workspace selection, read [docs/expo-router.md](docs/expo-router.md).**
-- **NEVER run the full test suite locally.** The test suites are heavy and will freeze the machine, especially if multiple agents run them in parallel. Rules:
+- **Choose local test scope by change impact and available resources.** Broad suites can exhaust the machine, especially when sessions run them concurrently. Rules:
   - Run the test files affected by the behavior change: `npx vitest run <file> --bail=1`.
-  - Never run `npm run test` for the entire monorepo/workspace unless explicitly asked. This does not prohibit the parent PaseoDog root's `tests/*.test.mjs` suite.
+  - Use the full monorepo/workspace suite when the change impact requires it; serialize heavy runs and bound concurrency. If the necessary coverage cannot run safely, report it as unverified rather than replacing it with a smaller passing test. The parent PaseoDog root's `tests/*.test.mjs` suite is a different scope.
   - If logs must be saved on this work server, allocate a unique directory under `/data/tmp/ubuntu` with the parent rules' 3-day TTL; do not overwrite shared `/tmp/test-output.txt`.
   - Reuse another session's observed success only when the tested inputs and scope still match; rerun affected checks after relevant changes.
   - Full-suite CI runs follow an authorized push, not a push made merely to run checks.

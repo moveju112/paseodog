@@ -8,6 +8,7 @@ import { contextUsage } from '../plugin/server/util.mjs';
 import { fixture, until, deferred } from './helpers.mjs';
 import { COMPOSER_FILE, QUEUE_GUARD, patchedComposerSource, patchPaseoComposer, withoutWorktreeSetupTip } from '../scripts/patch-paseo-composer.mjs';
 import { withWhite2Theme, withoutWhite2Theme } from '../scripts/patch-paseo-theme.mjs';
+import { withoutSingleWorkspace } from '../patches/paseo-single-workspace.mjs';
 import { withoutCollaboration } from '../patches/paseo-collaboration.mjs';
 import { withoutAutoEffort } from '../patches/paseo-auto-effort.mjs';
 import { withoutAgentProgress } from '../patches/paseo-agent-progress.mjs';
@@ -29,8 +30,11 @@ import { withoutChatUsability } from '../patches/paseo-chat-usability.mjs';
 import { withoutMarkdownTable } from '../patches/paseo-markdown-table.mjs';
 import { withoutDaemonUpdate } from '../patches/paseo-daemon-update.mjs';
 import { withoutSettingsOrganization } from '../patches/paseo-settings-organization.mjs';
+import { withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
 // 사이드바 쿼터 패치 해제 (도넛 -> 고정 순서, 실제 composer 체인 순서)
 const withoutUsageOrder = (source) => {
+    source = withoutSingleWorkspace(source);
+    source = withoutSettingsBehavior(source);
     source = withoutSettingsOrganization(source);
     source = withoutDaemonUpdate(source);
     source = withoutMarkdownTable(source);

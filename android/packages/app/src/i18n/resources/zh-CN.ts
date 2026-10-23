@@ -1154,6 +1154,7 @@ export const zhCN: TranslationResources = {
       heading: "显示",
       grouping: {
         label: "分组",
+        single: "单一工作区",
         project: "项目",
         status: "状态",
         labels: "标签",

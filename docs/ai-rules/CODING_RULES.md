@@ -1,11 +1,11 @@
 # Coding rules
 
-Scope: `plugin/`, `engine/src/`, `scripts/`, `patches/`, `tests/`. Inside `android/` follow that tree's TS/oxfmt/oxlint conventions, but still add Korean flow comments to files PaseoDog adds.
+Scope: `plugin/`, `engine/src/`, `scripts/`, `patches/`, `tests/`. Inside `android/` follow that tree's TS/oxfmt/oxlint conventions. In PaseoDog-owned code, use Korean comments for non-obvious intent, constraints and side effects.
 
 ## Style
 
-- **MUST** write root code as ESM .mjs, 4-space indent, English camelCase identifiers, and a one-line Korean flow comment above each new function.
-  - why: the whole repo uses this shape; review checks intent via the comment.
+- **MUST** write root code as ESM .mjs, 4-space indent and English camelCase identifiers. Comment non-obvious intent, constraints and side effects in Korean; self-explanatory functions need no summary comment.
+  - why: preserve the local module/style contract without duplicating what the code already says.
   - ✅ `evidence: scripts/patch-paseo-composer.mjs:43` — `// 기존 첨부파일·대기열 저장 및 배출 로직을 유지하면서 ...`
 - **MUST** run CLI scripts directly only behind the `process.argv[1] === fileURLToPath(import.meta.url)` guard; end failures by printing `error.message` + `process.exitCode = 1`.
   - why: tests import the same module and check it per function.

@@ -1198,6 +1198,7 @@ export const es: TranslationResources = {
       heading: "Visualización",
       grouping: {
         label: "Agrupación",
+        single: "Espacio de trabajo único",
         project: "Proyecto",
         status: "Estado",
         labels: "Etiquetas",

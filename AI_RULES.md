@@ -4,8 +4,9 @@ PaseoDog joins Paseo (daemon, desktop/mobile/web/SSH clients) and Mixdog (infere
 
 ## Core Rules
 
-- Build, deploy, release and PC apply (plugin reload, daemon restart, PC app install) proceed immediately; NEVER defer for other sessions or active turns. In Git, stage/commit only your own changes and preserve others' — [RUNTIME_DAEMON](docs/ai-rules/RUNTIME_DAEMON.md).
-- Every code-change request ALWAYS includes, after verification and without asking, the full delivery: selective commit/push of your own changes, release (APK + .deb build, sign, GitHub publish), and every needed apply (plugin reload, daemon restart, web-bundle patch, PC app install). Only an explicit narrowing ("커밋만", "릴리즈 제외") wins — [RELEASE](docs/ai-rules/tasks/RELEASE.md).
+- Continue authorized build, release and PC apply without unnecessary approval loops. Before reload/restart/install, check the dedicated runtime for active work; do not interrupt active turns without approval covering that impact. Continue independent work and report any pending apply separately. In Git, stage/commit only your own changes and preserve others' — [RUNTIME_DAEMON](docs/ai-rules/RUNTIME_DAEMON.md).
+- Every code-change request ALWAYS includes, after verification and without asking, selective commit/push of your own changes. Do not build or release unless the user explicitly requests a build or release.
+- An explicit build OR release request includes the full delivery: build ALL release artifacts (APK, Linux .deb/AppImage, Windows installer), sign, publish to GitHub, and perform every needed apply (plugin reload, daemon restart, web-bundle patch, PC app install) — [RELEASE](docs/ai-rules/tasks/RELEASE.md).
 - Modify upstream code only via version + blob-hash gated `scripts/patch-*.mjs` + `patches/*.mjs`. NEVER edit `node_modules`, `~/.paseo`, `~/.mixdog` or sibling checkouts directly; NEVER add a hash bypass.
 - Change Paseo UI in shared app source (`android/packages/app/src`) AND the web-bundle patch with the same meaning; decide Android/desktop/web applicability every time — [CODING_RULES](docs/ai-rules/CODING_RULES.md).
 - Sessions default to ask mode. Keep upstream deny/block in every mode, NEVER auto-resend uncertain mutating requests, NEVER advertise unimplemented capabilities.

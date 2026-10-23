@@ -9,6 +9,26 @@ const script=fileURLToPath(new URL('./fixtures/worker-fixture.mjs',import.meta.u
 const processes=[];
 function factory(options={}){return processEngineFactory({launch:{command:process.execPath,args:[script],env:{...process.env}},spawnProcess:(...args)=>{const child=spawn(...args);processes.push(child);return child;},terminateProcess:child=>child.kill('SIGKILL'),timeoutMs:5000,stopMs:100,scopeMode:'test-only-process-group',...options});}
 const args={config:{cwd:tmpdir(),env:{},mcpServers:{},settings:{},persist:true}};
+test('model-switch compaction survives the ordinary RPC timeout and excludes concurrent work', async (t) => {
+    const engine = await factory().create({
+        ...args, config: { ...args.config, env: { TEST_HOLD_CONFIGURE: 'true' } },
+    });
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+        const pending = engine.configure({ route: { provider: 'other', model: 'next' } });
+        // 다음 RPC 왕복은 configure가 워커에 도착해 active를 점유했음을 보장한다.
+        await assert.rejects(engine.ask('normal', {}), /Worker busy/);
+        await assert.rejects(engine.configure({ effort: 'high' }), /Worker busy/);
+        await assert.rejects(engine.compact(), /Worker busy/);
+        t.mock.timers.tick(5001);
+        await engine.auth({});
+        assert.deepEqual((await pending).route, { provider: 'other', model: 'next' });
+        assert.equal((await engine.ask('normal', {})).result.content, 'child result');
+    } finally {
+        t.mock.timers.reset();
+        await engine.close();
+    }
+});
 // 계승된 자식 ID는 작업 결과로만 전달하고 현재 네이티브 세션 주소는 유지한다.
 test('fork result crosses real worker IPC without replacing the source session identity', async () => {
     const engine = await factory().create(args);

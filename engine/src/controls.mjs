@@ -9,6 +9,7 @@ import { normalizeOrchestrationMode } from './orchestration-mode.mjs';
 import { flushPendingSessionConfigWrites } from 'mixdog/src/session-runtime/config-lifecycle/config-writers.mjs';
 import { resourceControls } from './resource-controls.mjs';
 import { compactionBufferRatio } from './compaction-buffer.mjs';
+import { changeHookSettings, readHookSettings } from './hook-settings.mjs';
 
 // 인증정보·프롬프트·파일 경로 없이 모델 선택에 필요한 필드만 전달한다.
 export function modelProjection(row) {
@@ -281,15 +282,9 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             if (!Array.isArray(request.disabledSkills)) throw new Error('Invalid disabledSkills');
             await runtime.setDisabledSkills?.(request.disabledSkills.map(String));
         }
-        if (request.hookAction === 'add' && request.hookRule) {
-            await runtime.addHookRule?.(request.hookRule);
+        if (request.hookAction !== undefined) {
             await runtime.flushHookRules?.();
-        } else if (request.hookAction === 'toggle' && typeof request.hookIndex === 'number') {
-            await runtime.setHookRuleEnabled?.(request.hookIndex, Boolean(request.enabled));
-            await runtime.flushHookRules?.();
-        } else if (request.hookAction === 'delete' && typeof request.hookIndex === 'number') {
-            await runtime.deleteHookRule?.(request.hookIndex);
-            await runtime.flushHookRules?.();
+            changeHookSettings(await runtime.hooksStatus?.(), request);
         }
     } else if (action === 'workflow') {
         if (!(await runtime.listWorkflows()).some((row) => row.id === request.workflow)) throw new Error('Unknown workflow');
@@ -433,15 +428,7 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
                 items,
             };
         })(),
-        hooks: {
-            rules: (rawHooks?.rules || []).map((r, index) => ({
-                index,
-                event: String(r.event || ''),
-                matcher: String(r.matcher || ''),
-                command: String(r.command || ''),
-                enabled: r.enabled === true,
-            })),
-        },
+        hooks: readHookSettings(rawHooks),
         workflows: await Promise.all((await runtime.listWorkflows()).map(async ({ id, name, active, description, source, userOverride }) => {
             const pack = typeof runtime.getWorkflowPack === 'function'
                 ? await Promise.resolve(runtime.getWorkflowPack(id)).catch(() => null)

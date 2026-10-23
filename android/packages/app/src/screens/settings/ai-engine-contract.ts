@@ -124,6 +124,7 @@ export const engineSnapshotSchema = z.object({
       rules: z.array(
         z.object({
           index: z.number(),
+          revision: z.string().optional(),
           event: z.string(),
           matcher: z.string().optional(),
           command: z.string(),
@@ -327,6 +328,7 @@ export type EngineCommand =
       disabledSkills?: string[];
       hookAction?: "add" | "toggle" | "delete";
       hookIndex?: number;
+      hookRevision?: string;
       enabled?: boolean;
       hookRule?: {
         event: string;

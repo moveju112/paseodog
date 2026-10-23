@@ -3,6 +3,7 @@ import { QueryClient } from "@tanstack/react-query";
 import {
   APP_SETTINGS_KEY,
   APP_SETTINGS_QUERY_KEY,
+  APP_SETTINGS_SAVE_ERROR_KEY,
   DEFAULT_APP_SETTINGS,
   DEFAULT_CLIENT_SETTINGS,
   DEFAULT_CODE_FONT_SIZE,
@@ -622,6 +623,73 @@ describe("loadAppSettingsFromStorage", () => {
 });
 
 describe("saveAppSettings", () => {
+  it("keeps confirmed settings and an actionable error after a failed diagnostics opt-out", async () => {
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+    await saveAppSettings({ queryClient, updates: { clientErrorReportingEnabled: true }, deps });
+    const setItem = deps.storage.setItem;
+    deps.storage.setItem = async () => {
+      throw new Error("disk full");
+    };
+    await expect(
+      saveAppSettings({
+        queryClient,
+        updates: { clientErrorReportingEnabled: false },
+        deps,
+      }),
+    ).rejects.toThrow("disk full");
+    expect(queryClient.getQueryData(APP_SETTINGS_QUERY_KEY)).toMatchObject({
+      clientErrorReportingEnabled: true,
+    });
+    expect(await loadAppSettingsFromStorage(deps)).toMatchObject({
+      clientErrorReportingEnabled: true,
+    });
+    expect(queryClient.getQueryData(APP_SETTINGS_SAVE_ERROR_KEY)).toContain("저장하지 못했어요");
+    deps.storage.setItem = setItem;
+    await saveAppSettings({ queryClient, updates: { clientErrorReportingEnabled: false }, deps });
+    expect(await loadAppSettingsFromStorage(deps)).toMatchObject({
+      clientErrorReportingEnabled: false,
+    });
+    expect(queryClient.getQueryData(APP_SETTINGS_SAVE_ERROR_KEY)).toBeNull();
+  });
+
+  it("does not publish an unconfirmed value or carry a failed update into the next save", async () => {
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(APP_SETTINGS_QUERY_KEY, DEFAULT_CLIENT_SETTINGS);
+    let rejectWrite: (error: Error) => void = () => {};
+    let started: () => void = () => {};
+    const writing = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const setItem = deps.storage.setItem;
+    deps.storage.setItem = () => {
+      started();
+      return new Promise<void>((_resolve, reject) => {
+        rejectWrite = reject;
+      });
+    };
+    const first = saveAppSettings({
+      queryClient,
+      updates: { clientErrorReportingEnabled: false },
+      deps,
+    });
+    const failed = expect(first).rejects.toThrow("disk full");
+    await writing;
+    expect(queryClient.getQueryData(APP_SETTINGS_QUERY_KEY)).toMatchObject({
+      clientErrorReportingEnabled: true,
+    });
+    const second = saveAppSettings({ queryClient, updates: { hideReasoning: true }, deps });
+    deps.storage.setItem = setItem;
+    rejectWrite(new Error("disk full"));
+    await failed;
+    await second;
+    expect(await loadAppSettingsFromStorage(deps)).toMatchObject({
+      clientErrorReportingEnabled: true,
+      hideReasoning: true,
+    });
+  });
+
   it("applies consecutive functional updates to the latest cached settings", async () => {
     const deps = makeDeps();
     const queryClient = new QueryClient();

@@ -13,6 +13,7 @@ import { isElectronRuntime } from "@/desktop/host";
 import {
   APP_SETTINGS_KEY,
   APP_SETTINGS_QUERY_KEY,
+  APP_SETTINGS_SAVE_ERROR_KEY,
   CLIENT_ERROR_RETENTION_DAYS,
   DEFAULT_CLIENT_ERROR_RETENTION_DAYS,
   DEFAULT_APP_SETTINGS,
@@ -148,6 +149,17 @@ export interface UseSettingsReturn {
 
 type SettingsSelector<TSelected> = (settings: Settings) => TSelected;
 
+export function useAppSettingsSaveError(): string | null {
+  const { data } = useQuery<string | null>({
+    queryKey: APP_SETTINGS_SAVE_ERROR_KEY,
+    queryFn: () => null,
+    initialData: null,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+  return data;
+}
+
 export function useAppSettings(): UseAppSettingsReturn {
   const queryClient = useQueryClient();
   const { data, isPending, error } = useQuery({
@@ -158,27 +170,19 @@ export function useAppSettings(): UseAppSettingsReturn {
   });
 
   const updateSettings = useCallback(
-    async (updates: AppSettingsUpdate) => {
-      try {
-        await saveAppSettings({ queryClient, updates });
-      } catch (err) {
-        console.error("[AppSettings] Failed to save settings:", err);
-        throw err;
-      }
+    (updates: AppSettingsUpdate) => {
+      const pending = saveAppSettings({ queryClient, updates });
+      // void 호출도 처리하되 await 호출자는 원래 거절을 받는다. 오류는 설정 화면에 지속 표시한다.
+      void pending.catch(() => {});
+      return pending;
     },
     [queryClient],
   );
 
-  const resetSettings = useCallback(async () => {
-    try {
-      const next = { ...DEFAULT_CLIENT_SETTINGS };
-      queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
-      await AsyncStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(next));
-    } catch (err) {
-      console.error("[AppSettings] Failed to reset settings:", err);
-      throw err;
-    }
-  }, [queryClient]);
+  const resetSettings = useCallback(
+    () => updateSettings(() => ({ ...DEFAULT_CLIENT_SETTINGS })),
+    [updateSettings],
+  );
   const settings = useMemo(() => normalizeAppSettings(data), [data]);
 
   return {

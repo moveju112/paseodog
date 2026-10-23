@@ -1162,6 +1162,7 @@ export const ar: TranslationResources = {
       heading: "العرض",
       grouping: {
         label: "التجميع",
+        single: "مساحة عمل واحدة",
         project: "المشروع",
         status: "الحالة",
         labels: "التسميات",

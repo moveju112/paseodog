@@ -1170,6 +1170,7 @@ export const en = {
       heading: "Display",
       grouping: {
         label: "Grouping",
+        single: "Single workspace",
         project: "Project",
         status: "Status",
         labels: "Labels",

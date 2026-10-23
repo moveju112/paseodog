@@ -10,6 +10,7 @@ import { createAuthSession } from './auth-session.mjs';
 import { agentMessageSource, agentMessageContent, pendingAgentMessage } from '../../plugin/server/agent-message.mjs';
 import { nativeSessionAction } from './session-actions.mjs';
 import { migrateCompactionBuffer } from './compaction-buffer.mjs';
+import { compactBeforeModelSwitch } from './model-switch.mjs';
 import { turnFailureRecord } from 'mixdog/src/runtime/agent/orchestrator/session/turn-failure.mjs';
 import { RETRY_CONTINUE_INSTRUCTION } from 'mixdog/src/tui/session/quota-resume.mjs';
 
@@ -79,6 +80,7 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
         }
     }
     let closed = false;
+    let configurationGeneration = 0;
     let quotaFailure = null;
     let currentEffortOptions = args.effortOptions;
     const effortSettings = { ...config.settings };
@@ -246,6 +248,11 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
                 // 비율 선택이 이전의 절대 토큰 한도에 가려지지 않도록 원본의 해제 값을 전달한다.
                 if (Object.hasOwn(next, 'contextPercent') && !Object.hasOwn(next, 'contextTokens'))
                     selected.contextTokens = null;
+                const generation = configurationGeneration;
+                if (modelSelection) await compactBeforeModelSwitch(runtime, selected, native.loadConfig, () => {
+                    if (closed || generation !== configurationGeneration)
+                        throw new Error('모델 변경이 취소됐어요.');
+                });
                 await runtime.setRoute(selected, { applyToCurrentSession: true, sessionOnly: true, keepMainModel: true });
                 if (changes.effortOptions) currentEffortOptions = changes.effortOptions;
                 if (modelSelection) {
@@ -322,6 +329,7 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
             };
         },
         async abort(reason) {
+            configurationGeneration++;
             try { await orchestration.abort(reason); } finally { await runtime.abort(reason); }
         },
         async close(reason) {

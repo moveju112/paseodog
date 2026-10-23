@@ -1175,6 +1175,7 @@ export const ja: TranslationResources = {
       heading: "表示",
       grouping: {
         label: "グループ化",
+        single: "単一ワークスペース",
         project: "プロジェクト",
         status: "ステータス",
         labels: "ラベル",

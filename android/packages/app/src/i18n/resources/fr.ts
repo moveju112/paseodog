@@ -1189,6 +1189,7 @@ export const fr: TranslationResources = {
       heading: "Affichage",
       grouping: {
         label: "Regroupement",
+        single: "Espace de travail unique",
         project: "Projet",
         status: "Statut",
         labels: "Libellés",

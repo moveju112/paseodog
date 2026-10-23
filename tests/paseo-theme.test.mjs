@@ -30,8 +30,12 @@ import { withoutChatUsability } from '../patches/paseo-chat-usability.mjs';
 import { withoutMarkdownTable } from '../patches/paseo-markdown-table.mjs';
 import { withoutDaemonUpdate } from '../patches/paseo-daemon-update.mjs';
 import { withoutSettingsOrganization } from '../patches/paseo-settings-organization.mjs';
+import { withoutSingleWorkspace } from '../patches/paseo-single-workspace.mjs';
+import { withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
 // 사이드바 쿼터 패치 해제 (도넛 -> 고정 순서, 실제 composer 체인 순서)
 const withoutUsageOrder = (source) => {
+    source = withoutSingleWorkspace(source);
+    source = withoutSettingsBehavior(source);
     source = withoutSettingsOrganization(source);
     source = withoutDaemonUpdate(source);
     source = withoutMarkdownTable(source);
@@ -154,7 +158,7 @@ test('White2 persists through the native settings schema and has localized label
     assert.deepEqual(await persistTheme(original, 'white2'), ['white2', 'auto']);
     assert.deepEqual(await persistTheme(patched, 'white2'), ['white2', 'white2']);
     assert.deepEqual(await persistTheme(patched, 'light'), ['light', 'light']);
-    assert.deepEqual(await persistTheme(patched, 'white3'), ['white3', 'auto']);
+    assert.deepEqual(await persistTheme(patched, 'white3'), ['auto', 'auto']);
     assert.equal(patched.split(WHITE2_OPTION).length, 2);
     const labels = [...patched.matchAll(/pureBlack:"[^"]*",white2:("[^"]*"),neutralPearl:"[^"]*",softLinen:"[^"]*",auto:"/g)].map((match) => JSON.parse(match[1]));
     assert.equal(labels.length, WHITE2_LABELS.length);

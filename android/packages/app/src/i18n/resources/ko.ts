@@ -1169,6 +1169,7 @@ export const ko: TranslationResources = {
       heading: "표시",
       grouping: {
         label: "그룹화",
+        single: "단일 워크스페이스",
         project: "프로젝트",
         status: "상태",
         labels: "레이블",

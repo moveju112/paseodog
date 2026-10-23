@@ -537,13 +537,14 @@ function SkillsSection({ snapshot, disabled, request }: SectionProps) {
             <View style={layout.formActions}>
               <Switch
                 accessibilityLabel={`훅 ${hook.index}`}
-                disabled={disabled}
+                disabled={disabled || !hook.revision}
                 value={hook.enabled}
                 onValueChange={(next) =>
                   void request({
                     action: "preferences",
                     hookAction: "toggle",
                     hookIndex: hook.index,
+                    hookRevision: hook.revision,
                     enabled: next,
                   })
                 }
@@ -551,12 +552,13 @@ function SkillsSection({ snapshot, disabled, request }: SectionProps) {
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={disabled}
+                disabled={disabled || !hook.revision}
                 onPress={() =>
                   void request({
                     action: "preferences",
                     hookAction: "delete",
                     hookIndex: hook.index,
+                    hookRevision: hook.revision,
                   })
                 }
               >
@@ -578,7 +580,7 @@ function SkillsSection({ snapshot, disabled, request }: SectionProps) {
       </View>
       {addingHook && (
         <View style={[settingsStyles.card, layout.form]}>
-          <Text style={settingsStyles.rowTitle}>새 라이프사이클 훅 추가</Text>
+          <Text style={settingsStyles.rowTitle}>새 라이프사이클 훅 추가 (저장 후 직접 켜기)</Text>
           <SettingRow title="이벤트 시점">
             <Select
               title="훅 이벤트 선택"

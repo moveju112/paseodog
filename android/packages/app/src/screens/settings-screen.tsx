@@ -54,7 +54,7 @@ import { TerminalSection } from "@/screens/settings/terminal/terminal-section";
 import { ChatSection } from "@/screens/settings/chat/chat-section";
 import { SidebarNavSection } from "@/screens/settings/sidebar/sidebar-nav-section";
 import { SendingSection } from "@/screens/settings/general/sending-section";
-import { useAppSettings, type AppSettings } from "@/hooks/use-settings";
+import { useAppSettings, useAppSettingsSaveError, type AppSettings } from "@/hooks/use-settings";
 import { useHostRuntimeIsConnected, useHosts } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import {
@@ -1075,6 +1075,15 @@ export interface SettingsScreenProps {
   openAddHostIntent?: string | null;
 }
 
+function AppSettingsSaveError() {
+  const error = useAppSettingsSaveError();
+  return error ? (
+    <Text accessibilityRole="alert" style={settingsStyles.rowError}>
+      {error}
+    </Text>
+  ) : null;
+}
+
 export default function SettingsScreen({ view, openAddHostIntent = null }: SettingsScreenProps) {
   const router = useRouter();
   const { t } = useTranslation();
@@ -1470,6 +1479,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
     return (
       <View style={styles.container}>
         <PageLayout title={detailTitle} onBack={handleBackFromDetail}>
+          <AppSettingsSaveError />
           {content}
         </PageLayout>
         {addHostModals}
@@ -1498,6 +1508,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
         <WindowChromeRegion corners="top-right">
           <View style={desktopStyles.contentPane} testID="settings-detail-pane">
             <PageLayout title={detailTitle} titleTestID="settings-detail-header-title">
+              <AppSettingsSaveError />
               {content}
             </PageLayout>
           </View>

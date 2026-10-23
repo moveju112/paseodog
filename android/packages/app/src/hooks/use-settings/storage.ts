@@ -33,6 +33,8 @@ import { ASSISTANT_ICONS, type AssistantIcon } from "./assistant-icons";
 
 export { APP_SETTINGS_KEY } from "./keys";
 export const APP_SETTINGS_QUERY_KEY = ["app-settings"];
+export const APP_SETTINGS_SAVE_ERROR_KEY = ["app-settings-save-error"];
+const pendingSaves = new WeakMap<QueryClient, Promise<void>>();
 
 export type SendBehavior = ActiveTurnBehavior | "queue";
 export type ReleaseChannel = "stable" | "beta";
@@ -380,24 +382,43 @@ export interface SettingsDeps {
   desktop: DesktopSettingsBridge;
 }
 
-export async function saveAppSettings(input: {
+export function saveAppSettings(input: {
   queryClient: QueryClient;
   updates: AppSettingsUpdate;
   deps: SettingsDeps;
 }): Promise<void> {
-  const storedCurrent =
-    input.queryClient.getQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY) ??
-    (await loadAppSettingsFromStorage(input.deps));
-  const current = normalizeAppSettings(storedCurrent);
-  const updates = typeof input.updates === "function" ? input.updates(current) : input.updates;
-  const next = { ...current, ...updates };
-  input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
-  await writeAppSettings(
-    input.deps.storage,
-    (await readSettingsObject(input.deps.storage, APP_SETTINGS_KEY)) ??
-      StoredAppSettingsSchema.parse({}),
-    next,
+  // 저장을 직렬화하고 성공값만 공개한다. 실패한 변경이 다음 저장에 섞이거나 화면에 남지 않는다.
+  const save = async () => {
+    try {
+      const storedCurrent =
+        input.queryClient.getQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY) ??
+        (await loadAppSettingsFromStorage(input.deps));
+      const current = normalizeAppSettings(storedCurrent);
+      const updates = typeof input.updates === "function" ? input.updates(current) : input.updates;
+      const next = normalizeAppSettings({ ...current, ...updates });
+      await writeAppSettings(
+        input.deps.storage,
+        (await readSettingsObject(input.deps.storage, APP_SETTINGS_KEY)) ??
+          StoredAppSettingsSchema.parse({}),
+        next,
+      );
+      input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
+      input.queryClient.setQueryData(APP_SETTINGS_SAVE_ERROR_KEY, null);
+    } catch (error) {
+      input.queryClient.setQueryData(
+        APP_SETTINGS_SAVE_ERROR_KEY,
+        "설정을 저장하지 못했어요. 이전 설정을 유지했어요. 저장 공간·권한을 확인하고 다시 변경해 주세요.",
+      );
+      throw error;
+    }
+  };
+  const pending = pendingSaves.get(input.queryClient) ?? Promise.resolve();
+  const result = pending.then(save);
+  pendingSaves.set(
+    input.queryClient,
+    result.catch(() => {}),
   );
+  return result;
 }
 
 export async function loadAppSettingsFromStorage(deps: SettingsDeps): Promise<AppSettings> {

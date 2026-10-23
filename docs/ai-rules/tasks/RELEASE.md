@@ -23,20 +23,19 @@ Every requested build/release also includes the following web delivery after Git
 5. APK: run `CI=1 APP_VARIANT=production npx expo prebuild --platform android --no-install` in `android/packages/app` ONLY when `app.config.js`, `plugins/`, `modules/*/app.plugin*` or native dependencies changed (prebuild invalidates native build caches); otherwise reuse the generated project. Then in `android/packages/app/android/`, with the signing init script, `./gradlew assembleRelease -PpaseodogVersionCode=<vc> -PpaseodogVersionName=<제품 버전>.<vc>`.
    The runner overlaps APK with web export and then one desktop packager. Linux and Windows packaging run sequentially: three simultaneous heavyweight builds caused a measured `systemd-oomd` kill. Do not start a third heavyweight stage to fill the APK's remaining time.
 6. Confirm the signing key file matches the init script's `signingConfigs.debug.storeFile`. If the key is missing, stop and report; NEVER create a new key. Per APK: `zipalign`, `apksigner verify`, package ID, version, ABI.
-7. .deb: after step 4's deps build, `cd android/packages/app && CI=1 PASEO_WEB_PLATFORM=electron npx expo export --platform web && cd ../.. && npm run build:package --workspace=@getpaseo/desktop -- --linux deb AppImage -c.extraMetadata.version=<제품 버전>.<versionCode>` (same as `npm run build:desktop` minus deps; one invocation so `latest-linux.yml` lists both the .deb and the AppImage; tar.gz is skipped). Windows: `--win nsis --x64` with the same version (installer only, no zip). If the change touches only Android-native files (`android/packages/app/plugins/`, `modules/*/android/`, Android-only config), skip the Linux build and re-upload the previous latest release's `.deb` + `latest-linux.yml` unchanged.
+7. .deb: after step 4's deps build, `cd android/packages/app && CI=1 PASEO_WEB_PLATFORM=electron npx expo export --platform web && cd ../.. && npm run build:package --workspace=@getpaseo/desktop -- --linux deb AppImage -c.extraMetadata.version=<제품 버전>.<versionCode>` (same as `npm run build:desktop` minus deps; one invocation so `latest-linux.yml` lists both the .deb and the AppImage; tar.gz is skipped). Windows: `--win nsis --x64` with the same version (installer only, no zip).
    `evidence: android/package.json:96`
-8. If source changes after a build, rebuild only affected artifacts.
 
 ## C. Publish
 
-9. One release version everywhere: `<ver>` = `<제품 버전>.<versionCode>` (e.g. `1.0.0-rc.7.11052`). Copy the APK as `PaseoDog-<ver>-arm64-v8a.apk`, then update JSON: `python3 scripts/android-update-manifest.py --version-code <vc> --version-name <ver> --tag v<ver> --target-abi arm64-v8a --output paseodog-android-update.json <apk>`.
+8. One release version everywhere: `<ver>` = `<제품 버전>.<versionCode>` (e.g. `1.0.0-rc.7.11052`). Copy the APK as `PaseoDog-<ver>-arm64-v8a.apk`, then update JSON: `python3 scripts/android-update-manifest.py --version-code <vc> --version-name <ver> --tag v<ver> --target-abi arm64-v8a --output paseodog-android-update.json <apk>`.
     `evidence: scripts/android-update-manifest.py:59`
-10. Tag `v<ver>` (check duplicates), title `PaseoDog <ver>`. Upload to ONE draft release: APK, `paseodog-android-update.json`, .deb, AppImage, `latest-linux.yml`, Windows `.exe` + `.exe.blockmap` + `latest.yml`, and `SHA256SUMS`. The phone reads `releases/latest/download/paseodog-android-update.json` and the desktop updater reads `releases/latest`, so the tag name itself is free.
+9. Tag `v<ver>` (check duplicates), title `PaseoDog <ver>`. Upload to ONE draft release: APK, `paseodog-android-update.json`, .deb, AppImage, `latest-linux.yml`, Windows `.exe` + `.exe.blockmap` + `latest.yml`, and `SHA256SUMS`. The phone reads `releases/latest/download/paseodog-android-update.json` and the desktop updater reads `releases/latest`, so the tag name itself is free.
     `evidence: android/packages/desktop/electron-builder.yml:48`
-11. Compare remote asset names and byte sizes with local (no re-download), then publish and mark latest.
+10. Compare remote asset names and byte sizes with local (no re-download), then publish and mark latest.
     `evidence: android/packages/app/src/components/paseodog-update-row.tsx:44`
 
 ## D. PC apply and wrap-up
 
-12. Install the same .deb on this PC with `sudo dpkg -i`, relaunch the app, and reload plugin / restart daemon as needed — [RUNTIME_DAEMON.md](../RUNTIME_DAEMON.md) "How to apply".
-13. Commit title in Korean: `<변경 요약> 및 <vc> 릴리즈`.
+11. Install the same .deb on this PC with `sudo dpkg -i`, relaunch the app, and reload plugin / restart daemon as needed — [RUNTIME_DAEMON.md](../RUNTIME_DAEMON.md) "How to apply".
+12. Commit title in Korean: `<변경 요약> 및 <vc> 릴리즈`.

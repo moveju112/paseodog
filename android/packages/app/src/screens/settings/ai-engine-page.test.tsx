@@ -287,6 +287,27 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("native host AI engine settings", () => {
+  it("addresses a hook toggle using the displayed revision", async () => {
+    const revision = "a".repeat(24);
+    host.invokePluginRpc.mockResolvedValue({
+      ...snapshot,
+      hooks: {
+        rules: [{ index: 0, revision, event: "PostToolUse", command: "echo ok", enabled: false }],
+      },
+    });
+    render(<AiEnginePage serverId="hooks-host" section="skills" />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "훅 0" }));
+    await waitFor(() =>
+      expect(host.invokePluginRpc).toHaveBeenCalledWith("paseodog-provider", "engine-controls", {
+        action: "preferences",
+        hookAction: "toggle",
+        hookIndex: 0,
+        hookRevision: revision,
+        enabled: true,
+      }),
+    );
+  });
+
   it("retains each host output style after saving, rereading and reopening settings", async () => {
     const outputStyles = [
       { id: "detailed", label: "Detailed" },

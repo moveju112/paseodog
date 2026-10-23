@@ -177,6 +177,7 @@ export const engineControls = defineRpc({
         disabledSkills: z.array(z.string().max(120)).max(200).optional(),
         hookAction: z.enum(['add', 'toggle', 'delete']).optional(),
         hookIndex: z.number().int().min(0).optional(),
+        hookRevision: z.string().regex(/^[a-f0-9]{24}$/).optional(),
         hookRule: z.object({
             event: z.string().max(64),
             matcher: z.string().max(256).optional(),

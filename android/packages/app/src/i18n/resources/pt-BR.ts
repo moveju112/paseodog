@@ -1188,6 +1188,7 @@ export const ptBR: TranslationResources = {
       heading: "Exibição",
       grouping: {
         label: "Agrupamento",
+        single: "Espaço de trabalho único",
         project: "Projeto",
         status: "Status",
         labels: "Etiquetas",
