@@ -1,29 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createRequire } from 'node:module';
 
-// 실제 NSIS 코드와 nsProcess 플러그인을 격리된 Windows/Wine에서 실행한다.
+// 실제 NSIS 코드와 Windows 프로세스 API를 격리된 Windows/Wine에서 실행한다.
 const compiler = process.env.PASEODOG_NSIS_BINARY;
-const plugins = process.env.PASEODOG_NSIS_PLUGINS;
 const runner = process.env.PASEODOG_WINDOWS_RUNNER;
 const root = fileURLToPath(new URL('../', import.meta.url));
 const config = createRequire(import.meta.url)('../android/packages/desktop/electron-builder.cjs');
 
 test('Windows installer closes background processes only after consent', {
-    skip: !compiler || !plugins || !runner ? 'Set PASEODOG_NSIS_BINARY, PASEODOG_NSIS_PLUGINS and PASEODOG_WINDOWS_RUNNER' : false,
+    skip: !compiler || !runner ? 'Set PASEODOG_NSIS_BINARY and PASEODOG_WINDOWS_RUNNER' : false,
     timeout: 120_000,
 }, async t => {
     const directory = mkdtempSync(join(tmpdir(), 'paseodog-installer-test-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const appName = `PaseoDogFixture${process.pid}.exe`;
-    const otherName = `OtherFixture${process.pid}.exe`;
     const title = `PaseoDog installer fixture ${process.pid}`;
+    const installed = join(directory, 'installed');
+    const outside = join(directory, 'installed-other');
+    mkdirSync(installed);
+    mkdirSync(outside);
     const children = new Set();
     t.after(() => {
         for (const child of children) child.kill();
@@ -34,7 +36,6 @@ test('Windows installer closes background processes only after consent', {
         const executable = join(directory, `${name}.exe`);
         writeFileSync(source, `Unicode true
 !include "LogicLib.nsh"
-!addplugindir "${plugins}"
 OutFile "${executable}"
 RequestExecutionLevel user
 ${body}
@@ -61,7 +62,15 @@ ${body}
         return child;
     }
 
-    // PowerShell·taskkill 없이 창이 없는 여러 프로세스까지 종료해야 한다.
+    async function waitForReady(paths) {
+        const deadline = Date.now() + 30_000;
+        while (!paths.every(path => existsSync(path))) {
+            assert.ok(Date.now() < deadline, 'Fixture processes did not become ready');
+            await delay(100);
+        }
+    }
+
+    // 이름이 다른 내장 실행파일은 종료하고, 경로 접두사만 비슷한 별도 설치는 보존한다.
     const appBody = `SilentInstall silent
 !include "FileFunc.nsh"
 Section
@@ -71,18 +80,36 @@ Section
   FileClose $1
   Sleep 60000
 SectionEnd`;
-    const app = compile(appName.slice(0, -4), appBody);
-    const other = compile(otherName.slice(0, -4), appBody);
-    const installer = compile('installer', `Name "${title}"
+    const app = compile(`installed/${appName.slice(0, -4)}`, appBody);
+    const native = compile('installed/native-helper', appBody);
+    const other = compile(`installed-other/${appName.slice(0, -4)}`, appBody);
+    compile('installed/installer', `Name "${title}"
 Caption "${title}"
 !define APP_EXECUTABLE_FILENAME "${appName}"
-!include "${resolve(root, 'android/node_modules/app-builder-lib/templates/nsis/include/nsProcess.nsh')}"
 !include "${resolve(root, 'android/packages/desktop', config.nsis.include)}"
 Page instfiles
 Section
+  StrCpy $INSTDIR "$EXEDIR"
   !insertmacro customCheckAppRunning
   SetErrorLevel 0
   SetAutoClose true
+SectionEnd`);
+    // 실제 업그레이드처럼 설치 폴더 안의 부모 설치기도 실행 상태로 둔다.
+    const installer = compile('installed/launcher', `SilentInstall silent
+!include "FileFunc.nsh"
+Section
+  ${'${GetParameters}'} $0
+  ExecWait '"$EXEDIR\\installer.exe" $0' $1
+  SetErrorLevel $1
+SectionEnd`);
+    const invalidTarget = compile('invalid-target', `SilentInstall silent
+!define APP_EXECUTABLE_FILENAME "${appName}"
+!include "${resolve(root, 'android/packages/desktop', config.nsis.include)}"
+!include "FileFunc.nsh"
+Section
+  ${'${GetParameters}'} $INSTDIR
+  !insertmacro customCheckAppRunning
+  SetErrorLevel 0
 SectionEnd`);
     const clickerBody = button => `SilentInstall silent
 Section
@@ -114,30 +141,28 @@ SectionEnd`;
 
     const empty = await launch(installer, ['/S']).result;
     assert.equal(empty, 0);
-    const first = launch(app, ['first']);
-    const second = launch(app, ['second']);
+    assert.equal(await launch(invalidTarget).result, 1603 & 255);
+    assert.equal(await launch(invalidTarget, ['C:\\']).result, 1603 & 255);
+    const second = launch(native, ['second']);
     const unrelated = launch(other, ['other']);
-    const deadline = Date.now() + 30_000;
-    while (!['first', 'second', 'other'].every(name => existsSync(join(directory, `${name}.ready`)))) {
-        assert.ok(Date.now() < deadline, 'Fixture processes did not become ready');
-        await delay(100);
-    }
+    await waitForReady([join(installed, 'second.ready'), join(outside, 'other.ready')]);
+    // PaseoDog.exe가 전혀 없어도 설치 폴더의 다른 실행파일은 감지해야 한다.
     const silent = await launch(installer, ['/S']).result;
     assert.equal(silent, 1602 & 255);
-    assert.equal(first.exitCode, null);
     assert.equal(second.exitCode, null);
     const decline = launch(decliner);
     const cancelled = await launch(installer).result;
     const declined = await decline.result;
     assert.equal(declined, 0);
     assert.equal(cancelled, 1602 & 255);
-    assert.equal(first.exitCode, null);
     assert.equal(second.exitCode, null);
+    const first = launch(app, ['first']);
+    await waitForReady([join(installed, 'first.ready')]);
     const accept = launch(clicker);
-    const installed = await launch(installer).result;
+    const completed = await launch(installer).result;
     const accepted = await accept.result;
     assert.equal(accepted, 0);
-    assert.equal(installed, 0);
+    assert.equal(completed, 0);
     await Promise.all([first.result, second.result]);
     assert.equal(unrelated.exitCode, null, 'Unrelated executables must remain running');
 });
