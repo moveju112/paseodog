@@ -94,7 +94,6 @@ win:
     - "!node_modules/sherpa-onnx-{darwin,linux}-*/**"
   artifactName: "PaseoDog-Setup-${version}-${arch}.${ext}"
   icon: assets/icon.ico
-  signAndEditExecutable: false
   extraResources:
     - from: bin/paseo.cmd
       to: bin/paseo.cmd
@@ -103,6 +102,7 @@ win:
       arch:
         - x64
 nsis:
+  script: dist/installer.nsi
   include: scripts/installer.nsh
   oneClick: false
   perMachine: false

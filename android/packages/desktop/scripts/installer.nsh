@@ -236,3 +236,69 @@ FunctionEnd
   paseodog_processes_closed:
   Pop $R0
 !macroend
+
+!macro paseodogCopyTreeFunction
+Var paseodogCopySource
+Var paseodogCopyDestination
+
+; Shell 파일 복사에서 누락되는 긴 경로도 Win32 확장 경로로 복사하고 결과를 확인한다.
+Function paseodogCopyTree
+  Exch $R0
+  Push $R1
+  Push $R2
+  Push $R3
+  Push $R4
+  Push $R5
+  StrCpy $R3 0
+  System::Call 'kernel32::CreateDirectoryW(w "\\?\$paseodogCopyDestination$R0", p 0) i.R4 ?e'
+  Pop $R5
+  ${If} $R4 == 0
+  ${AndIf} $R5 != 183
+    StrCpy $R3 "$R0 (Win32 $R5)"
+    Goto copy_return
+  ${EndIf}
+  ClearErrors
+  FindFirst $R1 $R2 "\\?\$paseodogCopySource$R0\*"
+  IfErrors copy_find_error
+  copy_entry:
+    StrCmp $R2 "" copy_close
+    StrCmp $R2 "." copy_next
+    StrCmp $R2 ".." copy_next
+    System::Call 'kernel32::GetFileAttributesW(w "\\?\$paseodogCopySource$R0\$R2") i.R4 ?e'
+    Pop $R5
+    ${If} $R4 == -1
+      Goto copy_error
+    ${EndIf}
+    IntOp $R4 $R4 & 16
+    ${If} $R4 != 0
+      Push "$R0\$R2"
+      Call paseodogCopyTree
+      Pop $R3
+      StrCmp $R3 0 copy_next copy_close
+    ${EndIf}
+    System::Call 'kernel32::CopyFileW(w "\\?\$paseodogCopySource$R0\$R2", w "\\?\$paseodogCopyDestination$R0\$R2", i 0) i.R4 ?e'
+    Pop $R5
+    ${If} $R4 == 0
+      Goto copy_error
+    ${EndIf}
+  copy_next:
+    FindNext $R1 $R2
+    Goto copy_entry
+  copy_error:
+    StrCpy $R3 "$R0\$R2 (Win32 $R5)"
+  copy_close:
+    FindClose $R1
+    Goto copy_return
+  copy_find_error:
+    System::Call 'kernel32::GetLastError() i.R5'
+    StrCpy $R3 "$R0 (Win32 $R5)"
+  copy_return:
+    StrCpy $R0 $R3
+    Pop $R5
+    Pop $R4
+    Pop $R3
+    Pop $R2
+    Pop $R1
+    Exch $R0
+FunctionEnd
+!macroend
