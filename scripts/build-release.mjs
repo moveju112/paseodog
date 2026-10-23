@@ -18,14 +18,19 @@ async function settleBuilds(builds) {
 // 공통 의존성은 한 번만 빌드하고 웹이 준비되는 즉시 PC 패키징을 시작한다.
 export async function runReleaseBuild(run) {
     await run('dependencies');
+    const android = run('android');
     await settleBuilds([
-        run('android'),
+        android,
         (async () => {
             await run('web');
             await run('desktop-main');
-            // APK와 PC 두 플랫폼을 한꺼번에 실행하면 메모리 압박으로 Gradle이 종료될 수 있다.
-            await run('linux');
-            await run('windows');
+            const linux = run('linux');
+            // APK 또는 Linux가 끝나 빈 자리가 생기면 Windows를 시작한다. 최대 두 작업은 유지한다.
+            const windows = (async () => {
+                await Promise.race([android, linux]);
+                await run('windows');
+            })();
+            await settleBuilds([linux, windows]);
         })(),
     ]);
 }

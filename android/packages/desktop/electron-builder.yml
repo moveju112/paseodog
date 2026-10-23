@@ -82,6 +82,7 @@ linux:
     - AppImage
     - deb
 deb:
+  compression: gz
   afterInstall: scripts/linux-sandbox/after-install.tpl
 rpm:
   afterInstall: scripts/linux-sandbox/after-install.tpl

@@ -132,7 +132,32 @@ test('unchanged pre-commit source checks are reused for delivery and a changed t
     assert.equal((await verifyReleaseSource(config, run)).cached, true);
     assert.equal(checks, before);
     assert.equal((await verifyReleaseSource({ ...config, appTests: ['src/second.test.ts'] }, run)).cached, false);
-    assert.equal(checks, before * 2);
+    assert.equal(checks, before + 1);
+});
+
+test('verification retains completed checks across failure and output-workspace changes', async t => {
+    const cacheRoot = await temporary(t);
+    const workspace = await temporary(t);
+    const counts = new Map();
+    let fail = true;
+    const run = async (command, args, options) => {
+        if (command === 'git') return '';
+        const name = options.log.split('/').at(-1);
+        counts.set(name, (counts.get(name) || 0) + 1);
+        if (name === 'test.log' && fail) throw new Error('test failure');
+        return '';
+    };
+    const config = { cacheRoot, workspace, appTests: ['src/first.test.ts'] };
+    await assert.rejects(verifyReleaseSource(config, run), /test failure/);
+    assert.equal(counts.size, 5);
+    fail = false;
+    const resumed = await verifyReleaseSource({ ...config, workspace: await temporary(t) }, run);
+    assert.equal(resumed.results.filter(result => result.cached).length, 4);
+    assert.equal(counts.get('test.log'), 2);
+    assert.equal(counts.get('check.log'), 1);
+    assert.equal(counts.get('app-types.log'), 1);
+    await verifyReleaseSource({ ...config, verificationEpoch: 1 }, run);
+    assert.equal(counts.get('check.log'), 2);
 });
 
 test('integrated delivery verifies before publishing and resumes without replaying mutations', async t => {

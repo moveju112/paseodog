@@ -16,6 +16,7 @@
     "check": "node scripts/check.mjs",
     "build:release": "node scripts/build-release.mjs",
     "deliver:release": "node scripts/release-pipeline.mjs",
+    "deliver:prepare": "node scripts/release-prepare.mjs",
     "typecheck": "npm --prefix plugin run typecheck",
     "test:live": "node scripts/live-smoke.mjs",
     "test:native": "node tests/native-orchestration-smoke.mjs",

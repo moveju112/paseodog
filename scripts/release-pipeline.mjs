@@ -12,6 +12,7 @@ import { verifyReleaseWeb } from './release-web-check.mjs';
 import { root } from './paths.mjs';
 import { restartDesktop } from './release-apply.mjs';
 import { verifyReleaseSource } from './release-verification.mjs';
+import { releasePreflight } from './release-preflight.mjs';
 import release from '../plugin/shared/release.json' with { type: 'json' };
 
 const self = fileURLToPath(import.meta.url);
@@ -185,7 +186,10 @@ if (process.argv[1] && resolve(process.argv[1]) === self) {
         } });
         if (!values.config || !isAbsolute(values.config)) throw new Error('--config requires an absolute JSON path');
         const config = validateReleaseConfig(JSON.parse(await readFile(values.config, 'utf8')));
-        if (values['verify-only']) await verifyReleaseSource(config);
+        if (values['verify-only']) {
+            await releasePreflight(config);
+            await verifyReleaseSource(config);
+        }
         else if (values['unlock-stopped']) await unlockStoppedDelivery(config.workspace);
         else if (values.status) console.log(await readFile(join(config.workspace, 'release-state.json'), 'utf8'));
         else if (values.start) {
@@ -193,7 +197,10 @@ if (process.argv[1] && resolve(process.argv[1]) === self) {
             await mkdir(config.workspace, { recursive: true, mode: 0o700 });
             const [command, args] = detachedCommand(values.config, config.workspace);
             await runCommand(command, args);
-        } else if (values.execute) await deliverRelease(config, { retryStage: values['retry-stage'] });
+        } else if (values.execute) {
+            await releasePreflight(config);
+            await deliverRelease(config, { retryStage: values['retry-stage'] });
+        }
         else console.log(JSON.stringify({ version: config.version, phases,
             note: 'Plan only. --start or --execute performs authorized publication and idle-only apply.' }, null, 2));
     } catch (error) { console.error(error.message); process.exitCode = 1; }

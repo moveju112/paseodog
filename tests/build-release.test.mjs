@@ -111,6 +111,23 @@ test('release scheduling never overlaps Android with both desktop packagers', as
 });
 
 // 독립 작업 중 실패해도 이미 시작한 빌드를 남기지 않고 모두 종료 후 실패를 알린다.
+test('Windows uses the free Android slot without waiting for an independent Linux package', async () => {
+    let finishAndroid, finishLinux;
+    const android = new Promise(resolve => { finishAndroid = resolve; });
+    const linux = new Promise(resolve => { finishLinux = resolve; });
+    const calls = [];
+    await runReleaseBuild(async name => {
+        calls.push(name);
+        if (name === 'android') await android;
+        if (name === 'linux') { finishAndroid(); await linux; }
+        if (name === 'windows') {
+            assert.ok(calls.includes('linux'));
+            finishLinux();
+        }
+    });
+    assert.equal(calls.filter(name => name === 'dependencies').length, 1);
+});
+
 test('failed builds drain their siblings and never start dependent stages', async () => {
     let androidCompleted = false;
     const calls = [];
