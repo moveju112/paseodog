@@ -1,6 +1,6 @@
 # AGENTS.md — Paseo Server Development Guide
 
-For AI coding agents working in `android/packages/server`. Supplements `android/CLAUDE.md`; PaseoDog root rules govern authorization, dedicated-daemon rollout, concurrent sessions and release delivery.
+Technical reference for `android/packages/server`. The parent `AI_RULES.md` owns workflow/authorization and `docs/ai-rules/CODING_RULES.md` owns check selection. Commands below are options, not a checklist; do not start a daemon, build the stack or run all test categories by default.
 
 ## Project Overview
 
@@ -138,9 +138,9 @@ type FetchState =
 
 Tests prove behavior, not structure. Every test should answer: "what user-visible or API-visible behavior does this verify?"
 
-- **TDD**: Work in vertical slices — one test, one implementation, repeat
+- Add a deterministic regression for the changed behavior. Do not turn every small edit into another full-suite run.
 - **Determinism first**: No conditional assertions, no timing/randomness, no weak assertions
-- **Real deps over mocks**: Database, APIs, file system — real in tests
+- Use real local dependencies when isolated and inexpensive; use deterministic test doubles for external/billable APIs. Never use shared or persistent user data as fixtures.
 - **Flaky tests are a bug**: Never remove a test because it's flaky; fix the variance source
 
 ---
@@ -149,7 +149,7 @@ Tests prove behavior, not structure. Every test should answer: "what user-visibl
 
 1. **Do not restart stock Paseo or interrupt active turns**; identify the dedicated daemon by home, server ID and process, and follow the parent PaseoDog safe local rollout rules rather than deciding by port alone
 2. **NEVER assume timeouts need a restart** — they can be transient
-3. **Run affected-package typecheck and targeted lint after code changes**; documentation-only changes follow the PaseoDog root checks
+3. Choose verification from the root coding guide; documentation-only changes do not require server or root code suites
 4. **Never depend on real provider login, credentials or billable calls in default tests**; test authentication/authorization, permission denials, ownership and access control with deterministic fixtures
 5. **NEVER make breaking WebSocket/message schema changes** — always backward-compatible
 

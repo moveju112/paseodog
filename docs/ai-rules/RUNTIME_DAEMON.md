@@ -1,48 +1,24 @@
-# Daemon and PC apply
+# Dedicated runtime
 
-Build, signing and GitHub publish order: [tasks/RELEASE.md](tasks/RELEASE.md). This file: which daemon to use, and when/how source changes reach the running daemon and the installed PC app.
+Source changes do not authorize runtime apply. Apply only under an explicit release/apply request; ordinary implementation ends with its verified commit/push.
 
-## Which daemon
+## Target and active work
 
-- **MUST** do PaseoDog work only on the dedicated daemon, started only via the `paseodog` wrapper (`paseodog start`).
-  - why: the wrapper injects the dedicated `PASEO_HOME`/`MIXDOG_HOME`; plain `paseo` falls back to `~/.paseo`.
-  - ✅ `evidence: scripts/paths.mjs:28` — `runtimeEnv()` sets `PASEO_HOME: paseoHome`.
-- **NEVER** reload or modify stock Paseo (`~/.paseo`, 6767) or personal profiles (`~/.mixdog`) as an apply target.
-  - why: PaseoDog does not own them.
-  - ✅ report an unexpected registration; do not touch it.
+- Use the `paseodog` wrapper and dedicated home. Identify the actual host/process/home, not just a port. Stock Paseo and personal Mixdog profiles are never implicit targets.
+- Before install, reload, restart or relaunch, check active turns on the affected dedicated runtime. Wait for idle or obtain specific interruption approval; never kill work to finish faster.
+- Release apply belongs to the independent [delivery service](tasks/RELEASE.md). End the initiating turn after scheduling it: waiting inside that active turn prevents the idle gate from opening.
+- Keep the previous executable/data recoverable during cutover. A failed readiness check is incomplete apply, not success; do not keep restarting an unverified candidate.
+- Never use `scripts/install.sh` / `scripts/install.mjs` as a diagnostic. New public listeners, account/chat deletion and signing-key replacement require separate authorization.
 
-## How to apply
+## Read-only diagnosis
 
-- Before reload, restart, installation or relaunch, identify the dedicated runtime and check whether the operation would interrupt active work. Apply automatically when safe under the existing authorization; otherwise finish independent build/publication work and wait for an idle boundary or explicit interruption approval. Report published, installed and running versions separately.
+Choose the command matching the missing evidence, not the whole list:
 
-- **MUST** after changing `plugin/`, the product version or upstream pins, reload the plugin on the dedicated daemon and confirm `available`.
-  - why: the daemon keeps the `VERSION` it loaded; a newer disk version makes the provider unavailable.
-  - ✅ `evidence: plugin/server/provider.ts:29` — `PaseoDog engine version mismatch`
-  - ✅ commands:
-    ```bash
-    paseodog plugin reload paseodog-provider
-    paseodog provider ls          # paseodog = available
-    ```
-- **MUST** apply shared app/desktop changes to the real install /opt/PaseoDog: install the verified locally built .deb with `sudo dpkg -i` and relaunch the app.
-  - why: source, build, published release, installed app and running app are separate states.
-  - ❌ hand-editing the installed `app.asar`.
-  - ✅ after install, confirm `dpkg -s paseodog` reports the built version.
-- **NEVER** run `scripts/install.sh` / `scripts/install.mjs` as a check or upgrade trial.
-  - why: install rewrites the profile, re-applies patches and starts/reloads the daemon.
-  - ✅ check with `paseodog doctor`; patches with `node scripts/patch-<이름>.mjs --check`.
-- **NEVER** fold new public listeners or chat/account data deletion into PC-apply approval.
-  - why: the immediate-apply scope is this PC's dedicated PaseoDog environment.
-  - ✅ get separate approval stating target and impact.
+| Need | Command |
+|---|---|
+| Installation/configuration | `paseodog doctor` |
+| Runtime identity | `paseodog daemon status` |
+| Loaded provider readiness | `paseodog provider diagnostic paseodog --json` |
+| Provider failure details | `paseodog plugin logs paseodog-provider` |
 
-## Diagnose
-
-```bash
-paseodog doctor                                  # 설치·설정만, 추론 요청 없음
-paseodog daemon status                           # 전용 데몬 pid·listen
-paseodog provider diagnostic paseodog --json
-paseodog plugin logs paseodog-provider
-```
-
-- **NEVER** report a passing `doctor` or Provider Ready as proof a feature works.
-  - why: `doctor` makes no inference request; Ready only proves `--check`.
-  - ✅ `evidence: scripts/doctor.mjs:28` — `no inference request was made`
+The daemon retains loaded plugin/version metadata. Disk changes may require a later authorized reload; never revert release metadata to disguise a mismatch. Provider Ready and `doctor` do not prove inference or UI behavior.
