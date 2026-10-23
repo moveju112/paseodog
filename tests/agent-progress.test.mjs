@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { patchedComposerSource, COMPOSER_FILE, withoutWorktreeSetupTip } from '../scripts/patch-paseo-composer.mjs';
 import { withoutWhite2Theme } from '../scripts/patch-paseo-theme.mjs';
 import { gitBlob } from '../scripts/patch-mixdog.mjs';
-import { withoutCollaboration, COLLABORATION_RENDER } from '../patches/paseo-collaboration.mjs';
+import { withoutCollaboration, FAST_RENDER as COLLABORATION_RENDER } from '../patches/paseo-collaboration.mjs';
 import { withoutAutoEffort } from '../patches/paseo-auto-effort.mjs';
 import { withoutSidebarToolbar } from '../patches/paseo-sidebar-toolbar.mjs';
 import { withoutHelpMenu } from '../patches/paseo-help-menu.mjs';

@@ -97,7 +97,7 @@ import {
 } from "@/agent-profiles";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { usePaseodogAutoEffort } from "@/components/paseodog-auto-effort";
-import { PaseodogCollaboration } from "@/components/paseodog-collaboration";
+import { PaseodogCollaboration, PaseodogFastScope } from "@/components/paseodog-collaboration";
 import {
   setAgentFeatureAndRemember,
   setAgentThinkingOptionAndRemember,
@@ -493,10 +493,16 @@ function ControlledAgentControls(props: ControlledAgentControlsProps) {
     serverId: props.modelSelectorServerId ?? null,
   });
   return (
-    <>
-      <AgentControlsContent {...props} {...autoEffort} />
+    <PaseodogFastScope.Provider value={props}>
+      <AgentControlsContent
+        {...props}
+        {...autoEffort}
+        features={props.provider === "paseodog"
+          ? autoEffort.features?.filter((feature) => feature.id !== "fast")
+          : autoEffort.features}
+      />
       {!!autoEffort.error && <Text accessibilityLiveRegion="polite">{autoEffort.error}</Text>}
-    </>
+    </PaseodogFastScope.Provider>
   );
 }
 

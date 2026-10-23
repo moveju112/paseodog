@@ -71,7 +71,7 @@ export function patchedComposerSource(source) {
         result = result.replace(before, after);
     }
     if (base !== original && base !== result) throw new Error('Partial Paseo composer patch');
-    // 실제 steering을 유지하며 권한 선택 옆에 별도 호스트 협업 스위치를 붙인다.
+    // 기존 OCHE 자리에는 현재 세션·새 세션 기본값을 구분하는 아이콘 전용 Fast 토글을 붙인다.
     // diff 알약 요소는 그대로 두고 별도 트랙 바 모듈에 현재 세션 하위 작업 진행 알약을 붙인다.
     // PaseoDog 하단 사이드바 분석 아이콘은 쿼터 행 대신 좌측 하단 도구줄에 둔다.
     // PaseoDog Effort 목록에 호스트 자동 추론 항목을 넣고 모델 선택창·토큰 설정의 중복 스위치는 뺀다.

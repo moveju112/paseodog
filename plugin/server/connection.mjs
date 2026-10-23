@@ -188,9 +188,12 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         return { model: model?.id || session.config.model || DEFAULT_MODEL, mode: session.config.mode || 'ask',
             ...(session.config.thinkingOption ? { thinkingOption: session.config.thinkingOption } : {}),
             models: catalog.models, modes: catalog.modes, thinkingOptions: model?.thinkingOptions || [],
-            settings: session.autoEffortAvailable && model?.thinkingOptions?.length ? [{ type: 'toggle', id: 'autoEffort', label: 'Auto effort',
+            settings: [...(session.autoEffortAvailable && model?.thinkingOptions?.length ? [{ type: 'toggle', id: 'autoEffort', label: 'Auto effort',
                 description: 'Applies to the next turn in this session',
-                value: session.config.settings.autoEffort }] : [] };
+                value: session.config.settings.autoEffort }] : []),
+                ...(route?.fastCapable === true ? [{ type: 'toggle', id: 'fast', label: 'Fast',
+                    description: 'Applies to the next turn in this session; additional charges may apply',
+                    value: currentRoute.fast === true }] : [])] };
     }
     function identity(session, info) {
         if (session.closed || session.active?.canceled) return;
@@ -586,13 +589,21 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             nativeChanges.route = { ...nativeChanges.route, ...tuning };
         }
         if (modeChange) { nextConfig.mode = changes.mode ?? 'ask'; nativeChanges.mode = nextConfig.mode; }
-        if (Object.hasOwn(changes, 'settings')) {
+        if (Object.hasOwn(changes.settings || {}, 'fast')) {
+            if (Object.keys(changes).length !== 1 || Object.keys(changes.settings).length !== 1
+                || typeof changes.settings.fast !== 'boolean')
+                throw new Error('Change boolean Fast separately from other settings');
+            if (!sessionConfig(session).settings.some((setting) => setting.id === 'fast'))
+                throw new Error('Fast is unavailable for the current model');
+            nativeChanges.route = { fast: changes.settings.fast };
+        } else if (Object.hasOwn(changes, 'settings')) {
             if (!changes.settings || typeof changes.settings !== 'object' || Array.isArray(changes.settings)
                 || Object.keys(changes.settings).length !== 1 || typeof changes.settings.autoEffort !== 'boolean')
                 throw new Error('Only boolean autoEffort session setting is supported');
             nextConfig.settings.autoEffort = changes.settings.autoEffort;
             nativeChanges.autoEffort = changes.settings.autoEffort;
-            if (changes.settings.autoEffort === true && !sessionConfig(session).settings.length)
+            if (changes.settings.autoEffort === true
+                && !sessionConfig(session).settings.some((setting) => setting.id === 'autoEffort'))
                 throw new Error('Auto effort is unavailable for the current model or native module');
         }
         if (Object.hasOwn(changes, 'thinkingOption')) {
