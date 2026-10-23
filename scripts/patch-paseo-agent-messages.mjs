@@ -9,7 +9,7 @@ import { ADAPTER_PHASE_EDITS, PROVIDER_PHASE_EDITS, withAssistantPhase, withoutA
 
 const provenanceEdits = [[
     '            prompt,\n            sessionMode,\n            logger: childLogger,\n',
-    '            prompt,\n            sessionMode,\n            // 호출자가 작성한 본문이 아니라 인증된 MCP 호출 컨텍��트를 전달한다.\n            runOptions: callerAgentId ? { paseodogSource: { kind: "agent", agentId: callerAgentId } } : undefined,\n            logger: childLogger,\n',
+    '            prompt,\n            sessionMode,\n            // 호출자가 작성한 본문이 아니라 인증된 MCP 호출 컨텍스트를 전달한다.\n            runOptions: callerAgentId ? { paseodogSource: { kind: "agent", agentId: callerAgentId } } : undefined,\n            logger: childLogger,\n',
 ]];
 
 export const AGENT_MESSAGE_PATCHES = [
