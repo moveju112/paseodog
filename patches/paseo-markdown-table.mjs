@@ -22,12 +22,19 @@ export const MARKDOWN_TABLE_EDITS = [
     ]),
 ];
 
+// 이미 설치된 11066 표 패치를 현재 구현으로 올리기 위한 정확한 이전 결과다.
+export const LEGACY_MARKDOWN_TABLE_EDITS = [[MARKDOWN_TABLE_EDITS[0][0], MARKDOWN_TABLE_EDITS[0][1]
+    .replace('    // Android는 갱신 시 undefined로 기존 flex: 1을 지우지 않으므로 측정 폭을 기본 크기로 명시한다.\n', '')
+    .replace('flex: 0, flexBasis: widths[column],', 'flex: undefined, flexBasis: "auto",')],
+    ...MARKDOWN_TABLE_EDITS.slice(1)];
+
 // 전체 번들 해시 검증 전에 열 너비 변경만 완전히 해제한다.
 export function withoutMarkdownTable(source) {
-    const counts = MARKDOWN_TABLE_EDITS.map(([, after]) => source.split(after).length - 1);
+    const edits = source.includes(LEGACY_MARKDOWN_TABLE_EDITS[0][1]) ? LEGACY_MARKDOWN_TABLE_EDITS : MARKDOWN_TABLE_EDITS;
+    const counts = edits.map(([, after]) => source.split(after).length - 1);
     if (counts.some((count) => count > 1)) throw new Error('Markdown table patch drift');
     if (counts.includes(0) && counts.some((count) => count > 0)) throw new Error('Partial markdown table patch');
-    for (const [before, after] of [...MARKDOWN_TABLE_EDITS].reverse()) source = source.replace(after, () => before);
+    for (const [before, after] of [...edits].reverse()) source = source.replace(after, () => before);
     return source;
 }
 
