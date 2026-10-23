@@ -103,6 +103,7 @@ win:
       arch:
         - x64
 nsis:
+  include: scripts/installer.nsh
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
