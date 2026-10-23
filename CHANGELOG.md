@@ -2,6 +2,8 @@
 
 ## 1.0.0-rc.7 - 2026-10-21
 
+- Android 앱에서 Markdown 표의 열 폭이 거의 0으로 줄어 글자가 보이지 않고 표가 세로로 길게 늘어나던 문제를 수정한다. 이미 설치된 웹 화면의 표 패치도 같은 구현으로 갱신한다.
+
 - Linux 프로세스 정리 시 systemd 구·신버전에서 지원하는 종료 옵션을 선택한다. 인증 워커의 유휴 정리 실패가 플러그인 종료와 로그인 연결 오류로 이어지지 않도록 처리한다.
 
 - 비밀번호 입력을 지원하는 PaseoDog 전용 웹을 `https://paseodog.choondoggy.com/`에 배포하고 기본 페어링 링크를 새 도메인으로 전환한다. 기존 공식 웹·GitHub Pages 기본값은 이관하고 사용자 지정 웹 주소는 유지한다. Cloudflare 루트 경로 export와 GitHub Pages 수동 배포를 지원하며 Android·PC export 경로는 유지한다.
