@@ -2,6 +2,45 @@
 
 Read Git-ignored `config/rules.local.md` for default targets (S25 arm64-v8a APK + Linux .deb) and signing-key location. Release from the pushed commit.
 
+## Automated delivery and resume
+
+Prefer `npm run deliver:release -- --config <absolute-config.json> --start` after updating the version/changelog and pushing the verified source commit. This is a user-systemd **service**, not a caller-owned scope: closing the chat does not terminate the delivery or the installed desktop. Without `--start` or `--execute`, it prints a plan and performs no release.
+
+### Agent execution budget
+
+- Optimize request-to-delivery latency, not only compiler time. Choose the affected checks once; run `--verify-only` before commit. After commit/push, `--start` reuses `verification.json` only for the same source bytes, Node version and app-test list. Do not run the same root suite again simply because the phase changed from commit to release.
+- Once started, the agent handles exceptions only. Do not split successful build, upload, publish, Pages, PC install and reload phases into separate chat turns or approval questions. The original release approval covers them; active-turn interruption, new credentials and destructive recovery remain approval boundaries.
+- Read only the failed stage's log when a stage fails. Do not re-read the whole repository or all successful logs, rerun passed suites, or rebuild all platforms for an unrelated check error.
+- Use the service status and checkpoint durations instead of repeated polling. Keep source inspection, active operator time, command wall time and idle/approval waits separate when reporting a slowdown. A faster four-test sample is not proof the whole delivery is faster.
+- Use `npm test -- --files tests/a.test.mjs,tests/b.test.mjs` for focused root checks. On the Linux release host, both focused and full harness runs share a repository-wide OS lock and print `queueMs` separately from `executionMs`; do not bypass that lock with direct `node --test` for heavyweight bundle checks. A cancelled process releases the OS lock without stale-lock cleanup. Other platforms retain ordinary local test execution without the Linux lock.
+- Runtime application waits for the initiating agent to become idle. End the turn after the independent service is scheduled; do not hold the turn open waiting for the service to reload that same active turn.
+
+Keep the JSON configuration in the unique release workspace, never in Git:
+
+```json
+{
+  "workspace": "/data/tmp/ubuntu/paseodog-release-<unique>",
+  "cacheRoot": "<absolute reusable cache from local rules>",
+  "signingInit": "<absolute approved signing init>",
+  "signingKey": "<absolute existing key>",
+  "previousApk": "<absolute previously published signed APK>",
+  "androidTools": "<absolute SDK build-tools version directory>",
+  "metroWorkers": "2",
+  "appTests": ["src/<affected behavior>.test.ts"],
+  "repo": "moveju112/paseodog",
+  "pagesProject": "paseodog",
+  "webUrl": "https://paseodog.choondoggy.com/"
+}
+```
+
+- The runner checks the clean pushed commit and signing-key reference before building. Root checks/tests and explicit affected app tests/types reuse the identical pre-commit verification receipt or run once when no valid receipt exists. Run affected-path lint before invoking it; pre-existing lint findings must be reported separately. Changes to installed dependencies outside the pinned lockfiles require a fresh workspace/receipt.
+- Root tests retain every `tests/*.test.mjs`. `scripts/test.mjs` prepares the common hash-gated bundle and checks its real idempotence once per run. Identical-input assertions reuse that result; legacy-upgrade and drift/partial-patch checks still call the real implementation. Test-only compression uses quality 4; shipped compression retains quality 11.
+- `release-state.json` records per-stage results and artifact hashes. Repeating `--start` resumes completed verified stages; changed inputs/artifacts are rejected. Packaging retains at most two heavyweight tasks and records `*-metrics.jsonl` for source copy, dependency install, patching, native downloads and pruning. Native binary cache hits still verify upstream SHA-256; Windows archives still verify lockfile SHA-512.
+- `--status` reads progress. If the service was killed, inspect the unit and state first; `--unlock-stopped` removes a stale lock only when its recorded process no longer exists. An uncertain remote mutation **never automatically retries**. Inspect GitHub/Pages/runtime state and use `--execute --retry-stage <exact-name>` only with approval covering that specific retry; never use it to overwrite an existing release blindly.
+- GitHub assets are checked before publication; the browser build uses the same dependency build but a separate export. Pages verification waits for startup and checks DOM `input.type`, not the optional HTML attribute. Deep-link refresh must render the exported bundle.
+- PC install, plugin reload and desktop relaunch wait for **all** active turns to become idle (up to one hour). Timeout leaves apply incomplete; it never stops an active turn. A GUI owning its daemon or failing to exit gracefully blocks relaunch without force-kill. Desktop verification uses the real `.bin` executable and startup/connection logs, not mutable `/proc` environment variables.
+- The standalone `build:release` and the manual steps below remain available. Native changes still require the prebuild decision in section B before either workflow.
+
 ## Required Cloudflare Pages delivery
 
 Every requested build/release also includes the following web delivery after GitHub publication, without a separate approval loop. `npm run build:release` alone does not deploy Pages; the operator must complete these steps before reporting delivery complete.

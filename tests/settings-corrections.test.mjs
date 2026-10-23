@@ -8,6 +8,7 @@ import { resolveCompactionRoute } from '../engine/node_modules/mixdog/src/runtim
 import { createCompactionSettings } from '../engine/node_modules/mixdog/src/session-runtime/settings-compaction-api.mjs';
 import { normalizeCompactionConfig } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/runtime-core/config-helpers.mjs';
 import { patchedComposerSource, COMPOSER_FILE } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { withSettingsCorrections, withoutSettingsCorrections } from '../patches/paseo-settings-corrections.mjs';
 
 // 실제 RPC 스키마와 네이티브 설정 저장기를 메모리 구성으로 연결한다.
@@ -73,8 +74,8 @@ test('summary route uses its configured provider and preserves model IDs contain
 
 // 설치된 웹 번들의 전체 원본 해시·재적용과 실제 렌더 목록을 함께 확인한다.
 test('web settings hide unsupported timeout and describe background memory', () => {
-    const source = patchedComposerSource(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
-    assert.equal(patchedComposerSource(source), source);
+    const source = composerFixture(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
+    assert.equal(composerFixture(source), source);
     assert.ok(source.includes('children:[le,ie,ne,ae,ce,ue,me,ge]'));
     assert.ok(!source.includes('children:[le,ie,ne,ae,ce,ue,me,xe,ge]'));
     assert.ok(source.includes(String.raw`\ubc31\uadf8\ub77c\uc6b4\ub4dc \uba54\ubaa8\ub9ac (Recap)`));
@@ -108,7 +109,7 @@ test('shared and web about settings omit release channels and changelog without 
         useTranslation: () => translation, useDesktopAppUpdater: () => updater,
         useCallback: (callback) => callback, useFocusEffect() {},
     });
-    const patched = patchedComposerSource(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
+    const patched = composerFixture(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
     new Script(patched);
     const webFunction = (name, anchor) => {
         const start = patched.lastIndexOf(`function ${name}(`, patched.indexOf(anchor));
@@ -156,7 +157,7 @@ test('shared and web about settings omit release channels and changelog without 
         assert.equal(desktop(), null);
         updater.isDesktopApp = true;
     }
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.equal(withSettingsCorrections(withoutSettingsCorrections(patched)), patched);
     assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
 });

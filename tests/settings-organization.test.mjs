@@ -12,7 +12,8 @@ const { create, act } = require('react-test-renderer');
 const ts = createRequire(new URL('../android/package.json', import.meta.url))('typescript');
 const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 const shared = read('android/packages/app/src/screens/settings-screen.tsx');
-const patched = patchedComposerSource(read('tools/node_modules/@getpaseo/server/' + COMPOSER_FILE));
+const patched = composerFixture(read('tools/node_modules/@getpaseo/server/' + COMPOSER_FILE));
+import { composerFixture } from './composer-fixture.mjs';
 const plain = (source) => stripTypeScriptTypes(source).replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '');
 const routeSource = plain(read('android/packages/app/src/plugins/routes.ts'));
 const buildPluginSurfaceRoute = runInNewContext(routeSource + '; buildPluginSurfaceRoute');
@@ -25,7 +26,7 @@ const jsx = (type, props) => React.createElement(type, props);
 
 test('settings organization remains hash-gated, reversible and idempotent', () => {
     new Script(patched);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.equal(withSettingsOrganization(withoutSettingsOrganization(patched)), patched);
     assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
     assert.throws(() => withSettingsOrganization(''), /anchor mismatch/);

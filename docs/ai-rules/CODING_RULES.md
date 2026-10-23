@@ -52,8 +52,9 @@ Scope: `plugin/`, `engine/src/`, `scripts/`, `patches/`, `tests/`. Inside `andro
 
 ## Checks
 
+- For an approved release, `deliver:release -- --config <absolute-config.json> --verify-only` supplies the root check/test and plugin/app typecheck evidence before commit; the same receipt may carry into delivery only while its source fingerprint and test inputs still match. Do not repeat passing checks just to cross a commit/build/release boundary.
 - **MUST** run `npm run check && npm test` at the root only when files outside `android/` changed or a root test reads the changed `android/` file (`MANIFEST.sha256`-listed or imported by `tests/`), plus `npm run typecheck` for plugin TS changes. For other `android/` changes run only that package's typecheck, `npm run lint -- <변경 경로>` in `android/`, and related Vitest.
-  - why: root `npm test` runs only `tests/*.test.mjs`, not the `android/` monorepo tests.
+  - why: root `npm test` uses `scripts/test.mjs` to run every `tests/*.test.mjs` with a shared verified bundle fixture, not the `android/` monorepo tests.
   - ✅ `evidence: package.json:12` — `"test": "node --test tests/*.test.mjs"`
 - **MUST** write tests with `node:test` + `node:assert/strict`; keep pinned upstream originals in `tests/fixtures/`. NEVER run billable smokes (`*-smoke.mjs`, `paseodog live-test --confirm-api-use`) without user approval.
   - why: root tests must be free and deterministic to run in CI.

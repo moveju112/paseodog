@@ -7,6 +7,7 @@ import { AGENT_PATCHES, gitBlob, patch, patchedAgentSource } from '../scripts/pa
 import { AGENT_EDITOR_SAFETY_PATCHES } from '../patches/agent-editor-safety.mjs';
 import { createAgentRouteApi } from '../engine/node_modules/mixdog/src/session-runtime/workflow-agents-api/agent-route.mjs';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { withoutAgentEditorSafety, withAgentEditorSafety } from '../patches/paseo-agent-editor-safety.mjs';
 
 test('duplicate native patch targets fail before reading or writing runtime files', () => {
@@ -134,7 +135,7 @@ test('native route preparation performs no config write until explicitly committ
 });
 
 test('web editor preserves the draft on failure, requires revision and prevents duplicate saves', async () => {
-    const source = patchedComposerSource(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
+    const source = composerFixture(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
     assert.equal(withAgentEditorSafety(withoutAgentEditorSafety(source)), source);
     const start = source.indexOf('Bt=async()=>{if(paseodogEditor.saving)');
     const end = source.indexOf(',t[63]=Me', start);

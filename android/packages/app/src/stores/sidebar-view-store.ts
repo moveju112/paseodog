@@ -63,6 +63,7 @@ interface SidebarViewStoreState {
   labelFilter: SidebarLabelFilter;
   setGroupMode: (mode: SidebarGroupMode) => void;
   toggleHostFilter: (serverId: string) => void;
+  selectHost: (serverId: string) => void;
   clearHostFilters: () => void;
   toggleProjectFilter: (viewKey: string) => void;
   clearProjectFilters: () => void;
@@ -183,6 +184,8 @@ export const useSidebarViewStore = create<SidebarViewStoreState>()(
       projectFilters: [],
       labelFilter: emptyLabelFilter(),
       setGroupMode: (mode) => set({ groupMode: mode }),
+      // 명시적 호스트 전환은 이전 호스트의 프로젝트 필터로 새 목록을 가리지 않는다.
+      selectHost: (serverId) => set({ hostFilters: [serverId], projectFilters: [] }),
       toggleHostFilter: (serverId) =>
         set((state) => ({ hostFilters: toggleFilterEntry(state.hostFilters, serverId) })),
       clearHostFilters: () => set({ hostFilters: [] }),

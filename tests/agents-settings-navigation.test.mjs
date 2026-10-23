@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Script } from 'node:vm';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { AGENTS_SETTINGS_AFTER, withAgentsSettings, withoutAgentsSettings } from '../patches/paseo-agents-settings.mjs';
 
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
 
 // 실제 메뉴 배열을 평가해 네이티브·웹에서 같은 경로와 번역 키를 선택하는지 확인한다.
 test('shared native and reviewed web menus expose the existing agents settings route', () => {
-    const patched = patchedComposerSource(installed);
+    const patched = composerFixture(installed);
     new Script(patched);
     const start = patched.indexOf('const Ae=[') + 'const Ae='.length;
     const web = new Function('f', `return ${patched.slice(start, patched.indexOf('],Le=', start) + 1)}`)(
@@ -26,7 +27,7 @@ test('shared native and reviewed web menus expose the existing agents settings r
         assert.equal(entry[0].labelKey, 'settings.hostSections.agents');
         assert.equal(items.some((item) => item.id === 'engine-accounts'), true);
     }
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.equal(withAgentsSettings(withoutAgentsSettings(patched)), patched);
     assert.throws(() => withoutAgentsSettings(patched + AGENTS_SETTINGS_AFTER), /drift/);
     assert.throws(() => withAgentsSettings(patched), /anchor mismatch/);

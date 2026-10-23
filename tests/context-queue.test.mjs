@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { brotliCompressSync, gzipSync } from 'node:zlib';
+import { brotliCompressSync, gzipSync, constants } from 'node:zlib';
 import { contextUsage } from '../plugin/server/util.mjs';
 import { fixture, until, deferred } from './helpers.mjs';
 import { COMPOSER_FILE, QUEUE_GUARD, patchedComposerSource, patchPaseoComposer, withoutWorktreeSetupTip } from '../scripts/patch-paseo-composer.mjs';
 import { withWhite2Theme, withoutWhite2Theme } from '../scripts/patch-paseo-theme.mjs';
 import { withoutSingleWorkspace } from '../patches/paseo-single-workspace.mjs';
+import { withoutHostSwitch } from '../patches/paseo-host-switch.mjs';
 import { withoutCollaboration } from '../patches/paseo-collaboration.mjs';
 import { withoutAutoEffort } from '../patches/paseo-auto-effort.mjs';
 import { withoutAgentProgress } from '../patches/paseo-agent-progress.mjs';
@@ -33,6 +34,7 @@ import { withoutSettingsOrganization } from '../patches/paseo-settings-organizat
 import { withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
 // 사이드바 쿼터 패치 해제 (도넛 -> 고정 순서, 실제 composer 체인 순서)
 const withoutUsageOrder = (source) => {
+    source = withoutHostSwitch(source);
     source = withoutSingleWorkspace(source);
     source = withoutSettingsBehavior(source);
     source = withoutSettingsOrganization(source);
@@ -55,9 +57,9 @@ test('composer patch applies exactly to a temporary installation and is idempote
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(join(directory, 'package.json'), readFileSync(root + 'package.json'));
     writeFileSync(path, bundle);
-    writeFileSync(path + '.br', brotliCompressSync(bundle));
+    writeFileSync(path + '.br', brotliCompressSync(bundle, { params: { [constants.BROTLI_PARAM_QUALITY]: 4 } }));
     writeFileSync(path + '.gz', gzipSync(bundle));
-    patchPaseoComposer(directory);
+    patchPaseoComposer(directory, { brotliQuality: 4 });
     patchPaseoComposer(directory, { check: true });
     const patched = readFileSync(path, 'utf8');
     assert.equal(patchedComposerSource(patched) === patched, true);

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { Script } from 'node:vm';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { WORK_RECORD_EDITS, withWorkRecords, withoutWorkRecords } from '../patches/paseo-work-records.mjs';
 import { ASSISTANT_PHASE_PATCHES, patchedAssistantPhaseSource } from '../scripts/patch-paseo-assistant-phase.mjs';
 import { RELAY_PASSWORD_PATCHES } from '../scripts/patch-paseo-relay-password.mjs';
@@ -228,9 +229,9 @@ test('a turn that ended on a closed provider connection offers one explicit cont
 
 test('reviewed web bundle supports the same A renderer and rejects partial patches or drift', () => {
     const source = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const patched = patchedComposerSource(source);
+    const patched = composerFixture(source);
     new Script(patched);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.equal(withWorkRecords(withoutWorkRecords(patched)), patched);
     const [before, after] = WORK_RECORD_EDITS[0];
     assert.throws(() => patchedComposerSource(patched.replace(after, before)), /Partial/);

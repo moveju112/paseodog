@@ -56,7 +56,11 @@ import { usePanelStore } from "@/stores/panel-store";
 import { useOwnsWindowChromeCorner, WindowChromeSafeArea } from "@/utils/desktop-window";
 import { useCloseAgentListGesture } from "@/mobile-panels/gestures";
 import { MobilePanelOverlay } from "@/mobile-panels/presentation";
-import { buildSettingsAddHostRoute, buildSettingsRoute } from "@/utils/host-routes";
+import {
+  buildHostRootRoute,
+  buildSettingsAddHostRoute,
+  buildSettingsRoute,
+} from "@/utils/host-routes";
 import { openHostOverview } from "@/navigation/settings-navigation";
 import {
   UsageSidebarItem,
@@ -344,22 +348,22 @@ function SidebarHostPicker({
   onOpenHostSettings: (serverId: string) => void;
 }) {
   const hosts = useHosts();
+  const hostFilters = useSidebarViewStore((state) => state.hostFilters);
+  const selectedHost = hostFilters.length === 1 ? hostFilters[0] : "";
   const triggerRef = useRef<View | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleSelect = useCallback(
-    (id: string) => {
-      onOpenHostSettings(id);
-    },
-    [onOpenHostSettings],
-  );
+  const handleSelect = useCallback((id: string) => {
+    useSidebarViewStore.getState().selectHost(id);
+    router.replace(buildHostRootRoute(id));
+  }, []);
 
   const handleOpen = useCallback(() => setIsOpen(true), []);
 
   return (
     <HostPicker
       hosts={hosts}
-      value=""
+      value={selectedHost}
       onSelect={handleSelect}
       open={isOpen}
       onOpenChange={setIsOpen}

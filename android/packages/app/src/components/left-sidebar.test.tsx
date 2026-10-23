@@ -17,6 +17,10 @@ const state = await vi.hoisted(async () => {
     hasUsageSummary: true,
     closeSidebar: vi.fn(),
     inspectAnchor: vi.fn(),
+    replaceRoute: vi.fn(),
+    openHostSettings: vi.fn(),
+    hostFilters: ["old"],
+    selectHost: vi.fn(),
   };
 });
 
@@ -73,9 +77,13 @@ vi.mock("@/stores/panel-store", () => ({
     selector({ showMobileAgent: state.closeSidebar }),
 }));
 vi.mock("@/stores/sidebar-view-store", () => ({
-  useSidebarViewStore: (selector: (value: { hostFilters: string[] }) => unknown) =>
-    selector({ hostFilters: [] }),
+  useSidebarViewStore: Object.assign(
+    (selector: (value: { hostFilters: string[] }) => unknown) =>
+      selector({ hostFilters: state.hostFilters }),
+    { getState: () => ({ selectHost: state.selectHost }) },
+  ),
 }));
+vi.mock("expo-router", () => ({ router: { replace: state.replaceRoute, push: vi.fn() } }));
 vi.mock("@/runtime/host-runtime", () => ({ useHosts: () => [] }));
 vi.mock("@/sidebar-nav/use-sidebar-nav-items", () => ({
   useSidebarNavItems: () => ({ items: state.items }),
@@ -112,7 +120,37 @@ vi.mock("@/components/ui/tooltip", () => ({
   TooltipContent: () => null,
 }));
 vi.mock("@/components/ui/shortcut", () => ({ Shortcut: () => null }));
-vi.mock("@/components/hosts/host-picker", () => ({ HostPicker: Passthrough }));
+vi.mock("@/components/hosts/host-picker", () => ({
+  HostPicker: function MockHostPicker({
+    children,
+    open,
+    onSelect,
+    onOpenHostSettings,
+  }: {
+    children: ReactNode;
+    open: boolean;
+    onSelect: (id: string) => void;
+    onOpenHostSettings: (id: string) => void;
+  }) {
+    const select = useCallback(() => onSelect("new"), [onSelect]);
+    const openSettings = useCallback(() => onOpenHostSettings("new"), [onOpenHostSettings]);
+    return (
+      <>
+        {children}
+        {open && (
+          <button type="button" onClick={select}>
+            Select new host
+          </button>
+        )}
+        {open && (
+          <button type="button" onClick={openSettings}>
+            New host settings
+          </button>
+        )}
+      </>
+    );
+  },
+}));
 vi.mock("@/components/retained-panel", () => ({ RetainedPanelActivity: Passthrough }));
 vi.mock("@/components/desktop/titlebar-drag-region", () => ({
   TitlebarDragRegion: () => null,
@@ -139,7 +177,7 @@ vi.mock("@/mobile-panels/gestures", () => ({
   useCloseAgentListGesture: () => ({ gesture: null, gestureRef: null }),
 }));
 vi.mock("@/mobile-panels/presentation", () => ({ MobilePanelOverlay: Passthrough }));
-vi.mock("@/navigation/settings-navigation", () => ({ openHostOverview: vi.fn() }));
+vi.mock("@/navigation/settings-navigation", () => ({ openHostOverview: state.openHostSettings }));
 
 // 플러그인 식별자·기여 항목·표시 여부만 다른 하단 항목을 만든다.
 function pluginItem(
@@ -176,6 +214,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("PaseoDog sidebar footer", () => {
+  it("switches the selected host instead of opening Overview, while keeping the settings button", () => {
+    render(<LeftSidebar active />);
+    fireEvent.click(screen.getByTestId("sidebar-hosts-trigger"));
+    fireEvent.click(screen.getByRole("button", { name: "Select new host" }));
+    expect(state.selectHost).toHaveBeenCalledWith("new");
+    expect(state.replaceRoute).toHaveBeenCalledWith("/h/new");
+    expect(state.openHostSettings).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "New host settings" }));
+    expect(state.openHostSettings).toHaveBeenCalledWith("new");
+    expect(state.replaceRoute).toHaveBeenCalledTimes(1);
+  });
   it("moves only visible PaseoDog groups after Hosts, retaining order and native navigation", () => {
     render(<LeftSidebar active />);
     const toolbar = screen.getByTestId("sidebar-footer-bottom-line");

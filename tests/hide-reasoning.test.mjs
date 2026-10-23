@@ -9,7 +9,8 @@ import { withoutConversationFocus } from '../patches/paseo-conversation-focus.mj
 import { withoutExternalLinks } from '../patches/paseo-external-links.mjs';
 
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const complete = patchedComposerSource(installed);
+const complete = composerFixture(installed);
+import { composerFixture } from './composer-fixture.mjs';
 const patched = withoutWorkRecords(withoutExternalLinks(withoutConversationFocus(complete)));
 const current = withoutHideReasoning(patched);
 const androidResources = new URL('../android/packages/app/src/i18n/resources/', import.meta.url);

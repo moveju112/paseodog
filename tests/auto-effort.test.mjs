@@ -15,10 +15,11 @@ const require = createRequire(new URL('../plugin/package.json', import.meta.url)
 const React = require('react');
 const { create, act } = require('react-test-renderer');
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = patchedComposerSource(installed);
+const patched = composerFixture(installed);
+import { composerFixture } from './composer-fixture.mjs';
 
 test('both PaseoDog control bars route through the effort wrapper and duplicate switches are removed reversibly', () => {
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     for (const [before, after, count] of AUTO_EFFORT_EDITS) {
         if (!after.includes(before)) assert.equal(patched.split(before).length, 1);
         assert.equal(patched.split(after).length, count + 1);

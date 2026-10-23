@@ -9,7 +9,8 @@ import { USAGE_ORDER_EDITS, withUsageOrder, withoutUsageOrder } from '../patches
 
 const { z } = createRequire(new URL('../tools/package.json', import.meta.url))('zod');
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = patchedComposerSource(installed);
+const patched = composerFixture(installed);
+import { composerFixture } from './composer-fixture.mjs';
 const current = withoutUsageOrder(patched);
 const androidPinned = readFileSync(new URL('../android/packages/app/src/usage/pinned.ts', import.meta.url), 'utf8');
 const defaults = { displayAs: 'used', pins: null, serverId: null };
@@ -98,7 +99,7 @@ test('sidebar usage order patch is hash gated, idempotent and reversible', () =>
         [['five_hour', '5h'], ['weekly', 'wk'], ['code_review:weekly', 'Code review wk']]);
     assert.equal(withoutUsageOrder(current), current);
     assert.equal(withUsageOrder(current), patched);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.equal(patchedComposerSource(current), patched);
     new Script(patched);
     for (const [before, after] of USAGE_ORDER_EDITS) {

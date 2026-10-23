@@ -9,6 +9,7 @@ import {
     RELAY_PASSWORD_PATCHES, patchedRelayPasswordSource, relayPasswordModule,
 } from '../scripts/patch-paseo-relay-password.mjs';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { RELAY_PASSWORD_WEB_EDITS, withoutRelayPassword } from '../patches/paseo-relay-password.mjs';
 import { en } from '../android/packages/app/src/i18n/resources/en.ts';
 import { pluginSettings } from '../android/packages/app/src/i18n/resources/plugin-settings.ts';
@@ -202,8 +203,8 @@ test('relay reset replaces the password, rotates the link key, recovers corrupt 
 
 test('web issuance and address/password entry remain hash gated and reversible', () => {
     const source = readFileSync(new URL(`server/${COMPOSER_FILE}`, packageRoot), 'utf8');
-    const patched = patchedComposerSource(source);
-    assert.equal(patchedComposerSource(patched), patched);
+    const patched = composerFixture(source);
+    assert.equal(composerFixture(patched), patched);
     assert.equal(patchedComposerSource(withoutRelayPassword(patched)), patched);
     assert.throws(() => patchedComposerSource(source + '// drift'), /hash mismatch/);
     // 재설정 화면·한국어 문구·재설정 요청 전달이 들어가고, 주소 입력창의 무조건 차단은 빠진다.

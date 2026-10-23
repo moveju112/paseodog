@@ -31,9 +31,11 @@ import { withoutMarkdownTable } from '../patches/paseo-markdown-table.mjs';
 import { withoutDaemonUpdate } from '../patches/paseo-daemon-update.mjs';
 import { withoutSettingsOrganization } from '../patches/paseo-settings-organization.mjs';
 import { withoutSingleWorkspace } from '../patches/paseo-single-workspace.mjs';
+import { withoutHostSwitch } from '../patches/paseo-host-switch.mjs';
 import { withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
 // 사이드바 쿼터 패치 해제 (도넛 -> 고정 순서, 실제 composer 체인 순서)
 const withoutUsageOrder = (source) => {
+    source = withoutHostSwitch(source);
     source = withoutSingleWorkspace(source);
     source = withoutSettingsBehavior(source);
     source = withoutSettingsOrganization(source);
@@ -50,7 +52,8 @@ const { z } = createRequire(new URL('../tools/package.json', import.meta.url))('
 const root = new URL('../tools/node_modules/@getpaseo/server/', import.meta.url).pathname;
 const installed = readFileSync(root + COMPOSER_FILE, 'utf8');
 const original = withoutAgentsSettings(withoutHideReasoning(withoutUsageOrder(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutWorktreeSetupTip(withoutImportCwd(installed))))))))))));
-const patched = patchedComposerSource(installed);
+const patched = composerFixture(installed);
+import { composerFixture } from './composer-fixture.mjs';
 const lightPalette = 'const E=O({surface0:"#ffffff",surface1:"#fafafa",surface2:"#f4f4f5",surface3:"#e4e4e7",surface4:"#d4d4d8",'
     + 'surfaceDiffEmpty:"#f6f6f6",surfaceSidebar:"#f4f4f5",foreground:"#1a1a1e",foregroundMuted:"#71717a",foregroundExtraMuted:"#a1a1aa",'
     + 'border:"#e4e4e7",borderAccent:"#ececf1",accent:"#20744A",';
@@ -199,7 +202,7 @@ test('soft light themes persist, reproduce approved palettes and preserve existi
 
 test('White2 keeps the strict upstream gate and is idempotent', () => {
     assert.equal(['bdc4b8ed97dbccc7e6215d7f2f7be2e420fce895', '35606b3c900c220239427937d2aa55f0860f1bb4'].includes(gitBlob(original)), true);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.equal(patchedComposerSource(original), patched);
     assert.equal(withoutAgentsSettings(withoutHideReasoning(withoutUsageOrder(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutWorktreeSetupTip(withoutImportCwd(patched)))))))))))), original);
     assert.throws(() => withWhite2Theme(patched), /anchor mismatch/);

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { OFFER_LINK_BEFORE, OFFER_LINK_AFTER, withOfferLink, withoutOfferLink } from '../patches/paseo-offer-link.mjs';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 
 const require = createRequire(new URL('../plugin/package.json', import.meta.url));
 const React = require('react');
@@ -106,9 +107,9 @@ test('web listener patch is hash-gated, reversible and idempotent in the compose
     const modalStart = installed.indexOf('_e.PairLinkModal=function');
     const modalEnd = installed.indexOf('\n__d(', modalStart);
     assert.match(installed.slice(modalStart, modalEnd), /\},5268,\[/);
-    const patched = patchedComposerSource(installed);
+    const patched = composerFixture(installed);
     assert.ok(patched.includes(OFFER_LINK_AFTER));
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.equal(withoutOfferLink(withOfferLink(OFFER_LINK_BEFORE)), OFFER_LINK_BEFORE);
     assert.throws(() => withOfferLink(OFFER_LINK_AFTER), /anchor mismatch/);
     assert.throws(() => patchedComposerSource(installed + '// drift'), /hash mismatch/);

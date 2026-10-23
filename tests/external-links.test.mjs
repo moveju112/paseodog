@@ -6,10 +6,11 @@ import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-com
 import { EXTERNAL_LINK_EDITS, withExternalLinks, withoutExternalLinks } from '../patches/paseo-external-links.mjs';
 
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = patchedComposerSource(installed);
+const patched = composerFixture(installed);
+import { composerFixture } from './composer-fixture.mjs';
 
 test('web bundle renders no community or repository link buttons and unwraps exactly', () => {
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     new Script(patched);
     for (const [before, after] of EXTERNAL_LINK_EDITS) {
         assert.equal(patched.includes(before), false);

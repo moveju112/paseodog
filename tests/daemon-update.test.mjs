@@ -7,6 +7,7 @@ import { createDaemonUpdateCallouts } from '../android/packages/app/src/desktop/
 import { DAEMON_RELEASE } from '../plugin/server/util.mjs';
 import { daemonRelease } from '../plugin/shared/controls.ts';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { withDaemonUpdate, withoutDaemonUpdate } from '../patches/paseo-daemon-update.mjs';
 import release from '../plugin/shared/release.json' with { type: 'json' };
 
@@ -171,10 +172,10 @@ test('daemon release RPC reports the loaded product release and rejects mutation
 
 test('web patch preserves the app callout, shares source behavior and remains hash gated', () => {
     const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const patched = patchedComposerSource(installed), original = withoutDaemonUpdate(patched);
+    const patched = composerFixture(installed), original = withoutDaemonUpdate(patched);
     new Script(patched);
     assert.equal(withDaemonUpdate(original), patched);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.ok(patched.includes(createDaemonUpdateCallouts.toString()));
     assert.ok(patched.includes('createElement(PaseodogOriginalUpdateCallout)'));
     // 패치된 실제 Metro 모듈을 실행해 기존 앱 알림과 데몬 알림이 함께 마운트되는지 확인한다.

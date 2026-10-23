@@ -8,7 +8,8 @@ import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-com
 import { ASSISTANT_ICON_EDITS, withAssistantIcon, withoutAssistantIcon } from '../patches/paseo-assistant-icon.mjs';
 
 const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
-const patched = patchedComposerSource(read('tools/node_modules/@getpaseo/server/' + COMPOSER_FILE));
+const patched = composerFixture(read('tools/node_modules/@getpaseo/server/' + COMPOSER_FILE));
+import { composerFixture } from './composer-fixture.mjs';
 const ts = createRequire(new URL('../android/package.json', import.meta.url))('typescript');
 
 // 공유 화면과 실제 웹 Metro 모듈에 같은 설정 저장 대역을 주입한다.
@@ -89,6 +90,6 @@ test('web icon validation, localized labels and patch reversal match shared sett
     const partial = patched.replace(after, before);
     assert.notEqual(partial, patched);
     assert.throws(() => patchedComposerSource(partial), /Partial Paseo assistant icon/);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
 });

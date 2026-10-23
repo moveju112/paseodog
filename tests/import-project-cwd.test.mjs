@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Script } from 'node:vm';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { IMPORT_CWD, IMPORT_CWD_ANCHOR, SOURCE_IMPORT_CWD } from '../patches/paseo-import-cwd.mjs';
 import { IMPORT_SOURCE_FILE, patchedImportSource } from '../scripts/patch-paseo-import-cwd.mjs';
 
@@ -22,8 +23,8 @@ function loadSessionQueries(bundle) {
 }
 
 test('project import passes the selected cwd through the shared request and preserves unscoped import', async () => {
-    const patched = patchedComposerSource(source);
-    assert.equal(patchedComposerSource(patched), patched);
+    const patched = composerFixture(source);
+    assert.equal(composerFixture(patched), patched);
     new Script(patched);
     assert.equal(patched.split(IMPORT_CWD).length, 2);
     assert.equal(patched.includes(IMPORT_CWD_ANCHOR), false);

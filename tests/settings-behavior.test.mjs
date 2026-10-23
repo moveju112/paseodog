@@ -9,6 +9,7 @@ import { controlRuntime } from '../engine/src/controls.mjs';
 import { createStandaloneHookBus } from '../engine/node_modules/mixdog/src/session-runtime/services/hook-bus.mjs';
 import { changeHookSettings, readHookSettings } from '../engine/src/hook-settings.mjs';
 import { patchedComposerSource, COMPOSER_FILE } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { withSettingsBehavior, withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
 
 // 원래 세션의 모델·본문을 기록하는 무과금 런타임. 실제 어댑터 configure 경로를 호출한다.
@@ -204,9 +205,9 @@ test('malformed hook files and invalid input are rejected without overwriting ex
 
 test('web settings patch is reversible, hash-gated, and persists before publishing state', async () => {
     const bundle = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const source = patchedComposerSource(bundle);
+    const source = composerFixture(bundle);
     new Script(source);
-    assert.equal(patchedComposerSource(source), source);
+    assert.equal(composerFixture(source), source);
     assert.equal(withSettingsBehavior(withoutSettingsBehavior(source)), source);
     assert.throws(() => patchedComposerSource(source + '// drift'), /hash mismatch/);
     const start = source.indexOf('_e.saveAppSettings=(()=>');

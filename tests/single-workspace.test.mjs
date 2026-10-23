@@ -12,7 +12,8 @@ const { transformSync } = createRequire(new URL('package.json', app))('esbuild')
 const readApp = (path) => readFileSync(new URL(`src/${path}`, app), 'utf8');
 const installed = readFileSync(new URL(
     `../tools/node_modules/@getpaseo/server/${COMPOSER_FILE}`, import.meta.url), 'utf8');
-const patched = patchedComposerSource(installed);
+const patched = composerFixture(installed);
+import { composerFixture } from './composer-fixture.mjs';
 
 function evaluateModule(source, id, dependencies) {
     const end = source.indexOf(`},${id},[`);
@@ -128,7 +129,7 @@ function blockHarness(platform) {
 test('single workspace patch is reversible, idempotent and refuses drift or partial application', () => {
     const base = withoutSingleWorkspace(patched);
     assert.equal(withSingleWorkspace(base), patched);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.throws(() => patchedComposerSource(`${patched}// drift`), /hash mismatch/);
     const [before, after] = SINGLE_WORKSPACE_EDITS[0];
     assert.throws(() => withoutSingleWorkspace(patched.replace(after, before)), /Partial/);

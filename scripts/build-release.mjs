@@ -31,7 +31,7 @@ export async function runReleaseBuild(run) {
 }
 
 // 고유 산출물 폴더와 재사용 캐시를 분리하고 플랫폼별 Metro 임시 경로를 고정한다.
-export async function buildRelease({ workspace, cacheRoot, signingInit, versionCode, version, metroWorkers }) {
+export async function buildRelease({ workspace, cacheRoot, signingInit, versionCode, version, metroWorkers, checkpoint }) {
     for (const value of [workspace, cacheRoot, signingInit]) {
         if (!value || !isAbsolute(value)) throw new Error('workspace, cache-root and signing-init must be absolute');
     }
@@ -39,7 +39,7 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
         throw new Error('Explicit release version and positive version-code are required');
     }
     if (resolve(workspace) === resolve(cacheRoot)) throw new Error('Workspace must differ from cache-root');
-    if (metroWorkers !== undefined && !/^[1-9]\d*$/.test(metroWorkers)) {
+    if (metroWorkers !== undefined && !/^[1-9]\d*$/.test(String(metroWorkers))) {
         throw new Error('metro-workers must be a positive integer');
     }
     if (Number(versionCode) !== release.versionCode || version !== `${release.version}.${release.versionCode}`)
@@ -60,18 +60,20 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
         linux: [desktopRoot, [...builder, '--linux', 'deb', 'AppImage']],
         windows: [desktopRoot, [...builder, '--win', 'nsis', '--x64']],
     };
-    await runReleaseBuild(async name => {
+    const execute = async name => {
         const temporary = join(cacheRoot, name);
         await mkdir(temporary, { recursive: true });
         const [cwd, command] = commands[name];
         const start = performance.now();
-        const log = createWriteStream(join(workspace, `${name}.log`), { flags: 'wx' });
+        const log = createWriteStream(join(workspace, `${name}.log`), { flags: checkpoint ? 'a' : 'wx' });
         console.log(`${new Date().toISOString()} ${name}: start`);
         await new Promise((resolveRun, reject) => {
             const child = spawn('systemd-run', ['--user', '--scope', '-q',
                 '-p', 'MemoryHigh=16G', '-p', 'MemorySwapMax=2G', ...command], {
                 cwd,
                 env: { ...process.env, TMPDIR: temporary, CI: '1',
+                    PASEODOG_BUILD_CACHE_ROOT: cacheRoot,
+                    PASEODOG_RELEASE_METRICS: join(workspace, `${name}-metrics.jsonl`),
                     ...(metroWorkers ? { PASEODOG_METRO_WORKERS: metroWorkers } : {}),
                     APP_VARIANT: 'production', PASEO_WEB_PLATFORM: name === 'web' ? 'electron' : '' },
                 stdio: ['ignore', 'pipe', 'pipe'],
@@ -92,7 +94,22 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
             await copyFile(join(cwd, 'app/build/outputs/apk/release/app-arm64-v8a-release.apk'),
                 join(workspace, `PaseoDog-${version}-arm64-v8a.apk`));
         }
-    });
+    };
+    const artifacts = {
+        dependencies: ['packages/highlight/dist', 'packages/client/dist', 'packages/protocol/dist',
+            'packages/relay/dist', 'packages/plugin/dist', 'packages/server/dist', 'packages/cli/dist']
+            .map(path => join(androidRoot, path)),
+        android: [join(workspace, `PaseoDog-${version}-arm64-v8a.apk`)],
+        web: [join(androidRoot, 'packages/app/dist')],
+        'desktop-main': [join(desktopRoot, 'dist')],
+        linux: [join(output, `PaseoDog-${version}-amd64.deb`), join(output, `PaseoDog-${version}-x86_64.AppImage`),
+            join(output, 'latest-linux.yml')],
+        windows: [join(output, `PaseoDog-Setup-${version}-x64.exe`),
+            join(output, `PaseoDog-Setup-${version}-x64.exe.blockmap`), join(output, 'latest.yml')],
+    };
+    await runReleaseBuild(name => checkpoint
+        ? checkpoint(`build-${name}`, () => execute(name), { artifacts: artifacts[name] })
+        : execute(name));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

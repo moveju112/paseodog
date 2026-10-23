@@ -16,7 +16,8 @@ const React = pluginRequire('react');
 const { jsx, jsxs } = pluginRequire('react/jsx-runtime');
 const { create, act } = pluginRequire('react-test-renderer');
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = patchedComposerSource(installed);
+const patched = composerFixture(installed);
+import { composerFixture } from './composer-fixture.mjs';
 const current = withoutUsageDonut(patched);
 
 // 번들 Metro 모듈 하나를 시작 위치에서 잘라 팩토리로 실행한다(의존 모듈은 zod 대역).
@@ -41,7 +42,7 @@ test('sidebar usage donut patch is hash gated, idempotent and reversible', () =>
     new Script(patched);
     assert.equal(withUsageDonut(current), patched);
     assert.equal(patchedComposerSource(current), patched);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     const edits = usageDonutEdits(current);
     for (const [before, after] of edits) {
         assert.equal(patched.split(after).length, 2);

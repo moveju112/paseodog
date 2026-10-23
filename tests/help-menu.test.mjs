@@ -6,10 +6,11 @@ import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-com
 import { HELP_MENU, HELP_MENU_ANCHOR, withoutHelpMenu, withHelpMenu } from '../patches/paseo-help-menu.mjs';
 
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = patchedComposerSource(installed);
+const patched = composerFixture(installed);
+import { composerFixture } from './composer-fixture.mjs';
 
 test('help menu drops only the report-issue group and keeps help items and versions', () => {
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     new Script(patched);
     assert.equal(patched.split(HELP_MENU).length, 2);
     assert.equal(patched.includes(HELP_MENU_ANCHOR), false);

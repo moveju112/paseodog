@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { Script } from 'node:vm';
 import { COMPOSER_FILE, DESKTOP_COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 
 const originalPolicy = 'e.shouldShowWorktreeSetupCallout=function(t){return!0===t?.ok&&!n(t.config??{})}';
 const hiddenPolicy = 'e.shouldShowWorktreeSetupCallout=function(t){return!1}';
@@ -32,8 +33,8 @@ for (const [client, path] of [
         skip: client === 'desktop' && !existsSync(path),
     }, () => {
         const source = readFileSync(path, 'utf8');
-        const patched = patchedComposerSource(source);
-        assert.equal(patchedComposerSource(patched), patched);
+        const patched = composerFixture(source);
+        assert.equal(composerFixture(patched), patched);
         new Script(patched);
         const policy = loadPolicy(patched);
         const original = loadPolicy(patched.replace(hiddenPolicy, originalPolicy));

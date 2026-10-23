@@ -8,8 +8,10 @@ import { createNativeEngine } from '../engine/src/native-engine.mjs';
 import { normalizeOrchestrationMode } from '../engine/src/orchestration-mode.mjs';
 import { createEngineControls } from '../plugin/server/controls.mjs';
 import { patchedComposerSource, COMPOSER_FILE, withoutWorktreeSetupTip } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { withoutWhite2Theme } from '../scripts/patch-paseo-theme.mjs';
 import { withoutSingleWorkspace } from '../patches/paseo-single-workspace.mjs';
+import { withoutHostSwitch } from '../patches/paseo-host-switch.mjs';
 import { gitBlob } from '../scripts/patch-mixdog.mjs';
 import {
     createCollaborationState, COLLABORATION_SOURCE, COLLABORATION_SOURCE_ANCHOR,
@@ -40,6 +42,7 @@ import { withoutSettingsOrganization } from '../patches/paseo-settings-organizat
 import { withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
 // 사이드바 쿼터 패치 해제 (도넛 -> 고정 순서, 실제 composer 체인 순서)
 const withoutUsageOrder = (source) => {
+    source = withoutHostSwitch(source);
     source = withoutSingleWorkspace(source);
     source = withoutSettingsBehavior(source);
     source = withoutSettingsOrganization(source);
@@ -79,7 +82,7 @@ test('composer hook preserves the reviewed original, existing controls, and refu
     assert.equal(gitBlob(original), 'bdc4b8ed97dbccc7e6215d7f2f7be2e420fce895');
     const result = patchedComposerSource(original);
     assert.equal(withoutAgentsSettings(withoutHideReasoning(withoutUsageOrder(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutWorktreeSetupTip(withoutImportCwd(result)))))))))))), original);
-    assert.equal(patchedComposerSource(result), result);
+    assert.equal(composerFixture(result), result);
     assert.ok(result.includes(FAST_RENDER));
     assert.ok(result.includes('children:[Fe,Le,Ee,ze,Be]'));
     assert.ok(result.includes('j.AgentModeControl,Object.assign({},ve,{onClose:E})'));
@@ -93,7 +96,7 @@ test('composer hook preserves the reviewed original, existing controls, and refu
 
 test('new-agent draft composer gets Fast, and each exact previous install upgrades through the hash gate', () => {
     const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const result = patchedComposerSource(installed);
+    const result = composerFixture(installed);
     const draftStart = result.indexOf('_e.DraftAgentControls=function');
     const draftEnd = result.indexOf('var o=r(d[0])', draftStart);
     assert.ok(draftStart > 0 && result.slice(draftStart, draftEnd).endsWith(FAST_DRAFT_RENDER));

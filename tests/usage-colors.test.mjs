@@ -6,7 +6,8 @@ import { COMPOSER_FILE, DESKTOP_COMPOSER_FILE, patchedComposerSource } from '../
 import { USAGE_COLORS, USAGE_COLORS_ANCHOR, withUsageColors, withoutUsageColors } from '../patches/paseo-usage-colors.mjs';
 
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const current = withoutUsageColors(patchedComposerSource(installed));
+const current = withoutUsageColors(composerFixture(installed));
+import { composerFixture } from './composer-fixture.mjs';
 
 // 번들에서 UsageMeter 모듈 팩토리를 잘라 대역 의존성으로 실행하고 채움 스타일 이름을 돌려준다.
 function renderFill(source, props) {

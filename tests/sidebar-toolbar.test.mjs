@@ -8,7 +8,8 @@ import {
 } from '../patches/paseo-sidebar-toolbar.mjs';
 
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = patchedComposerSource(installed);
+const patched = composerFixture(installed);
+import { composerFixture } from './composer-fixture.mjs';
 
 // 검토 번들 사이드바 모듈 범위의 대역으로 주입 함수를 실행해 PaseoDog 항목만 고른다.
 function loadToolbarItems(items) {
@@ -20,7 +21,7 @@ function loadToolbarItems(items) {
 }
 
 test('PaseoDog footer item moves from the quota rows into the bottom-left toolbar', () => {
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     new Script(patched);
     assert.ok(patched.includes(ROWS_FILTER) && patched.includes(TOOLBAR_RENDER));
     assert.throws(() => patchedComposerSource(patched.replace(TOOLBAR_RENDER, '')), /Partial Paseo sidebar toolbar/);
