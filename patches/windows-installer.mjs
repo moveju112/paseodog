@@ -1,4 +1,20 @@
 export const WINDOWS_INSTALLER_VERSION = '26.8.1';
+export const WINDOWS_UNINSTALLER_BLOB = 'e9daa9f78bd740b094f07503427733a84645ab7a';
+export const WINDOWS_UNINSTALLER_MARKER = '; paseodog-standard-uninstaller\n';
+const uninstallerAnchor = '        if (customScriptPath != null) {';
+const uninstallerGuard = `        if (customScriptPath != null && !script.startsWith(${JSON.stringify(WINDOWS_UNINSTALLER_MARKER)})) {`;
+
+// 기본 템플릿 기반의 PaseoDog 스크립트만 upstream의 uninstaller 생성·서명 단계를 유지한다.
+export function withWindowsUninstaller(source) {
+    if (source.split(uninstallerAnchor).length !== 2)
+        throw new Error('Windows uninstaller pipeline anchor mismatch');
+    return source.replace(uninstallerAnchor, uninstallerGuard);
+}
+
+export function withoutWindowsUninstaller(source) {
+    return source.replace(uninstallerGuard, uninstallerAnchor);
+}
+
 export const WINDOWS_INSTALLER_BLOBS = {
     'installer.nsi': '4b1f42e4e96ba2b3e7d6d8d2f9ee19b46779a422',
     'installSection.nsh': '053772f55ca6ece52f0a34c4fa0f05c9a5f07bd2',
@@ -46,6 +62,6 @@ export function withWindowsInstallerSources(sources) {
     const extractor = withWindowsExtraction(sources['include/extractAppPackage.nsh']);
     const files = sources['include/installer.nsh'].replace('!include "extractAppPackage.nsh"', () => extractor);
     const section = sources['installSection.nsh'].replace('!include installer.nsh', () => files);
-    return '!ifndef BUILD_UNINSTALLER\n!insertmacro paseodogCopyTreeFunction\n!endif\n'
+    return WINDOWS_UNINSTALLER_MARKER + '!ifndef BUILD_UNINSTALLER\n!insertmacro paseodogCopyTreeFunction\n!endif\n'
         + sources['installer.nsi'].replace('!include "installSection.nsh"', () => section);
 }

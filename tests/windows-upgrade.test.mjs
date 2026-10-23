@@ -5,8 +5,11 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import * as path from 'node:path';
 import { windowsInstallerScript, prepareWindowsInstaller } from '../scripts/patch-windows-installer.mjs';
-import { withWindowsExtraction, WINDOWS_INSTALLER_BLOBS, WINDOWS_INSTALLER_VERSION } from '../patches/windows-installer.mjs';
+import { withWindowsExtraction, WINDOWS_INSTALLER_BLOBS, WINDOWS_INSTALLER_VERSION,
+    WINDOWS_UNINSTALLER_BLOB, WINDOWS_UNINSTALLER_MARKER, withWindowsUninstaller, withoutWindowsUninstaller } from '../patches/windows-installer.mjs';
+import { gitBlob } from '../scripts/patch-mixdog.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const builder = join(root, 'android/node_modules/app-builder-lib');
@@ -15,6 +18,42 @@ const compiler = process.env.PASEODOG_NSIS_BINARY;
 const runner = process.env.PASEODOG_WINDOWS_RUNNER;
 const resources = process.env.PASEODOG_NSIS_RESOURCES;
 const win = path => 'Z:' + resolve(path).replaceAll('/', '\\');
+
+test('PaseoDog keeps standard uninstaller generation without changing other custom installers', async () => {
+    const original = withoutWindowsUninstaller(readFileSync(join(builder, 'out/targets/nsis/NsisTarget.js'), 'utf8'));
+    assert.equal(gitBlob(original), WINDOWS_UNINSTALLER_BLOB);
+    const patched = withWindowsUninstaller(original);
+    assert.equal(withoutWindowsUninstaller(patched), original);
+    const start = patched.indexOf('    async computeScriptAndSignUninstaller(');
+    const end = patched.indexOf('    computeVersionKey(', start);
+    for (const script of ['custom installer', WINDOWS_UNINSTALLER_MARKER + 'standard template']) {
+        const compiled = [], signed = [], extracted = [];
+        const method = new Function('path', 'fs_extra_1', 'nsisUtil_1', 'builder_util_1', 'macosVersion_1', 'wine_1',
+            `return ({${patched.slice(start, end)}}).computeScriptAndSignUninstaller;`)(
+            path, { readFile: async () => script },
+            { UninstallerReader: { exec: async (...args) => extracted.push(args) } },
+            { log: { info() {} } }, {}, {},
+        );
+        const target = {
+            packager: { getResource: async () => '/custom.nsi', signIf: async file => signed.push(file) },
+            options: {}, outDir: '/build-output',
+            executeMakensis: async defines => compiled.push({ ...defines }),
+            computeFinalScript: async value => value,
+        };
+        const defines = {};
+        assert.equal(await method.call(target, defines, {}, '/build-output/Setup.exe', '', []), script);
+        const standard = script.startsWith(WINDOWS_UNINSTALLER_MARKER);
+        assert.equal(compiled.length, standard ? 1 : 0);
+        assert.equal(signed.length, standard ? 1 : 0);
+        assert.equal(extracted.length, standard ? 1 : 0);
+        if (standard) {
+            assert.equal(compiled[0].BUILD_UNINSTALLER, null);
+            assert.ok(compiled[0].UNINSTALLER_OUT_FILE);
+            assert.equal(defines.UNINSTALLER_OUT_FILE, path.join(target.outDir, 'Setup.__uninstaller.exe'));
+            assert.equal(Object.hasOwn(defines, 'BUILD_UNINSTALLER'), false);
+        }
+    }
+});
 
 test('Windows installer generation gates every upstream input and check mode never writes', t => {
     const directory = mkdtempSync(join(tmpdir(), 'paseodog-nsis-gate-'));

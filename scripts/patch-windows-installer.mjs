@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { gitBlob } from './patch-mixdog.mjs';
 import {
     WINDOWS_INSTALLER_VERSION, WINDOWS_INSTALLER_BLOBS, withWindowsInstallerSources,
+    WINDOWS_UNINSTALLER_BLOB, withWindowsUninstaller, withoutWindowsUninstaller,
 } from '../patches/windows-installer.mjs';
 
 const builder = fileURLToPath(new URL('../android/node_modules/app-builder-lib/', import.meta.url));
@@ -25,9 +26,17 @@ export function windowsInstallerScript(root = builder) {
 
 export function prepareWindowsInstaller(output, { check = false } = {}) {
     const source = windowsInstallerScript();
+    const target = join(builder, 'out/targets/nsis/NsisTarget.js');
+    const installed = readFileSync(target, 'utf8');
+    const original = withoutWindowsUninstaller(installed);
+    if (gitBlob(original) !== WINDOWS_UNINSTALLER_BLOB)
+        throw new Error('Windows uninstaller builder source hash mismatch');
+    const patched = withWindowsUninstaller(original);
     if (check) {
         if (readFileSync(output, 'utf8') !== source) throw new Error('Windows installer patch is missing');
+        if (installed !== patched) throw new Error('Windows uninstaller builder patch is missing');
     } else {
+        if (installed !== patched) writeFileSync(target, patched);
         writeFileSync(output, source);
     }
 }
