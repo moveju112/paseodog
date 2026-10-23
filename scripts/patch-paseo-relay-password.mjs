@@ -14,7 +14,7 @@ export const RELAY_PASSWORD_PATCHES = [
         previous: ['ad35d4a821a7862b783f8c253ec3288dc39aa2d7'] },
     { package: 'server', file: 'dist/server/server/pairing-offer.js',
         blob: '3c6d163a523a6b0403980557c7b5456e3f83427a', source: 'server/src/server/pairing-offer.ts',
-        previous: ['5c125a60944c228e98c2ea93d08bf9e9716219a4'] },
+        previous: ['5c125a60944c228e98c2ea93d08bf9e9716219a4', '8fefab2893f5c4f0c160dde00d1b2589f4c667ce'] },
     { package: 'cli', file: 'dist/commands/daemon/pair.js',
         blob: '7e31fd5d38bfac62fb97cd63f9c868726652b726', source: 'cli/src/commands/daemon/pair.ts',
         previous: ['1de64ad714077bef1e1498ff73750664072cb390'] },

@@ -194,6 +194,10 @@ export default {
       ...(isProfileBuild ? [withAndroidProfileable] : []),
     ],
     experiments: {
+      // GitHub Pages 전용 export에만 하위 경로를 적용하고 네이티브·PC 빌드는 유지한다.
+      ...(process.env.PASEODOG_WEB_BASE_PATH
+        ? { baseUrl: process.env.PASEODOG_WEB_BASE_PATH }
+        : {}),
       typedRoutes: true,
       reactCompiler: true,
       autolinkingModuleResolution: true,

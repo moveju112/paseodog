@@ -36,6 +36,7 @@ async function getPairingOfferUrl(args: {
     relayPublicEndpoint: args.relayPublicEndpoint,
     appBaseUrl: args.appBaseUrl,
     includeQr: false,
+    password: "connection-offer-test-secret",
   });
   if (!pairing.url) {
     throw new Error("Expected relay pairing URL to be available");
@@ -95,7 +96,7 @@ describe("ConnectionOfferV2 (daemon E2E)", () => {
         relayPublicEndpoint: daemon.config.relayPublicEndpoint,
         appBaseUrl: daemon.config.appBaseUrl,
       });
-      expect(offerUrl.startsWith("https://app.paseo.sh/#offer=")).toBe(true);
+      expect(offerUrl.startsWith("https://moveju112.github.io/paseodog/#offer=")).toBe(true);
 
       const offer = decodeOfferFromFragmentUrl(offerUrl) as {
         v: number;

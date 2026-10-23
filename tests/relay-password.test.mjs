@@ -50,6 +50,25 @@ test('reviewed relay patches are idempotent and refuse source drift or partial a
     }
 });
 
+test('pairing links use the password-enabled web, migrate the old default, and preserve custom hosting', async (t) => {
+    const home = privateHome(t);
+    const helper = await loadSource(relayPasswordModule(), new URL('relay-password.js', serverRoot));
+    const spec = RELAY_PASSWORD_PATCHES.find((entry) => entry.file.endsWith('/pairing-offer.js'));
+    const { module } = await loadSource(patchedRelayPasswordSource(installed(spec), spec),
+        new URL(spec.file, new URL('server/', packageRoot)), { [new URL('relay-password.js', serverRoot).href]: helper.url });
+    const args = { paseoHome: home, relayEnabled: true, includeQr: false, password: 'separate-relay-secret' };
+    for (const appBaseUrl of [undefined, 'https://app.paseo.sh', 'https://app.paseo.sh/']) {
+        const { url } = await module.generateLocalPairingOffer({ ...args, appBaseUrl });
+        const parsed = new URL(url);
+        assert.equal(parsed.origin, 'https://moveju112.github.io');
+        assert.equal(parsed.pathname, '/paseodog/');
+        assert.match(parsed.hash, /^#offer=/);
+        assert.ok(!url.includes(args.password));
+    }
+    const { url } = await module.generateLocalPairingOffer({ ...args, appBaseUrl: 'https://example.test/custom/' });
+    assert.ok(url.startsWith('https://example.test/custom/#offer='));
+});
+
 test('relay issuance stores only a private hash, confirms reissue, and never embeds passwords', async (t) => {
     const home = privateHome(t);
     const helper = await loadSource(relayPasswordModule(), new URL('relay-password.js', serverRoot));

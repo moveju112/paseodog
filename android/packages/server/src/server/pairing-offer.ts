@@ -43,7 +43,11 @@ export async function generateLocalPairingOffer(args: {
   const relayPublicEndpoint = args.relayPublicEndpoint ?? relayEndpoint;
   const relayUseTls = args.relayUseTls ?? relayEndpoint === "relay.paseo.sh:443";
   const relayPublicUseTls = args.relayPublicUseTls ?? relayUseTls;
-  const appBaseUrl = args.appBaseUrl ?? "https://app.paseo.sh";
+  // 기존 기본값을 저장한 호스트도 비밀번호 입력을 지원하는 전용 웹으로 연결한다.
+  const appBaseUrl =
+    !args.appBaseUrl || args.appBaseUrl.replace(/\/$/, "") === "https://app.paseo.sh"
+      ? "https://moveju112.github.io/paseodog"
+      : args.appBaseUrl;
   const serverId = getOrCreateServerId(args.paseoHome, { logger: args.logger });
   const daemonKeyPair = await loadOrCreateDaemonKeyPair(args.paseoHome, args.logger);
   const offer = await createConnectionOfferV2({

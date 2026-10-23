@@ -75,6 +75,22 @@ PC 앱의 **Pair Device**에서도 릴레이 비밀번호를 입력한 뒤 주�
 비밀번호를 잊었다면 같은 화면의 **비밀번호·주소 재설정**으로 새 비밀번호와 새 주소를 받고, 다른 기기는 새 주소로 다시 연결합니다.
 비밀번호는 링크·QR에 포함되지 않습니다. `paseodog password`로 설정하는 로컬 접속 암호와는 별개입니다.
 
+### 브라우저 연결·전용 웹 배포
+
+PaseoDog의 기본 페어링 링크는 비밀번호 입력을 지원하는 `https://moveju112.github.io/paseodog/`를 사용합니다.
+기존 기본 주소 `https://app.paseo.sh`는 링크 발급 시 전용 웹으로 전환하고, 별도로 지정한 웹 주소는 유지합니다.
+이미 발급한 링크는 자동 변경되지 않으므로 적용 후 호스트에서 다시 조회하세요. 비밀번호를 재설정할 필요는 없습니다.
+공식 Paseo 웹(`app.paseo.sh`)에는 PaseoDog의 UI 패치가 적용되지 않습니다.
+
+전용 웹은 아직 배포하지 않았다면 접속할 수 없습니다.
+저장소 **Settings → Pages → Source → GitHub Actions**를 선택한 뒤,
+**Actions → PaseoDog web → Run workflow → main**으로 배포합니다.
+푸시·릴리즈만으로는 배포하지 않습니다. 정적 웹만 공개하며 데몬 포트를 외부에 열지 않습니다.
+GitHub Pages의 깊은 링크 새로고침은 `404.html`로 SPA를 표시합니다(HTTP 상태는 404).
+
+로컬 export는 `node scripts/build-web.mjs --output <절대 출력 경로>`로 실행합니다.
+GitHub Pages 하위 경로는 이 export에만 적용하며 Android·데스크톱 빌드는 바꾸지 않습니다.
+
 APK는 공개 디버그 키 서명이며 Windows·Linux 설치파일에는 코드서명이 없습니다.
 다운로드 파일의 무결성은 릴리즈의 `SHA256SUMS`로 확인할 수 있습니다.
 

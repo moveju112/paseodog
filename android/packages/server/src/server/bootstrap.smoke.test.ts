@@ -941,9 +941,10 @@ export default function contribute(plugin: unknown) {
           relayPublicEndpoint: "127.0.0.1:9",
           appBaseUrl: "https://app.paseo.sh",
           includeQr: false,
+          password: "bootstrap-pairing-test-secret",
         });
         expect(pairing.relayEnabled).toBe(true);
-        expect(pairing.url?.startsWith("https://app.paseo.sh/#offer=")).toBe(true);
+        expect(pairing.url?.startsWith("https://moveju112.github.io/paseodog/#offer=")).toBe(true);
       } finally {
         await daemon.stop().catch(() => undefined);
         await daemon.agentManager.flush().catch(() => undefined);
