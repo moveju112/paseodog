@@ -4,7 +4,10 @@ import release from '../shared/release.json' with { type: 'json' };
 export const VERSION = release.version;
 export const UPSTREAM_VERSIONS = release.paseodogUpstream;
 // 플러그인이 실제로 로드한 릴리즈를 보고하며 디스크만 갱신된 상태와 구분한다.
-export const DAEMON_RELEASE = Object.freeze({ version: release.version, versionCode: release.versionCode });
+export const DAEMON_RELEASE = Object.freeze({
+    version: release.version, versionCode: release.versionCode,
+    paseodogUpstream: Object.freeze({ ...release.paseodogUpstream }),
+});
 
 // 호스트의 환경 정리 뒤에도 자기 Electron 바이너리로 실행하는 엔진만 Node 모드를 복원한다.
 export function engineEnvironment(launch, { isElectron = Boolean(process.versions.electron), execPath = process.execPath } = {}) {

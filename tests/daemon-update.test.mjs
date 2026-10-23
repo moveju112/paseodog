@@ -163,7 +163,10 @@ test('late reply from a disconnected host cannot replace a fresh release result'
 });
 
 test('daemon release RPC reports the loaded product release and rejects mutation inputs', () => {
-    assert.deepEqual(DAEMON_RELEASE, { version: release.version, versionCode: release.versionCode });
+    assert.deepEqual(DAEMON_RELEASE, {
+        version: release.version, versionCode: release.versionCode,
+        paseodogUpstream: release.paseodogUpstream,
+    });
     assert.ok(Object.isFrozen(DAEMON_RELEASE));
     assert.equal(daemonRelease.name, 'daemon-release');
     assert.deepEqual(daemonRelease.output.parse(DAEMON_RELEASE), DAEMON_RELEASE);

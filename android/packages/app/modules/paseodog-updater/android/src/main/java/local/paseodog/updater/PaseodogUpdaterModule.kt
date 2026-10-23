@@ -27,6 +27,11 @@ class PaseodogUpdaterModule : Module() {
       val context = requireNotNull(appContext.reactContext)
       context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode.toDouble()
     }
+    Function("installedRelease") {
+      val context = requireNotNull(appContext.reactContext)
+      val installed = context.packageManager.getPackageInfo(context.packageName, 0)
+      mapOf("version" to installed.versionName, "versionCode" to installed.longVersionCode.toDouble())
+    }
     AsyncFunction("install") { url: String, expectedHash: String, version: Double ->
       check(busy.compareAndSet(false, true)) { "업데이트 작업이 이미 진행 중입니다." }
       try {

@@ -34,6 +34,7 @@ import { withoutRelayPassword } from '../patches/paseo-relay-password.mjs';
 import { withoutCompactionBuffer } from '../patches/paseo-compaction-buffer.mjs';
 import { withoutOfferLink } from '../patches/paseo-offer-link.mjs';
 import { withoutSettingsCorrections } from '../patches/paseo-settings-corrections.mjs';
+import { withoutVersionDetails } from '../patches/paseo-version-details.mjs';
 import { withoutAgentEditorSafety } from '../patches/paseo-agent-editor-safety.mjs';
 import { withoutChatUsability } from '../patches/paseo-chat-usability.mjs';
 import { withoutMarkdownTable } from '../patches/paseo-markdown-table.mjs';
@@ -45,6 +46,7 @@ const withoutUsageOrder = (source) => {
     source = withoutHostSwitch(source);
     source = withoutSingleWorkspace(source);
     source = withoutSettingsBehavior(source);
+    source = withoutVersionDetails(source);
     source = withoutSettingsOrganization(source);
     source = withoutDaemonUpdate(source);
     source = withoutMarkdownTable(source);

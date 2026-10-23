@@ -86,6 +86,7 @@ import { isElectronRuntime } from "@/desktop/host";
 import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
 import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
 import { resolveAppVersion } from "@/utils/app-version";
+import { useAppVersionText, useHostVersionText } from "@/utils/use-version-labels";
 import { useAppDiagnosticStore } from "@/diagnostics/store";
 import { settingsStyles } from "@/styles/settings";
 import { THINKING_TONE_NATIVE_PCM_BASE64 } from "@/utils/thinking-tone.native-pcm";
@@ -510,16 +511,17 @@ interface AboutSectionProps {
 
 function AboutSection({ appVersion, appVersionText, isDesktopApp }: AboutSectionProps) {
   const { t } = useTranslation();
+  const versionText = useAppVersionText(appVersionText);
   return (
     <>
       <SettingsSection title={t("settings.about.title")}>
         <View style={settingsStyles.card}>
-          <View style={settingsStyles.row}>
+          <View style={[settingsStyles.row, styles.versionDetailsRow]}>
             <View style={settingsStyles.rowContent}>
               <Text style={settingsStyles.rowTitle}>{t("settings.about.appVersion")}</Text>
               <Text style={settingsStyles.rowHint}>{t("settings.about.thisDevice")}</Text>
             </View>
-            <Text style={styles.aboutValue}>{appVersionText}</Text>
+            <Text selectable style={styles.aboutValue}>{versionText}</Text>
           </View>
           <PaseodogUpdateRow />
           {isDesktopApp ? <DesktopAppUpdateRow /> : null}
@@ -591,6 +593,7 @@ function HostVersionRow({
   } else {
     valueText = "—";
   }
+  const versionText = useHostVersionText(host.serverId, valueText);
 
   const valueStyle = useMemo(
     () => [styles.aboutValue, isMismatch && styles.aboutVersionMismatch],
@@ -598,7 +601,7 @@ function HostVersionRow({
   );
 
   return (
-    <View style={rowStyle}>
+    <View style={[rowStyle, styles.versionDetailsRow]}>
       <View style={settingsStyles.rowContent}>
         <Text style={settingsStyles.rowTitle} numberOfLines={1}>
           {host.label}
@@ -607,7 +610,7 @@ function HostVersionRow({
           <Text style={settingsStyles.rowHint}>{t("settings.about.versionDiffers")}</Text>
         ) : null}
       </View>
-      <Text style={valueStyle}>{valueText}</Text>
+      <Text selectable style={valueStyle}>{versionText}</Text>
     </View>
   );
 }
@@ -1544,6 +1547,11 @@ const styles = StyleSheet.create((theme) => ({
   aboutValue: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
+  },
+  versionDetailsRow: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 8,
   },
   aboutVersionMismatch: {
     color: theme.colors.palette.amber[500],

@@ -7,6 +7,10 @@ export const daemonRelease = defineRpc({
     output: z.object({
         version: z.string().min(1),
         versionCode: z.number().int().positive(),
+        paseodogUpstream: z.object({
+            paseo: z.string().min(1),
+            mixdog: z.string().min(1),
+        }).strict().optional(),
     }).strict(),
 });
 

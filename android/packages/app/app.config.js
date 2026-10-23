@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const pkg = require("./package.json");
+const paseodogRelease = require("../../../plugin/shared/release.json");
 const withAndroidAsyncStorageSize = require("./plugins/with-android-async-storage-size");
 const withAndroidProfileable = require("./plugins/with-android-profileable");
 const withAndroidApkSplits = require("./plugins/with-android-apk-splits");
@@ -203,6 +204,7 @@ export default {
       autolinkingModuleResolution: true,
     },
     extra: {
+      paseodogRelease,
       fdroidBuild: isFdroidBuild,
       profileBuild: isProfileBuild,
       router: {},

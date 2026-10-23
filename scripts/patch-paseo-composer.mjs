@@ -32,6 +32,7 @@ import { withDaemonUpdate, withoutDaemonUpdate } from '../patches/paseo-daemon-u
 import { withSettingsBehavior, withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
 import { withSingleWorkspace, withoutSingleWorkspace } from '../patches/paseo-single-workspace.mjs';
 import { withHostSwitch, withoutHostSwitch } from '../patches/paseo-host-switch.mjs';
+import { withVersionDetails, withoutVersionDetails } from '../patches/paseo-version-details.mjs';
 
 const PRECOMPRESSED = [['.br', brotliCompressSync, brotliDecompressSync], ['.gz', gzipSync, gunzipSync]];
 
@@ -56,6 +57,7 @@ export function withoutWorktreeSetupTip(source) {
 
 // 기존 첨부파일·대기열 저장 및 배출 로직을 유지하면서 PaseoDog의 자동 턴 교체만 차단한다.
 export function patchedComposerSource(source) {
+    source = withoutVersionDetails(source);
     source = withoutHostSwitch(source);
     source = withoutSingleWorkspace(source);
     source = withoutSettingsBehavior(source);
@@ -90,7 +92,7 @@ export function patchedComposerSource(source) {
     // 사용량 옵션의 Sidebar style에서 Donuts를 고르면 사이드바 쿼터를 링·초기화 카운트다운으로 그린다.
     // 워크트리 스크립트 설정을 권하는 팁은 프로젝트 설정 여부와 무관하게 숨긴다.
     // "추론 숨기기"를 켜면 완료된 최종 답변만 표시한다(모델 추론·네이티브 기록·승인·오류 유지).
-    const hiddenSetupTip = original.replace(...worktreeSetupTip);
+    const hiddenSetupTip = withVersionDetails(original.replace(...worktreeSetupTip));
     // AI 엔진 설정의 압축 여유 버퍼 선택지를 Mixdog 상한에 맞춘 10/20/25%로 바꾼다.
     const resultWithChat = withChatUsability(withAgentEditorSafety(withSettingsCorrections(withOfferLink(withCompactionBuffer(withConversationFocus(withRelayPassword(withExternalLinks(withWorkRecords(withSidebarStatusShapes(withAgentsSettings(withImportCwd(withHideReasoning(withUsageOrder(withUsageDonut(withUsageColors(withWhite2Theme(withCollaboration(withAutoEffort(withAgentProgress(withSidebarToolbar(withHelpMenu(hiddenSetupTip))))))))))))))))))))));
     return withHostSwitch(withSingleWorkspace(withSettingsBehavior(withSettingsOrganization(withDaemonUpdate(withMarkdownTable(resultWithChat))))));

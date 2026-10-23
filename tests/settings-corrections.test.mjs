@@ -87,6 +87,7 @@ test('shared and web about settings omit release channels and changelog without 
         type, ...props, children: children.length ? children : props?.children,
     });
     const translation = { t: (key) => key };
+    const useAppVersionText = base => `PaseoDog: 1.0.0\n빌드: 42\nPaseo: ${base}`;
     const updater = {
         isDesktopApp: true, statusText: 'up to date', availableUpdate: null,
         errorMessage: null, isChecking: false, isInstalling: false,
@@ -106,6 +107,7 @@ test('shared and web about settings omit release channels and changelog without 
     }).outputText;
     const native = runInNewContext(compiled + '; [AboutSection, DesktopAppUpdateRow]', {
         ...components, jsx, Fragment: 'Fragment', settingsStyles: {}, styles: {},
+        useAppVersionText,
         useTranslation: () => translation, useDesktopAppUpdater: () => updater,
         useCallback: (callback) => callback, useFocusEffect() {},
     });
@@ -120,6 +122,7 @@ test('shared and web about settings omit release channels and changelog without 
         S: { useTranslation: () => translation }, Pe: { jsx, jsxs: jsx, Fragment: 'Fragment' },
         t: components, s: components, ae: { settingsStyles: {} }, ot: {},
         Ue: 'whats-new', He: components, Qe: 'desktop-update', T: components, Ge: 'hosts',
+        paseodogVersionLabels: { useAppVersionText },
     });
     const webDesktop = runInNewContext(`(${webFunction('Qe', 'settings.about.releaseChannel.label')});`, {
         l: { c: (size) => Array(size).fill(Symbol.for('react.memo_cache_sentinel')) },
@@ -139,6 +142,7 @@ test('shared and web about settings omit release channels and changelog without 
         for (const isDesktopApp of [false, true]) {
             const values = renderedValues(about({ appVersion: '1.0.0', appVersionText: 'v1.0.0', isDesktopApp }));
             assert.ok(values.includes('settings.about.appVersion'));
+            assert.ok(values.includes('PaseoDog: 1.0.0\n빌드: 42\nPaseo: v1.0.0'));
             assert.ok(values.includes('product-update'));
             assert.ok(!values.includes('whats-new'));
             assert.ok(!values.includes('changelog.title'));
