@@ -569,6 +569,36 @@ describe("native host AI engine settings", () => {
       ),
     );
   });
+  it("requires a Main model for context limits but keeps model-independent controls available", async () => {
+    host.invokePluginRpc.mockResolvedValue({
+      ...snapshot,
+      route: { ...route, model: "" },
+    });
+    render(<AiEnginePage serverId="unconfigured-host" section="tokens" />);
+    const limit = await screen.findByRole("button", { name: "메인 컨텍스트 한도 비율" });
+    expect((limit as HTMLButtonElement).disabled).toBe(true);
+    expect(limit.textContent).toBe("Main 모델 선택 필요");
+    expect(screen.getByText("새 대화 입력창에서 Main 모델을 먼저 선택해 주세요.")).toBeTruthy();
+    fireEvent.click(limit);
+    expect(host.invokePluginRpc.mock.calls.every(([, , input]) => input.action === "read")).toBe(
+      true,
+    );
+    expect((screen.getByRole("checkbox", { name: "자동 압축" }) as HTMLInputElement).disabled).toBe(
+      false,
+    );
+
+    host.invokePluginRpc.mockResolvedValue(snapshot);
+    fireEvent.click(screen.getByRole("button", { name: "새로고침" }));
+    await waitFor(() => expect((limit as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "50% (비용 절감)" }));
+    await waitFor(() =>
+      expect(host.invokePluginRpc).toHaveBeenLastCalledWith(
+        "paseodog-provider",
+        "engine-controls",
+        { action: "main", route: { contextPercent: 50 } },
+      ),
+    );
+  });
   it("shows Auto-Clear details only while enabled and preserves saved thresholds", async () => {
     let autoClear = { ...snapshot.autoClear };
     host.invokePluginRpc.mockImplementation(async (_plugin, _method, input) => {

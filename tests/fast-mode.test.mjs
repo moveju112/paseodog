@@ -177,6 +177,28 @@ test('draft Fast checks the selected model capability instead of borrowing the M
     assert.ok(calls.every((input) => input.action === 'read'));
 });
 
+test('draft Fast requires a configured Main even when the draft model supports Fast', async () => {
+    const calls = [];
+    let model = '';
+    const client = { isConnected: true, async invokePluginRpc(plugin, method, input) {
+        calls.push(input);
+        return { route: { provider: 'test', model, fast: false },
+            models: [{ provider: 'test', id: 'main', fastCapable: true }] };
+    } };
+    const control = createFastControl(client, null, 'test/main');
+    await control.refresh();
+    assert.equal(control.getSnapshot().available, false);
+    await control.toggle();
+    assert.ok(calls.every((input) => input.action === 'read'));
+    model = 'main';
+    await control.refresh();
+    assert.equal(control.getSnapshot().available, true);
+    await control.toggle();
+    assert.deepEqual(calls.filter((input) => input.action !== 'read'), [
+        { action: 'main', route: { fast: true } },
+    ]);
+});
+
 test('injected web UI renders only a lightning switch, toggles the live session, and gates disconnected hosts', async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     let enabled = false, connectionListener;

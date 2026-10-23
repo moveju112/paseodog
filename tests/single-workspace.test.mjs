@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import {
-    SINGLE_WORKSPACE_EDITS, withSingleWorkspace, withoutSingleWorkspace,
+    SINGLE_WORKSPACE_EDITS, WORKSPACE_HEADER_EDITS, withSingleWorkspace, withoutSingleWorkspace,
 } from '../patches/paseo-single-workspace.mjs';
 
 const app = new URL('../android/packages/app/', import.meta.url);
@@ -34,6 +34,64 @@ function sourceRowModel() {
 }
 
 const webRowModel = evaluateModule(patched, 4355, [{}]).buildSidebarProjectRowModel;
+
+function headerHarness(platform) {
+    let compact = false;
+    const jsx = (type, props, ...children) => ({
+        type, props: children.length ? { ...props, children } : props,
+    });
+    const theme = {
+        spacing: { 1: 4, 2: 8 },
+        borderRadius: { lg: 8 },
+        colors: { surfaceSidebar: '#111' },
+    };
+    const source = platform === 'source' ? readApp('components/left-sidebar.tsx') : patched;
+    const slice = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
+    let code;
+    let styles;
+    let bindings;
+    let name;
+    if (platform === 'source') {
+        const styleCode = transformSync(`const styles = {
+            ${slice('workspacesSectionHeader:', 'workspacesSectionTitle:')}
+            ${slice('mobileCloseButton:', 'desktopSidebarBorder:')}
+        };`, { loader: 'ts' }).code;
+        styles = new Function('theme', `${styleCode};return styles;`)(theme);
+        code = transformSync(slice('function WorkspacesSectionHeader()', '// Stable element'), {
+            loader: 'tsx', jsxFactory: 'jsx',
+        }).code;
+        name = 'WorkspacesSectionHeader';
+        bindings = {
+            useIsCompactFormFactor: () => compact, jsx, styles,
+            View: 'view', Text: 'text', Tooltip: 'tooltip', TooltipTrigger: 'trigger',
+            TooltipContent: 'content', IconTooltipContent: 'icon',
+            SidebarDisplayPreferencesMenu: 'display-menu',
+        };
+    } else {
+        styles = new Function('e', `return {
+            ${slice('workspacesSectionHeader:', 'workspacesSectionTitle:')}
+            ${slice('mobileCloseButton:', 'desktopSidebarBorder:')}
+        };`)(theme);
+        code = slice('function we(){const isCompact=', 'const xe=');
+        name = 'we';
+        const cache = Array(4).fill(Symbol.for('react.memo_cache_sentinel'));
+        bindings = {
+            A: { useIsCompactFormFactor: () => compact }, n: { c: () => cache },
+            oe: { jsx, jsxs: jsx }, Re: styles, t: { View: 'view' }, o: { Text: 'text' },
+            T: { Tooltip: 'tooltip', TooltipTrigger: 'trigger', TooltipContent: 'content' },
+            k: { SidebarDisplayPreferencesMenu: 'display-menu' }, ae: 'icon',
+        };
+    }
+    const component = new Function(...Object.keys(bindings), `${code};return ${name};`)(
+        ...Object.values(bindings));
+    return {
+        closeStyle: styles.mobileCloseButton,
+        render(isCompact) {
+            compact = isCompact;
+            return component();
+        },
+    };
+}
 
 // 실제 소스·웹 컴포넌트를 동일 입력으로 실행한다. 웹은 컴파일러 캐시를 렌더 사이에 유지한다.
 function blockHarness(platform) {
@@ -136,7 +194,30 @@ test('single workspace patch is reversible, idempotent and refuses drift or part
     assert.throws(() => withSingleWorkspace('unexpected upstream'), /anchor mismatch/);
 });
 
+test('header fix upgrades the previous patch and rejects partial or duplicate header edits', () => {
+    let previous = patched;
+    for (const [before, after] of [...WORKSPACE_HEADER_EDITS].reverse())
+        previous = previous.replace(after, () => before);
+    assert.equal(patchedComposerSource(previous), patched);
+    const [before, after] = WORKSPACE_HEADER_EDITS[0];
+    assert.throws(() => withoutSingleWorkspace(patched.replace(after, before)), /Partial/);
+    assert.throws(() => withoutSingleWorkspace(patched + after), /drift/);
+});
+
 for (const platform of ['source', 'web']) {
+    test(`${platform}: display menu stays outside the mobile close hit target across layout changes`, () => {
+        const harness = headerHarness(platform);
+        const desktop = harness.render(false);
+        assert.equal(desktop.props.style.paddingRight, 4);
+        const mobile = harness.render(true);
+        const closeHitExtent = harness.closeStyle.marginRight + harness.closeStyle.width + 8;
+        assert.ok(mobile.props.style.paddingRight >= closeHitExtent);
+        const containsMenu = (node) => node?.type === 'display-menu'
+            || [node?.props?.children].flat().some((child) => child && typeof child === 'object' && containsMenu(child));
+        assert.ok(containsMenu(mobile));
+        assert.deepEqual(harness.render(false).props.style, desktop.props.style);
+    });
+
     test(`${platform}: toggling single mode immediately merges rows, preserves status and opens the correct host`, () => {
         const harness = blockHarness(platform);
         const regular = harness.render('project');

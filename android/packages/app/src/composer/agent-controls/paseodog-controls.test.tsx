@@ -13,7 +13,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentFeature } from "@getpaseo/protocol/agent-types";
 
 const runtime = vi.hoisted(() => ({
-  client: { invokePluginRpc: vi.fn(), setAgentFeature: vi.fn(), fetchAgent: vi.fn(), isConnected: true },
+  client: {
+    invokePluginRpc: vi.fn(),
+    setAgentFeature: vi.fn(),
+    fetchAgent: vi.fn(),
+    isConnected: true,
+  },
   connected: true,
   visible: true,
 }));
@@ -166,7 +171,7 @@ const secondFastScope = { paseodogScope: "live" as const, agentId: "two" };
 // PC 패치가 허용하는 최소 RPC 응답을 만든다.
 function snapshot(autoEffort = false, orchestration = "none", supported = true, enabled = true) {
   return {
-    route: { autoEffort },
+    route: { autoEffort, model: "small" },
     orchestration,
     toolModules: { autoEffort: { supported, enabled } },
   };
@@ -200,6 +205,30 @@ afterEach(() => {
 });
 
 describe("native Effort list contract", () => {
+  it("keeps manual effort local until a Main model is configured", async () => {
+    runtime.client.invokePluginRpc.mockResolvedValue({
+      ...snapshot(true),
+      route: { autoEffort: true, model: "" },
+    });
+    const select = vi.fn();
+    const { result } = renderHook(() =>
+      usePaseodogAutoEffort({
+        provider: "paseodog",
+        scope: "draft",
+        serverId: "host",
+        thinkingOptions: options,
+        onSelectThinkingOption: select,
+      }),
+    );
+    await waitFor(() => expect(runtime.client.invokePluginRpc).toHaveBeenCalledTimes(1));
+    expect(result.current.thinkingOptions).toEqual(options);
+    act(() => result.current.onSelectThinkingOption("high"));
+    expect(select).toHaveBeenCalledExactlyOnceWith("high");
+    expect(runtime.client.invokePluginRpc.mock.calls.map((call) => call[2])).toEqual([
+      { action: "read" },
+    ]);
+  });
+
   it("uses only the live session feature and leaves manual selection on its existing path", async () => {
     const select = vi.fn();
     const props = {
@@ -420,19 +449,18 @@ describe("native Fast lightning toggle", () => {
     route: { provider: "test", model: "model", fast },
     models: [{ provider: "test", id: "model", fastCapable }],
   });
-  it("uses an icon only and shares confirmed draft defaults without changing collaboration", async () => {
+  it("keeps the toolbar icon-only and shows shared confirmed draft states in the sheet", async () => {
     runtime.client.invokePluginRpc.mockResolvedValue(fastSnapshot());
     render(
       <>
         <PaseodogCollaboration provider="paseodog" serverId="host" />
-        <PaseodogCollaboration provider="paseodog" serverId="host" />
+        <PaseodogCollaboration provider="paseodog" serverId="host" surface="sheet" />
       </>,
     );
     const triggers = screen.getAllByRole("switch", { name: /^Fast mode/ });
-    await waitFor(() =>
-      expect(triggers[0].getAttribute("aria-label")).toBe("Fast mode: 꺼짐"),
-    );
+    await waitFor(() => expect(triggers[0].getAttribute("aria-label")).toBe("Fast mode: 꺼짐"));
     expect(triggers[0].textContent).toBe("");
+    expect(triggers[1].textContent).toBe("Fast꺼짐");
     expect(screen.getAllByTestId("fast-icon")).toHaveLength(2);
     expect(screen.queryByText("OCHE")).toBeNull();
     expect(runtime.client.invokePluginRpc).toHaveBeenCalledTimes(1);
@@ -442,13 +470,17 @@ describe("native Fast lightning toggle", () => {
     fireEvent.click(triggers[0]);
     // 저장 중에는 같은 호스트의 다른 스위치도 막혀 중복 쓰기가 없다.
     expect(triggers.map((toggle) => toggle.hasAttribute("disabled"))).toEqual([true, true]);
+    expect(triggers[1].textContent).toBe("Fast확인 중");
     fireEvent.click(triggers[1]);
     expect(runtime.client.invokePluginRpc).toHaveBeenCalledTimes(2);
     await act(async () => pending.resolve(fastSnapshot(true)));
     expect(triggers.map((toggle) => toggle.getAttribute("aria-checked"))).toEqual(["true", "true"]);
+    expect(triggers[1].textContent).toBe("Fast켜짐");
+    expect(triggers[0].textContent).toBe("");
     runtime.client.invokePluginRpc.mockResolvedValue(fastSnapshot());
     fireEvent.click(triggers[1]);
     await waitFor(() => expect(triggers[0].getAttribute("aria-checked")).toBe("false"));
+    expect(triggers[1].textContent).toBe("Fast꺼짐");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(runtime.client.invokePluginRpc.mock.calls.map((call) => call[2])).toEqual([
       { action: "read" },
@@ -464,19 +496,13 @@ describe("native Fast lightning toggle", () => {
     runtime.client.invokePluginRpc.mockResolvedValue(fastSnapshot());
     render(<PaseodogCollaboration provider="paseodog" serverId="host" />);
     const trigger = screen.getByRole("switch", { name: /^Fast mode/ });
-    await waitFor(() =>
-      expect(trigger.getAttribute("aria-label")).toBe("Fast mode: 꺼짐"),
-    );
+    await waitFor(() => expect(trigger.getAttribute("aria-label")).toBe("Fast mode: 꺼짐"));
     runtime.client.invokePluginRpc.mockRejectedValueOnce(new Error("timeout"));
     fireEvent.click(trigger);
-    await waitFor(() =>
-      expect(trigger.getAttribute("aria-label")).toBe("Fast mode: 확인 필요"),
-    );
+    await waitFor(() => expect(trigger.getAttribute("aria-label")).toBe("Fast mode: 확인 필요"));
     expect(screen.getAllByText(/저장 요청은 자동 재전송하지 않아요/).length).toBeGreaterThan(0);
     fireEvent.click(trigger);
-    await waitFor(() =>
-      expect(trigger.getAttribute("aria-label")).toBe("Fast mode: 꺼짐"),
-    );
+    await waitFor(() => expect(trigger.getAttribute("aria-label")).toBe("Fast mode: 꺼짐"));
     expect(runtime.client.invokePluginRpc.mock.calls.map((call) => call[2])).toEqual([
       { action: "read" },
       { action: "main", route: { fast: true } },
@@ -501,12 +527,14 @@ describe("native Fast lightning toggle", () => {
     ]);
   });
 
-  it("keeps the sheet icon-only and disables unsupported models", async () => {
+  it("shows the unsupported-model status in the sheet and disables the toggle", async () => {
     runtime.client.invokePluginRpc.mockResolvedValue(fastSnapshot(false, false));
     render(<PaseodogCollaboration provider="paseodog" serverId="host" surface="sheet" />);
     const trigger = screen.getByRole("switch", { name: /^Fast mode/ });
-    await waitFor(() => expect(trigger.getAttribute("aria-label")).toBe("Fast mode: 지원하지 않는 모델"));
-    expect(trigger.textContent).toBe("");
+    await waitFor(() =>
+      expect(trigger.getAttribute("aria-label")).toBe("Fast mode: 지원하지 않는 모델"),
+    );
+    expect(trigger.textContent).toBe("Fast지원하지 않는 모델");
     expect(trigger.hasAttribute("disabled")).toBe(true);
   });
 

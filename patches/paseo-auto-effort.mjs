@@ -18,7 +18,7 @@ export function createAutoEffortState(client) {
             const value = await client.invokePluginRpc('paseodog-provider', 'engine-controls', input);
             if (typeof value?.route?.autoEffort !== 'boolean') throw new Error('Unsupported auto effort snapshot');
             const module = value.toolModules?.autoEffort;
-            publish({ enabled: value.route.autoEffort, available: module?.supported !== false && module?.enabled === true });
+            publish({ enabled: value.route.autoEffort, available: Boolean(value.route.model?.trim()) && module?.supported !== false && module?.enabled === true });
             return true;
         } catch {
             publish({ enabled: null, error: '자동 추론 설정 결과를 확인할 수 없어요. 다시 선택하면 새로고침만 해요.' });
@@ -149,10 +149,13 @@ export const AUTO_EFFORT_EDITS = [
 
 // 훅 전체가 있을 때만 제거해 원본 해시 검증을 유지한다.
 export function withoutAutoEffort(source) {
-    const previous = AUTO_EFFORT_SOURCE
-        .replace("'자동 추론 (확인 필요)' : 'Auto'", "'자동 추론 (확인 필요)' : '자동 추론 (호스트 기본)'")
-        .replace("'자동 추론 (저장 중)' : 'Auto'", "'자동 추론 (저장 중)' : '자동 추론 (이 세션)'");
-    const installed = source.includes(previous) ? previous : AUTO_EFFORT_SOURCE;
+    const previous = AUTO_EFFORT_SOURCE.replace('Boolean(value.route.model?.trim()) && ', '');
+    const versions = [AUTO_EFFORT_SOURCE, previous].flatMap((value) => [
+        value,
+        value.replace("'자동 추론 (확인 필요)' : 'Auto'", "'자동 추론 (확인 필요)' : '자동 추론 (호스트 기본)'")
+            .replace("'자동 추론 (저장 중)' : 'Auto'", "'자동 추론 (저장 중)' : '자동 추론 (이 세션)'"),
+    ]);
+    const installed = versions.find((value) => source.includes(value)) || AUTO_EFFORT_SOURCE;
     const markers = [installed, ...AUTO_EFFORT_EDITS.map(([, after]) => after)];
     const present = markers.map((marker) => source.includes(marker));
     if (present.every((value) => !value)) return source;

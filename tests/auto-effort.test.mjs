@@ -53,7 +53,7 @@ function wrapper(store, seen) {
     };
 }
 
-function hostClient(initial, { failWrite = false } = {}) {
+function hostClient(initial, { failWrite = false, model = 'small' } = {}) {
     const calls = [];
     let autoEffort = initial;
     return { calls, client: { async invokePluginRpc(plugin, method, input) {
@@ -62,7 +62,7 @@ function hostClient(initial, { failWrite = false } = {}) {
             autoEffort = input.route.autoEffort;
             if (failWrite) throw new Error('ack lost');
         }
-        return { route: { autoEffort }, toolModules: { autoEffort: { enabled: true, installed: true, supported: true } } };
+        return { route: { autoEffort, model }, toolModules: { autoEffort: { enabled: true, installed: true, supported: true } } };
     } } };
 }
 
@@ -82,7 +82,7 @@ function sdkOverConnection(f, hostCalls) {
         setAgentFeature: (agentId, id, value) => configure({ settings: { [id]: value } }),
         async invokePluginRpc(plugin, method, input) {
             hostCalls.push(input);
-            return { route: { autoEffort: true }, toolModules: { autoEffort: { enabled: true, supported: true } } };
+            return { route: { autoEffort: true, model: 'model' }, toolModules: { autoEffort: { enabled: true, supported: true } } };
         },
     };
 }
@@ -292,6 +292,30 @@ test('draft auto entry reflects the real host default, manual choice turns it of
     }
 });
 
+test('draft without a Main model keeps manual effort usable without a host mutation', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const { client, calls } = hostClient(true, { model: '' });
+    const seen = [], selected = [];
+    const Component = wrapper({ sessions: { host: { client } } }, seen);
+    const options = [{ id: 'low', label: 'Low' }];
+    let tree;
+    try {
+        await act(async () => {
+            tree = create(React.createElement(Component, {
+                paseodogScope: 'draft', provider: 'paseodog', modelSelectorServerId: 'host',
+                thinkingOptions: options, onSelectThinkingOption: (id) => selected.push(id),
+            }));
+        });
+        assert.equal(seen.at(-1).thinkingOptions, options);
+        await act(async () => seen.at(-1).onSelectThinkingOption('low'));
+        assert.deepEqual(selected, ['low']);
+        assert.deepEqual(calls.map(({ input }) => input), [{ action: 'read' }]);
+    } finally {
+        await act(async () => tree?.unmount());
+        delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+    }
+});
+
 test('other providers, models without effort levels and disabled modules keep the original controls untouched', async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     const { client, calls } = hostClient(true);
@@ -308,7 +332,7 @@ test('other providers, models without effort levels and disabled modules keep th
         assert.equal(seen.filter((props) => props.provider === 'paseodog').every((props) => props.thinkingOptions.length === 0), true);
         assert.ok(calls.every(({ input }) => input.action === 'read'));
         const off = { async invokePluginRpc() {
-            return { route: { autoEffort: true }, toolModules: { autoEffort: { enabled: false, supported: true } } };
+            return { route: { autoEffort: true, model: 'small' }, toolModules: { autoEffort: { enabled: false, supported: true } } };
         } };
         const disabled = [];
         const Disabled = wrapper({ sessions: { host: { client: off } } }, disabled);

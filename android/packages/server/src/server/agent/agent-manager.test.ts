@@ -2960,6 +2960,7 @@ test("createAgent injects paseo MCP server only into provider launch config", as
     registry: storage,
     logger,
     mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpAuthToken: "test-mcp-signing-key",
     idFactory: () => "00000000-0000-4000-8000-000000000103",
   });
 
@@ -2988,6 +2989,7 @@ test("createAgent injects paseo MCP server only into provider launch config", as
     paseo: {
       type: "http",
       url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${snapshot.id}`,
+      headers: { Authorization: expect.stringMatching(/^Bearer paseodog-agent-v1\./) },
     },
     custom: {
       type: "stdio",
@@ -3289,7 +3291,7 @@ test("createAgent allows best-effort internal MCP when the provider session repo
   expect(client.lastConfig?.mcpServers?.paseo).toEqual({
     type: "http",
     url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${snapshot.id}`,
-    headers: { Authorization: "Bearer cap-token" },
+    headers: { Authorization: expect.stringMatching(/^Bearer paseodog-agent-v1\./) },
   });
 
   rmSync(workdir, { recursive: true, force: true });
@@ -3417,6 +3419,7 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
     registry: storage,
     logger,
     mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpAuthToken: "test-mcp-signing-key",
     resolvePaseoToolPolicy: () => ({ disabledTools: ["list_agents"] }),
   });
   const enabledAgent = await enabledManager.createAgent(
@@ -3428,6 +3431,7 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
   expect(enabledClient.lastConfig?.mcpServers?.paseo).toEqual({
     type: "http",
     url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${enabledAgent.id}`,
+    headers: { Authorization: expect.stringMatching(/^Bearer paseodog-agent-v1\./) },
   });
 
   const disabledClient = new McpClient();
@@ -3469,6 +3473,7 @@ test("resumeAgentFromPersistence replaces stored internal paseo MCP with current
     registry: storage,
     logger,
     mcpBaseUrl: "http://127.0.0.1:6768/mcp/agents",
+    mcpAuthToken: "test-mcp-signing-key",
     idFactory: () => "00000000-0000-4000-8000-000000000105",
   });
   const handle: AgentPersistenceHandle = {
@@ -3497,6 +3502,7 @@ test("resumeAgentFromPersistence replaces stored internal paseo MCP with current
     paseo: {
       type: "http",
       url: `http://127.0.0.1:6768/mcp/agents?callerAgentId=${snapshot.id}`,
+      headers: { Authorization: expect.stringMatching(/^Bearer paseodog-agent-v1\./) },
     },
     custom: {
       type: "stdio",

@@ -443,9 +443,11 @@ function EngineSettings({ theme, host, section }: PluginSurfaceProps & { section
         {snapshot && section === 'tokens' && <>
             {mainModel?.fastCapable && button(`Fast 응답: ${snapshot.route.fast ? '켜짐' : '꺼짐'}`,
                 () => void request({ action: 'main', route: { fast: !snapshot.route.fast } }))}
+            {!snapshot.route.model?.trim() && <Text style={text}>새 대화 입력창에서 Main 모델을 먼저 선택해 주세요.</Text>}
             {([100, 85, 70, 50] as const).map((pct) => button(`컨텍스트 한도 ${pct}%`,
                 () => void request({ action: 'main', route: { contextPercent: pct } }),
-                (snapshot.route.contextPercent ?? 100) === pct))}
+                Boolean(snapshot.route.model?.trim()) && (snapshot.route.contextPercent ?? 100) === pct,
+                busy || !snapshot.route.model?.trim()))}
             {button(`자동 압축: ${snapshot.compaction.auto ? '켜짐' : '꺼짐'}`,
                 () => void request({ action: 'compaction', enabled: !snapshot.compaction.auto }))}
             {button(`모델 변경 시 자동 압축: ${snapshot.compaction.onModelChange ? '켜짐' : '꺼짐'}`,

@@ -1,4 +1,6 @@
 import type { AgentSessionConfig, McpServerConfig } from "./agent-sdk-types.js";
+import * as crypto from "node:crypto";
+import { createAgentMcpIdentity } from "./agent-mcp-identity.js";
 
 const PASEO_MCP_SERVER_NAME = "paseo";
 const PASEO_MCP_PATHNAME = "/mcp/agents";
@@ -31,14 +33,13 @@ export function withRuntimePaseoMcpServer(params: {
   agentId: string;
   mcpBaseUrl: string | null;
   /**
-   * Capability token authenticating the injected connection to the daemon's
-   * Agent MCP endpoint. The daemon password is gated off this route, so without
-   * this header the agent's MCP requests are rejected when a password is set.
+   * Daemon signing key. Only a derived, agent-bound token reaches the provider;
+   * the root key is never included in the launch config.
    */
   mcpAuthToken: string | null;
 }): AgentSessionConfig {
   const storedConfig = stripInternalPaseoMcpServer(params.config);
-  if (!params.mcpBaseUrl || storedConfig.mcpServers?.[PASEO_MCP_SERVER_NAME]) {
+  if (!params.mcpBaseUrl || !params.mcpAuthToken || storedConfig.mcpServers?.[PASEO_MCP_SERVER_NAME]) {
     return storedConfig;
   }
 
@@ -48,9 +49,9 @@ export function withRuntimePaseoMcpServer(params: {
       [PASEO_MCP_SERVER_NAME]: {
         type: "http",
         url: `${params.mcpBaseUrl}?callerAgentId=${params.agentId}`,
-        ...(params.mcpAuthToken
-          ? { headers: { Authorization: `Bearer ${params.mcpAuthToken}` } }
-          : {}),
+        headers: {
+          Authorization: `Bearer ${createAgentMcpIdentity({ crypto, secret: params.mcpAuthToken }).mint(params.agentId)}`,
+        },
       },
       ...storedConfig.mcpServers,
     },

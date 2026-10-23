@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Zap } from "lucide-react-native";
@@ -37,9 +44,15 @@ function useFastMode(provider: string, serverId: string | null) {
   const connected = useHostRuntimeIsConnected(serverId ?? "");
   const visible = useAppActivelyVisible();
   const control =
-    client && serverId && provider === "paseodog" &&
+    client &&
+    serverId &&
+    provider === "paseodog" &&
     (scope.paseodogScope === "draft" || scope.agentId)
-      ? getFastControl(client, scope.paseodogScope === "live" ? scope.agentId : null, scope.selectedModelId)
+      ? getFastControl(
+          client,
+          scope.paseodogScope === "live" ? scope.agentId : null,
+          scope.selectedModelId,
+        )
       : null;
   const snapshot = useSyncExternalStore(
     control?.subscribe ?? emptySubscribe,
@@ -59,16 +72,17 @@ function fastStatus(snapshot: ReturnType<ReturnType<typeof getFastControl>["getS
   return snapshot.enabled ? "켜짐" : "꺼짐";
 }
 
-// 기존 OCHE 자리는 아이콘 전용 Fast 토글로 대체하고 협업·권한 설정은 그대로 둔다.
+// Fast 토글은 툴바에서는 아이콘, 시트에서는 라벨과 상태가 있는 행으로 표시한다.
 export function PaseodogCollaboration({
   provider,
   serverId,
   disabled = false,
+  surface = "toolbar",
 }: CollaborationProps) {
   const { control, snapshot, connected, scope } = useFastMode(provider, serverId);
   const enabled = snapshot.enabled === true && !snapshot.error;
-  const blocked = disabled || !connected || snapshot.busy ||
-    (!snapshot.error && !snapshot.available);
+  const blocked =
+    disabled || !connected || snapshot.busy || (!snapshot.error && !snapshot.available);
   const accessibilityState = useMemo(
     () => ({ checked: enabled, disabled: blocked, busy: snapshot.busy }),
     [enabled, blocked, snapshot.busy],
@@ -78,9 +92,11 @@ export function PaseodogCollaboration({
   }, [blocked, control]);
   if (!control) return null;
   const status = fastStatus(snapshot);
-  const hint = snapshot.error || (scope.paseodogScope === "live"
-    ? "이 세션의 다음 요청부터 적용 · 추가 요금이 발생할 수 있어요"
-    : "새 세션의 기본값 · 추가 요금이 발생할 수 있어요");
+  const hint =
+    snapshot.error ||
+    (scope.paseodogScope === "live"
+      ? "이 세션의 다음 요청부터 적용 · 추가 요금이 발생할 수 있어요"
+      : "새 세션의 기본값 · 추가 요금이 발생할 수 있어요");
   let iconMapping = mutedIconMapping;
   if (enabled) iconMapping = accentIconMapping;
   if (snapshot.error) iconMapping = destructiveIconMapping;
@@ -89,8 +105,9 @@ export function PaseodogCollaboration({
       <ThemedAgentControlTrigger
         icon={Zap}
         uniProps={iconMapping}
-        surface="toolbar"
+        surface={surface}
         label="Fast"
+        value={status}
         showToolbarLabel={false}
         showCaret={false}
         open={enabled}
