@@ -130,23 +130,28 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
         await stage('github-draft', () => execute('github-draft', 'gh', ['release', 'create', tag, '--draft',
             '--repo', config.repo, '--target', commit, '--title', `PaseoDog ${version}`, '--notes-file', join(root, 'CHANGELOG.md')]),
         { mutation: true });
-        await stage('github-upload', () => execute('github-upload', 'gh', ['release', 'upload', tag, '--repo', config.repo, ...assets]),
-            { mutation: true });
+        const webOutput = join(workspace, 'web-cloudflare');
+        await mkdir(join(config.cacheRoot, 'web-cloudflare'), { recursive: true });
+        // 업로드와 웹 export는 입력을 공유하지 않는다. 둘 다 끝나기 전에는 공개하거나 잠금을 해제하지 않는다.
+        const prepared = await Promise.allSettled([
+            stage('github-upload', () => execute('github-upload', 'gh',
+                ['release', 'upload', tag, '--repo', config.repo, ...assets]), { mutation: true }),
+            stage('browser-export', () => buildWeb({
+                output: webOutput, hosting: 'cloudflare', metroWorkers: String(config.metroWorkers), dependenciesBuilt: true,
+            }, (command, args, options) => execute('browser-export', 'systemd-run', [
+                '--user', '--scope', '-q', '-p', 'MemoryHigh=16G', '-p', 'MemorySwapMax=2G', command, ...args,
+            ], options.cwd, { ...options.env, TMPDIR: join(config.cacheRoot, 'web-cloudflare') })),
+            { artifacts: [webOutput] }),
+        ]);
+        const failures = prepared.filter(result => result.status === 'rejected').map(result => result.reason);
+        if (failures.length) throw new AggregateError(failures, failures.map(error => error.message).join('; '));
+        await assertSource();
         const published = JSON.parse(await capture('gh', ['release', 'view', tag, '--repo', config.repo,
             '--json', 'assets,targetCommitish']));
         if (published.targetCommitish !== commit) throw new Error('GitHub release target differs from verified commit');
         verifyRemoteAssets(published.assets, expected);
         await stage('github-publish', () => execute('github-publish', 'gh',
             ['release', 'edit', tag, '--repo', config.repo, '--draft=false', '--latest']), { mutation: true });
-        const webOutput = join(workspace, 'web-cloudflare');
-        await mkdir(join(config.cacheRoot, 'web-cloudflare'), { recursive: true });
-        await stage('browser-export', () => buildWeb({
-            output: webOutput, hosting: 'cloudflare', metroWorkers: String(config.metroWorkers), dependenciesBuilt: true,
-        }, (command, args, options) => execute('browser-export', 'systemd-run', [
-            '--user', '--scope', '-q', '-p', 'MemoryHigh=16G', '-p', 'MemorySwapMax=2G', command, ...args,
-        ], options.cwd, { ...options.env, TMPDIR: join(config.cacheRoot, 'web-cloudflare') })),
-        { artifacts: [webOutput] });
-        await assertSource();
         await stage('pages-deploy', () => execute('pages-deploy', 'npx', ['--no-install', 'wrangler', 'pages', 'deploy',
             webOutput, '--project-name', config.pagesProject, '--branch', 'main'], join(root, 'android/packages/app')),
         { mutation: true });

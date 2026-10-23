@@ -160,7 +160,9 @@ test('verification retains completed checks across failure and output-workspace 
     assert.equal(counts.get('check.log'), 2);
 });
 
-test('integrated delivery verifies before publishing and resumes without replaying mutations', async t => {
+for (const failure of [null, 'upload', 'export']) {
+test(`integrated delivery overlaps upload/export, drains failures and resumes safely: ${failure ?? 'success'}`,
+    { timeout: 10000 }, async t => {
     const directory = await temporary(t);
     const key = join(directory, 'approved.keystore'), init = join(directory, 'signing.gradle'), previous = join(directory, 'previous.apk');
     await writeFile(key, 'fixture'); await writeFile(init, `storeFile = file("${key}")`); await writeFile(previous, 'old');
@@ -172,6 +174,8 @@ test('integrated delivery verifies before publishing and resumes without replayi
     t.after(() => rm(config.cacheRoot, { recursive: true, force: true }));
     const calls = [];
     let assets = [];
+    let exportStarted;
+    const exporting = new Promise(resolve => { exportStarted = resolve; });
     const run = async (command, args) => {
         calls.push([command, ...args]);
         if (command === 'git') {
@@ -186,7 +190,15 @@ test('integrated delivery verifies before publishing and resumes without replayi
             targetCommitish: 'abc', assets: assets.map(path => ({ name: path.split('/').at(-1), size: 7 })),
         });
         if (command === 'npx' && args[0] === 'expo') throw new Error('Browser export must run in a bounded scope');
+        if (command === 'gh' && args[1] === 'upload') {
+            await exporting;
+            await new Promise(resolve => setImmediate(resolve));
+            if (failure === 'upload') throw new Error('upload failed');
+        }
         if (command === 'systemd-run' && args.includes('expo')) {
+            exportStarted();
+            await new Promise(resolve => setImmediate(resolve));
+            if (failure === 'export') throw new Error('export failed');
             const output = args[args.indexOf('--output-dir') + 1];
             const { mkdir } = await import('node:fs/promises');
             await mkdir(output); await writeFile(join(output, 'index.html'), 'fixture');
@@ -206,6 +218,16 @@ test('integrated delivery verifies before publishing and resumes without replayi
         launchDesktop: async () => { calls.push(['desktop']); },
         installedRelease: async () => ({ versionCode: Number(config.versionCode) }),
     };
+    if (failure) {
+        await assert.rejects(deliverRelease(config, operations), new RegExp(`${failure} failed`));
+        const saved = JSON.parse(await readFile(join(directory, 'release-state.json'), 'utf8'));
+        assert.equal(saved.stages['github-upload'].status, failure === 'upload' ? 'failed' : 'complete');
+        assert.equal(saved.stages['browser-export'].status, failure === 'export' ? 'failed' : 'complete');
+        assert.equal(calls.some(row => row[0] === 'gh' && row[2] === 'edit'), false);
+        assert.equal(calls.some(row => row.includes('deploy')), false);
+        await assert.rejects(readFile(join(directory, 'delivery.lock')), { code: 'ENOENT' });
+        return;
+    }
     await deliverRelease(config, operations);
     const firstCount = calls.filter(row => row[0] === 'gh' && ['create', 'upload', 'edit'].includes(row[2])).length;
     assert.equal(firstCount, 3);
@@ -219,6 +241,7 @@ test('integrated delivery verifies before publishing and resumes without replayi
     assert.equal(calls.filter(row => row[0] === 'desktop').length, 1);
     assert.equal(calls.filter(row => row[0] === 'build').length, 1);
 });
+}
 
 test('delivery defaults are explicit targets and detached execution is a service, not a caller-owned scope', () => {
     const input = {
