@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { runReleaseBuild, buildRelease } from '../scripts/build-release.mjs';
 
 const require = createRequire(import.meta.url);
@@ -9,6 +13,20 @@ const { configureBundleCache } = require('../android/packages/app/plugins/with-a
 const builderConfig = require('../android/packages/desktop/electron-builder.cjs');
 const { getMainFileMatchers, getNodeModuleFileMatcher } =
     require('../android/node_modules/app-builder-lib/out/fileMatcher.js');
+
+test('desktop postcompile generates the installer from the package working directory', t => {
+    const directory = mkdtempSync(join(tmpdir(), 'paseodog-postcompile-'));
+    t.after(() => rmSync(directory, { recursive: true }));
+    const desktop = new URL('../android/packages/desktop/', import.meta.url);
+    const manifest = JSON.parse(readFileSync(new URL('package.json', desktop), 'utf8'));
+    const [program, ...args] = manifest.scripts['build:main'].split('&&')[1].trim().split(/\s+/);
+    const output = join(directory, 'installer.nsi');
+    const result = spawnSync(program, [...args.slice(0, -1), output], {
+        cwd: desktop, encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(readFileSync(output).length > 0);
+});
 
 // 플랫폼별 필터도 공통 소스맵·임시파일 제외를 보존하고 네이티브 대상만 남긴다.
 test('desktop filters do not create a second unrestricted file copy', () => {
