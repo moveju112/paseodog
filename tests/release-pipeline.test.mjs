@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdtemp, readFile, rm, writeFile, mkdir, symlink } from 'node:fs/promises';
+import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { openReleaseState, insideWorkspace } from '../scripts/release-state.mjs';
@@ -12,7 +12,8 @@ import { verifyRemoteAssets, verifyUpdaterManifest } from '../scripts/release-ar
 import { desktopRootPids } from '../scripts/release-apply.mjs';
 import { verifyReleaseWeb } from '../scripts/release-web-check.mjs';
 import { buildWeb } from '../scripts/build-web.mjs';
-import { verifyReleaseSource } from '../scripts/release-verification.mjs';
+import { verifyReleaseSource, sourceFingerprint } from '../scripts/release-verification.mjs';
+import { root } from '../scripts/paths.mjs';
 import { withTestLock } from '../scripts/test.mjs';
 
 async function temporary(t) {
@@ -96,6 +97,25 @@ test('test harness serializes heavyweight runs and releases the slot after failu
     await rejected;
     await withTestLock(async () => { events.push('third'); }, directory);
     assert.deepEqual(events, ['first', 'released', 'second', 'third']);
+});
+
+test('source verification hashes directory symlinks and invalidates changed links or tracked bytes', async t => {
+    const directory = await temporary(t);
+    await mkdir(join(directory, 'first'));
+    await mkdir(join(directory, 'second'));
+    const link = join(directory, 'link');
+    const file = join(directory, 'first', 'source');
+    await symlink('first', link);
+    await writeFile(file, 'before');
+    const run = async () => [link, file].map(path => relative(root, path)).join('\0');
+    const original = await sourceFingerprint(run);
+    assert.equal(await sourceFingerprint(run), original);
+    await writeFile(file, 'after');
+    const edited = await sourceFingerprint(run);
+    assert.notEqual(edited, original);
+    await rm(link);
+    await symlink('second', link);
+    assert.notEqual(await sourceFingerprint(run), edited);
 });
 
 test('unchanged pre-commit source checks are reused for delivery and a changed test list invalidates them', async t => {

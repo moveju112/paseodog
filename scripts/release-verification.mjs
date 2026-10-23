@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, lstat, readlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runCommand } from './release-command.mjs';
 import { root } from './paths.mjs';
@@ -9,8 +9,11 @@ export async function sourceFingerprint(run = runCommand) {
         { cwd: root, capture: true })).split('\0').filter(Boolean).sort();
     const hash = createHash('sha256').update(process.version);
     for (const path of [...new Set(paths)]) {
-        const bytes = await readFile(join(root, path));
-        hash.update(`${path}\0${bytes.length}\0`).update(bytes);
+        const fullPath = join(root, path);
+        const link = (await lstat(fullPath)).isSymbolicLink();
+        // Git은 링크 대상 디렉터리 대신 링크 자체를 추적한다.
+        const bytes = link ? Buffer.from(await readlink(fullPath)) : await readFile(fullPath);
+        hash.update(`${path}\0${link ? 'symlink' : 'file'}\0${bytes.length}\0`).update(bytes);
     }
     return hash.digest('hex');
 }
