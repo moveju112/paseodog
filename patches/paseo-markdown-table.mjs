@@ -22,15 +22,29 @@ export const MARKDOWN_TABLE_EDITS = [
     ]),
 ];
 
-// 이미 설치된 11066 표 패치를 현재 구현으로 올리기 위한 정확한 이전 결과다.
-export const LEGACY_MARKDOWN_TABLE_EDITS = [[MARKDOWN_TABLE_EDITS[0][0], MARKDOWN_TABLE_EDITS[0][1]
-    .replace('    // Android는 갱신 시 undefined로 기존 flex: 1을 지우지 않으므로 측정 폭을 기본 크기로 명시한다.\n', '')
-    .replace('flex: 0, flexBasis: widths[column],', 'flex: undefined, flexBasis: "auto",')],
-    ...MARKDOWN_TABLE_EDITS.slice(1)];
+// 이미 설치된 11066·11073 표 패치를 현재 구현으로 올리기 위한 정확한 이전 셀 스타일이다.
+const CURRENT_CELL_STYLE = `    // 셀 기본 flex: 1을 유지하고 측정 폭은 flexGrow 비율로만 반영한다.
+    // Android에서 마운트 뒤 width·flexBasis를 지정하면 셀이 padding 폭으로 접힌다.
+    return React.createElement(View, {
+      dataSet,
+      style: [style, { minWidth: 0 }, widths[column] !== undefined && { flexGrow: widths[column] }],`;
+const LEGACY_CELL_STYLES = [`    return React.createElement(View, {
+      dataSet,
+      style: [style, { minWidth: 0 }, widths[column] !== undefined && {
+        flex: undefined, flexBasis: "auto", flexGrow: 0, flexShrink: 0, width: widths[column],
+      }],`, `    // Android는 갱신 시 undefined로 기존 flex: 1을 지우지 않으므로 측정 폭을 기본 크기로 명시한다.
+    return React.createElement(View, {
+      dataSet,
+      style: [style, { minWidth: 0 }, widths[column] !== undefined && {
+        flex: 0, flexBasis: widths[column], flexGrow: 0, flexShrink: 0, width: widths[column],
+      }],`];
+export const LEGACY_MARKDOWN_TABLE_EDITS = LEGACY_CELL_STYLES.map((cellStyle) => [
+    [MARKDOWN_TABLE_EDITS[0][0], MARKDOWN_TABLE_EDITS[0][1].replace(CURRENT_CELL_STYLE, () => cellStyle)],
+    ...MARKDOWN_TABLE_EDITS.slice(1)]);
 
 // 전체 번들 해시 검증 전에 열 너비 변경만 완전히 해제한다.
 export function withoutMarkdownTable(source) {
-    const edits = source.includes(LEGACY_MARKDOWN_TABLE_EDITS[0][1]) ? LEGACY_MARKDOWN_TABLE_EDITS : MARKDOWN_TABLE_EDITS;
+    const edits = LEGACY_MARKDOWN_TABLE_EDITS.find(([[, after]]) => source.includes(after)) ?? MARKDOWN_TABLE_EDITS;
     const counts = edits.map(([, after]) => source.split(after).length - 1);
     if (counts.some((count) => count > 1)) throw new Error('Markdown table patch drift');
     if (counts.includes(0) && counts.some((count) => count > 0)) throw new Error('Partial markdown table patch');

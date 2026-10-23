@@ -130,12 +130,11 @@ export function createMarkdownTableComponents(
   function Cell({ node, parent, style, children, dataSet }: CellProps) {
     const widths = React.useContext(Widths);
     const column = parent[0]?.children.findIndex((cell) => cell.key === node.key) ?? -1;
-    // Android는 갱신 시 undefined로 기존 flex: 1을 지우지 않으므로 측정 폭을 기본 크기로 명시한다.
+    // 셀 기본 flex: 1을 유지하고 측정 폭은 flexGrow 비율로만 반영한다.
+    // Android에서 마운트 뒤 width·flexBasis를 지정하면 셀이 padding 폭으로 접힌다.
     return React.createElement(View, {
       dataSet,
-      style: [style, { minWidth: 0 }, widths[column] !== undefined && {
-        flex: 0, flexBasis: widths[column], flexGrow: 0, flexShrink: 0, width: widths[column],
-      }],
+      style: [style, { minWidth: 0 }, widths[column] !== undefined && { flexGrow: widths[column] }],
     }, children);
   }
 

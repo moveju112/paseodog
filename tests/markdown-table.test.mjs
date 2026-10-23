@@ -14,7 +14,9 @@ test('content-sized tables upgrade the pinned web bundle with reversible, comple
     const [before, after] = MARKDOWN_TABLE_EDITS[1];
     assert.throws(() => patchedComposerSource(result.replace(after, () => before)), /Partial/);
     assert.throws(() => patchedComposerSource(result + '\n'), /hash mismatch/);
-    const [current, legacy] = [MARKDOWN_TABLE_EDITS[0][1], LEGACY_MARKDOWN_TABLE_EDITS[0][1]];
-    assert.notEqual(legacy, current);
-    assert.equal(patchedComposerSource(result.replace(current, () => legacy)), result);
+    const current = MARKDOWN_TABLE_EDITS[0][1];
+    for (const [[, legacy]] of LEGACY_MARKDOWN_TABLE_EDITS) {
+        assert.notEqual(legacy, current);
+        assert.equal(patchedComposerSource(result.replace(current, () => legacy)), result);
+    }
 });
