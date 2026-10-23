@@ -9,6 +9,89 @@ const require = createRequire(new URL('../plugin/package.json', import.meta.url)
 const React = require('react');
 const { create, act } = require('react-test-renderer');
 
+test('forked sessions accept copied Fast and auto effort values without changing host defaults', async (t) => {
+    for (const fast of [false, true]) {
+        for (const autoEffort of [false, true]) {
+            const catalog = { route: { provider: 'test', model: 'model', fast: !fast, autoEffort: !autoEffort },
+                models: [{ provider: 'test', id: 'model', label: 'Model', fastCapable: true,
+                    effortOptions: [{ id: 'high', label: 'High' }] }] };
+            const f = fixture({ configuration: () => ({ autoEffortAvailable: true }) },
+                { loadCatalog: () => catalog });
+            t.after(() => f.connection.close());
+            f.open.config.settings = { fast, autoEffort };
+            f.open.config.thinkingOption = 'high';
+            await f.ready();
+            assert.equal(f.creates[0].route.fast, fast);
+            assert.equal(f.creates[0].route.autoEffort, autoEffort);
+            assert.equal(f.creates[0].route.effort, 'high');
+            const config = f.events.findLast((event) => event.type === 'session.config').config;
+            assert.deepEqual(Object.fromEntries(config.settings.map((setting) => [setting.id, setting.value])),
+                { autoEffort, fast });
+            assert.equal(config.mode, 'ask');
+            assert.equal(catalog.route.fast, !fast);
+            assert.equal(catalog.route.autoEffort, !autoEffort);
+        }
+    }
+});
+
+test('session creation rejects invalid settings and unsupported Fast before starting an engine', async (t) => {
+    const catalog = { route: { provider: 'test', model: 'main', fast: false },
+        models: [{ provider: 'test', id: 'main', fastCapable: true },
+            { provider: 'test', id: 'other', fastCapable: false }] };
+    for (const [settings, message] of [
+        [{ fast: 'true' }, 'Unsupported session settings; fast must be boolean'],
+        [{ fast: null }, 'Unsupported session settings; fast must be boolean'],
+        [{ autoEffort: 'false' }, 'Unsupported session settings; autoEffort must be boolean'],
+        [{ unknown: false }, 'Unsupported session settings'],
+        [{ fast: true }, 'Fast is unavailable for the current model'],
+    ]) {
+        const f = fixture({}, { loadCatalog: () => catalog });
+        t.after(() => f.connection.close());
+        f.open.config.model = 'test/other';
+        f.open.config.settings = settings;
+        await f.connection.send(f.open);
+        const failed = await until(f.events, (event) => event.type === 'request.failed');
+        assert.equal(failed.error.message, message);
+        assert.equal(f.creates.length, 0);
+    }
+    const disabled = fixture({}, { loadCatalog: () => catalog });
+    t.after(() => disabled.connection.close());
+    disabled.open.config.model = 'test/other';
+    disabled.open.config.settings = { fast: false };
+    await disabled.ready();
+    assert.equal(disabled.creates[0].route.fast, false);
+});
+
+test('restoring a fork keeps the saved Fast selection rather than its stale creation setting', async (t) => {
+    const catalog = { route: { provider: 'test', model: 'model', fast: true },
+        models: [{ provider: 'test', id: 'model', fastCapable: true }] };
+    const f = fixture({
+        async ask(text, callbacks) {
+            callbacks.onIdentity({ id: 'fork-native', state: { provider: 'test', model: 'model', fast: true } });
+            return { content: text };
+        },
+        async configure(changes) { return { route: changes.route }; },
+    }, { loadCatalog: () => catalog });
+    t.after(() => f.connection.close());
+    f.open.config.settings = { fast: true, autoEffort: false };
+    await f.ready();
+    await f.run();
+    await f.connection.send({ type: 'session.configure', sessionId: 'p1', requestId: 'disable-fast',
+        changes: { settings: { fast: false } } });
+    await until(f.events, (event) => event.type === 'request.completed' && event.requestId === 'disable-fast');
+    const persistence = f.events.find((event) => event.type === 'session.opened').persistence;
+    await f.connection.close();
+    const resumed = fixture({}, { loadCatalog: () => catalog, store: f.store });
+    t.after(() => resumed.connection.close());
+    resumed.open.config.settings = { fast: true, autoEffort: false };
+    resumed.open.persistence = persistence;
+    await resumed.ready();
+    assert.equal(resumed.creates[0].nativeSessionId, 'fork-native');
+    assert.equal(resumed.creates[0].route.fast, false);
+    assert.equal(resumed.events.findLast((event) => event.type === 'session.config')
+        .config.settings.find((setting) => setting.id === 'fast').value, false);
+});
+
 test('Fast changes only the selected session route and exposes confirmed values through SDK settings', async (t) => {
     const calls = [];
     const catalog = { route: { provider: 'test', model: 'model', fast: false },

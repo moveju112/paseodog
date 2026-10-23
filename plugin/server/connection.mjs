@@ -277,7 +277,11 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             }
             if (Object.hasOwn(config.settings, 'autoEffort')) requestedRoute.autoEffort = config.settings.autoEffort;
             else if (config.thinkingOption && !input.persistence) requestedRoute.autoEffort = false;
+            // 분기에서 복사한 명시적 Fast 값을 Main 기본값보다 우선한다. 복원은 아래 저장 경로를 따른다.
+            if (Object.hasOwn(config.settings, 'fast')) requestedRoute.fast = config.settings.fast;
             let effortRoute = routes.find((row) => row.provider === requestedRoute.provider && row.model === requestedRoute.model);
+            if (!input.persistence && config.settings.fast === true && effortRoute?.fastCapable !== true)
+                throw new Error('Fast is unavailable for the current model');
             if (!input.persistence && input.config.thinkingOption && !(effortRoute?.effortOptions || [])
                 .some((option) => (typeof option === 'string' ? option : option.id) === requestedRoute.effort))
                 throw new Error('Unsupported effort for current model');

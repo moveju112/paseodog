@@ -92,9 +92,12 @@ export function validateConfig(config) {
     }
     if (config.mode && !['ask', 'review', 'bypass'].includes(config.mode)) throw new Error(`Unsupported mode: ${config.mode}`);
     if (typeof config.persist !== 'boolean') throw new Error('persist must be boolean');
-    if (Object.keys(config.settings).some((key) => key !== 'autoEffort')
-        || (Object.hasOwn(config.settings, 'autoEffort') && typeof config.settings.autoEffort !== 'boolean'))
-        throw new Error('Unsupported session settings; autoEffort must be boolean');
+    if (Object.keys(config.settings).some((key) => !['autoEffort', 'fast'].includes(key)))
+        throw new Error('Unsupported session settings');
+    for (const key of ['autoEffort', 'fast']) {
+        if (Object.hasOwn(config.settings, key) && typeof config.settings[key] !== 'boolean')
+            throw new Error(`Unsupported session settings; ${key} must be boolean`);
+    }
     for (const [key, value] of Object.entries(config.env)) {
         if (typeof value !== 'string' || key.includes('\0') || key.includes('=') || value.includes('\0')) {
             throw new Error('Invalid environment variable');
