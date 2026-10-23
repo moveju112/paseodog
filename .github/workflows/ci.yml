@@ -22,6 +22,8 @@ jobs:
           # Root tests also import Expo/desktop source and installed Android packages.
           # Never run Android workspace install hooks in this read-only CI setup.
           npm --prefix android ci --ignore-scripts
+      - name: Verify controls EPIPE regression before web bundle integration tests
+        run: node --test --test-name-pattern="control daemon stdin failures" tests/engine-controls.test.mjs
       - name: Apply and verify pinned runtime patches
         run: |
           for patch in mixdog paseo-usage paseo-steer paseo-agent-messages paseo-assistant-phase \
