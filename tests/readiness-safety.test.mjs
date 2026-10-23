@@ -19,6 +19,7 @@ test('strict Linux scope confines worker independently of Unix process groups', 
     const scope = createProcessScope({ launch, platform: 'linux', unitName,
         runCommand: async (cmd, argv) => {
             calls.push({ cmd, argv });
+            if (argv.includes('--help')) return { stdout: '  --kill-whom=WHOM  Whom to send signal to\n' };
             return { stdout: argv.includes('show') ? '/user.slice/user-1000.slice/example.scope\n' : '' };
         },
         readCgroupEvents: async () => reads++ === 0 ? 'populated 1\nfrozen 0\n' : 'populated 0\nfrozen 0\n',
@@ -35,7 +36,39 @@ test('strict Linux scope confines worker independently of Unix process groups', 
     assert.equal(reads, 2);
     assert.deepEqual(calls.filter(x => x.argv.includes('stop')).map(x => x.argv.slice(0, 4)),
         [['--user', 'stop', '--no-block', unitName]]);
-    assert.ok(calls.some(x => x.argv.includes('kill') && x.argv.includes('--signal=SIGKILL')));
+    assert.deepEqual(calls.filter(x => x.argv.includes('kill')).map(x => x.argv),
+        [['--user', 'kill', '--kill-whom=all', '--signal=SIGKILL', unitName]]);
+});
+
+test('strict Linux scope selects the legacy systemd kill option once and still verifies an empty cgroup', async () => {
+    const calls = [];
+    let reads = 0;
+    const scope = createProcessScope({ launch, platform: 'linux', unitName,
+        runCommand: async (_cmd, argv) => {
+            calls.push(argv);
+            if (argv.includes('--help')) return { stdout: '  --kill-who=WHO  Whom to send signal to\n' };
+            if (argv.includes('show')) return { stdout: '/user.slice/example.scope\n' };
+            if (argv.includes('kill')) {
+                assert.deepEqual(argv, ['--user', 'kill', '--kill-who=all', '--signal=SIGKILL', unitName]);
+            }
+            return { stdout: '' };
+        },
+        readCgroupEvents: async () => { reads++; return 'populated 0\n'; },
+    });
+    await scope.preflight();
+    await scope.stop();
+    assert.equal(calls.filter(argv => argv.includes('--help')).length, 1);
+    assert.equal(calls.filter(argv => argv.includes('kill')).length, 1);
+    assert.equal(reads, 1);
+});
+
+test('strict Linux scope refuses to spawn without a supported whole-scope kill option', async () => {
+    const scope = createProcessScope({ launch, platform: 'linux', unitName,
+        runCommand: async () => ({ stdout: 'systemctl help without a supported kill option\n' }) });
+    const factory = processEngineFactory({ launch, spawnProcess() { throw new Error('must not spawn'); },
+        terminateProcess() {}, scopeFactory: () => scope });
+    await assert.rejects(factory.create({ config: { cwd: tmpdir(), env: {} } }),
+        /systemctl must support --kill-whom or --kill-who/);
 });
 
 test('without systemd user manager strict Linux mode fails BEFORE spawning native process', async () => {

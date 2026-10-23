@@ -419,3 +419,43 @@ test('control daemon stdin failures reject uncertain writes without retrying mut
         }
     }
 });
+
+test('authentication idle cleanup waits for active requests and recovers from failure without leaking credentials', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const messages = [];
+    t.mock.method(process.stderr, 'write', (message) => { messages.push(message); return true; });
+    let created = 0, closed = 0, requests = 0, complete;
+    const controls = createEngineControls({
+        engineFactory: () => ({
+            async create() {
+                const number = ++created;
+                return {
+                    async auth() {
+                        if (++requests === 2) return new Promise(resolve => { complete = resolve; });
+                        return { connected: true, worker: number };
+                    },
+                    async close() {
+                        closed++;
+                        if (number === 1) throw new Error('cleanup failed with token=private');
+                    },
+                };
+            },
+        }),
+    });
+    t.after(() => controls.close());
+    controls.bind({ command: '/engine', args: [],
+        env: { MIXDOG_HOME: '/unused-auth-profile', MIXDOG_DATA_DIR: '/unused-auth-profile' } });
+    assert.deepEqual(await controls.auth({ action: 'status' }), { connected: true, worker: 1 });
+    const pending = controls.auth({ action: 'status' });
+    await new Promise(resolve => setImmediate(resolve));
+    t.mock.timers.tick(660000);
+    assert.equal(closed, 0, 'Idle cleanup must not interrupt an active authentication request');
+    complete({ connected: true, worker: 1 });
+    await pending;
+    assert.deepEqual(await controls.auth({ action: 'status' }), { connected: true, worker: 2 });
+    assert.equal(created, 2);
+    assert.equal(closed, 1);
+    assert.deepEqual(messages, ['[paseodog] authentication cleanup failed; inspect process scopes\n']);
+    await controls.close();
+    assert.equal(closed, 2);
+});
