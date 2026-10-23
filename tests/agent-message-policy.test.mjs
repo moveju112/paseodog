@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import { createRequire } from 'node:module';
 import { createAgentMessagePolicy } from '../android/packages/server/src/server/agent/agent-message-policy.ts';
-import { createMessagePolicyHandler } from '../plugin/server/message-policy.mjs';
+import { createMessagePolicyHandler } from '../engine/src/message-policy.mjs';
 import { agentMessagePolicy } from '../plugin/shared/message-policy.ts';
 import { AGENT_MESSAGE_PATCHES, patchedAgentMessageSource } from '../scripts/patch-paseo-agent-messages.mjs';
 import { agentMessagePolicyEdits } from '../patches/paseo-agent-messages.mjs';

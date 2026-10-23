@@ -20,11 +20,12 @@ describe("withRuntimePaseoMcpServer", () => {
     expect(result.mcpServers?.paseo).toEqual({
       type: "http",
       url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
-      headers: { Authorization: "Bearer cap-token" },
+      headers: { Authorization: expect.stringMatching(/^Bearer paseodog-agent-v1\./) },
     });
+    expect(JSON.stringify(result)).not.toContain("cap-token");
   });
 
-  test("omits the header when no token is available", () => {
+  test("does not inject an unauthenticated endpoint when no signing key is available", () => {
     const result = withRuntimePaseoMcpServer({
       config: BASE_CONFIG,
       agentId: "agent-1",
@@ -32,10 +33,7 @@ describe("withRuntimePaseoMcpServer", () => {
       mcpAuthToken: null,
     });
 
-    expect(result.mcpServers?.paseo).toEqual({
-      type: "http",
-      url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
-    });
+    expect(result.mcpServers?.paseo).toBeUndefined();
   });
 
   test("does not inject when no MCP base URL is configured", () => {

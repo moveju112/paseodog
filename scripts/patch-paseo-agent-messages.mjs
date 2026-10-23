@@ -6,13 +6,26 @@ import { gitBlob } from './patch-mixdog.mjs';
 import { patchedSteerSource } from './patch-paseo-steer.mjs';
 import { agentMessageTransportEdits, agentMessagePolicyEdits } from '../patches/paseo-agent-messages.mjs';
 import { ADAPTER_PHASE_EDITS, PROVIDER_PHASE_EDITS, withAssistantPhase, withoutAssistantPhase } from '../patches/paseo-assistant-phase.mjs';
+import { MCP_CONFIG_IDENTITY_EDITS, MCP_BOOTSTRAP_IDENTITY_EDITS } from '../patches/paseo-mcp-identity.mjs';
+import { SESSION_TITLE_PATCHES, patchedSessionTitleSource } from './patch-paseo-session-titles.mjs';
 
 const provenanceEdits = [[
     '            prompt,\n            sessionMode,\n            logger: childLogger,\n',
-    '            prompt,\n            sessionMode,\n            // 호출자가 작성한 본문이 아니라 인증된 MCP 호출 컨텍��트를 전달한다.\n            runOptions: callerAgentId ? { paseodogSource: { kind: "agent", agentId: callerAgentId } } : undefined,\n            logger: childLogger,\n',
+    '            prompt,\n            sessionMode,\n            // 호출자가 작성한 본문이 아니라 인증된 MCP 호출 컨텍스트를 전달한다.\n            runOptions: callerAgentId ? { paseodogSource: { kind: "agent", agentId: callerAgentId } } : undefined,\n            logger: childLogger,\n',
 ]];
 
 export const AGENT_MESSAGE_PATCHES = [
+    {
+        file: 'dist/server/server/agent/runtime-mcp-config.js',
+        blob: 'b55d8dea334abcb7b21465365f671b9eab3d285b',
+        edits: MCP_CONFIG_IDENTITY_EDITS,
+    },
+    {
+        file: 'dist/server/server/bootstrap.js',
+        blob: '7270675d0098e4853019fae4d65823b969762f79',
+        normalize: source => patchedSessionTitleSource(source, SESSION_TITLE_PATCHES.find(spec => spec.file === 'bootstrap.js')),
+        edits: MCP_BOOTSTRAP_IDENTITY_EDITS,
+    },
     {
         file: 'dist/server/server/agent/tools/paseo-tools.js',
         blob: 'b60d89416317941c9275b0c91df9f2774862b444',
