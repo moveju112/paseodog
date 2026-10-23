@@ -15,6 +15,7 @@ import {
 import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { openChangelog } from "@/changelog";
+import { DaemonUpdateCallouts } from "./daemon-update-callout-source";
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
@@ -114,7 +115,7 @@ export function UpdateCalloutSource() {
     t,
   ]);
 
-  return null;
+  return <DaemonUpdateCallouts />;
 }
 
 function UpdateAvailableDescription({

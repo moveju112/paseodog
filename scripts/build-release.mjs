@@ -4,6 +4,7 @@ import { copyFile, mkdir } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import release from '../plugin/shared/release.json' with { type: 'json' };
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -41,6 +42,8 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
     if (metroWorkers !== undefined && !/^[1-9]\d*$/.test(metroWorkers)) {
         throw new Error('metro-workers must be a positive integer');
     }
+    if (Number(versionCode) !== release.versionCode || version !== `${release.version}.${release.versionCode}`)
+        throw new Error('Release arguments must match plugin/shared/release.json');
     await mkdir(workspace, { recursive: true });
     const androidRoot = join(root, 'android');
     const desktopRoot = join(androidRoot, 'packages/desktop');

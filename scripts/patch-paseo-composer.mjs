@@ -27,6 +27,7 @@ import { withSettingsCorrections, withoutSettingsCorrections } from '../patches/
 import { withAgentEditorSafety, withoutAgentEditorSafety } from '../patches/paseo-agent-editor-safety.mjs';
 import { withChatUsability, withoutChatUsability } from '../patches/paseo-chat-usability.mjs';
 import { withMarkdownTable, withoutMarkdownTable } from '../patches/paseo-markdown-table.mjs';
+import { withDaemonUpdate, withoutDaemonUpdate } from '../patches/paseo-daemon-update.mjs';
 
 const PRECOMPRESSED = [['.br', brotliCompressSync, brotliDecompressSync], ['.gz', gzipSync, gunzipSync]];
 
@@ -51,6 +52,7 @@ export function withoutWorktreeSetupTip(source) {
 
 // 기존 첨부파일·대기열 저장 및 배출 로직을 유지하면서 PaseoDog의 자동 턴 교체만 차단한다.
 export function patchedComposerSource(source) {
+    source = withoutDaemonUpdate(source);
     source = withoutMarkdownTable(source);
     source = withoutChatUsability(source);
     source = withoutAgentEditorSafety(source);
@@ -83,7 +85,7 @@ export function patchedComposerSource(source) {
     const hiddenSetupTip = original.replace(...worktreeSetupTip);
     // AI 엔진 설정의 압축 여유 버퍼 선택지를 Mixdog 상한에 맞춘 10/20/25%로 바꾼다.
     const resultWithChat = withChatUsability(withAgentEditorSafety(withSettingsCorrections(withOfferLink(withCompactionBuffer(withConversationFocus(withRelayPassword(withExternalLinks(withWorkRecords(withSidebarStatusShapes(withAgentsSettings(withImportCwd(withHideReasoning(withUsageOrder(withUsageDonut(withUsageColors(withWhite2Theme(withCollaboration(withAutoEffort(withAgentProgress(withSidebarToolbar(withHelpMenu(hiddenSetupTip))))))))))))))))))))));
-    return withMarkdownTable(resultWithChat);
+    return withDaemonUpdate(withMarkdownTable(resultWithChat));
 }
 
 // 고정된 웹 입력창 번들만 수정하고 다른 클라이언트·공급자 동작은 건드리지 않는다.

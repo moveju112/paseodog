@@ -1,6 +1,15 @@
 import { defineRpc } from '@getpaseo/plugin';
 import { z } from 'zod';
 
+export const daemonRelease = defineRpc({
+    name: 'daemon-release',
+    input: z.object({}).strict(),
+    output: z.object({
+        version: z.string().min(1),
+        versionCode: z.number().int().positive(),
+    }).strict(),
+});
+
 // 완료된 대화의 제목만 생성하며 세션 실행·도구 호출·설정 변경은 허용하지 않는다.
 export const engineTitle = defineRpc({
     name: 'engine-title',
