@@ -14,5 +14,6 @@ export const renderWorkRecord = createWorkRecordRenderer({
   StyleSheet,
   useTranslation,
   useAssistantNickname: () => useSettings((settings) => settings.assistantNickname),
+  useAssistantIcon: () => useSettings((settings) => settings.assistantIcon),
   getClient: (serverId) => useSessionStore.getState().sessions[serverId]?.client ?? null,
 });

@@ -43,6 +43,28 @@ function makeDeps(
 }
 
 describe("loadAppSettingsFromStorage", () => {
+  it("keeps the initial avatar by default and persists a selected assistant icon", async () => {
+    for (const value of [undefined, null, "unknown", 7, {}, ["🐶"]]) {
+      const deps = makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({ assistantIcon: value }),
+        }),
+      });
+      expect((await loadAppSettingsFromStorage(deps)).assistantIcon).toBe("");
+    }
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+    await saveAppSettings({
+      queryClient,
+      updates: { assistantNickname: "Mixy", assistantIcon: "🤖" },
+      deps,
+    });
+    expect((await loadAppSettingsFromStorage(deps)).assistantIcon).toBe("🤖");
+    expect((await loadAppSettingsFromStorage(deps)).assistantNickname).toBe("Mixy");
+    await saveAppSettings({ queryClient, updates: { assistantIcon: "" }, deps });
+    expect((await loadAppSettingsFromStorage(deps)).assistantIcon).toBe("");
+    expect((await loadAppSettingsFromStorage(deps)).assistantNickname).toBe("Mixy");
+  });
   // 누락·빈 값·오류는 Dog로, 사용자가 지정한 닉네임은 재시작 후에도 유지한다.
   it("normalizes and persists the assistant nickname", async () => {
     for (const value of [undefined, "", "   ", null, 7, {}, ["Dog"]]) {

@@ -48,12 +48,14 @@ async function loadClient(t) {
         delete globalThis.IS_REACT_ACT_ENVIRONMENT;
     });
     const settingsScreens = [];
+    const screens = [];
+    const panels = [];
     let liveScreen;
     let footer;
     require(output).default({
         addSettingsScreen(value) { settingsScreens.push(value); return () => {}; },
-        addScreen(value) { liveScreen = value; return () => {}; },
-        addWorkspacePanel() { return () => {}; },
+        addScreen(value) { screens.push(value); if (value.id === 'mixdog-live') liveScreen = value; return () => {}; },
+        addWorkspacePanel(value) { panels.push(value); return () => {}; },
         addSidebarFooterItem(value) { footer = value; return () => {}; },
     });
     const settings = (id) => {
@@ -73,7 +75,7 @@ async function loadClient(t) {
         mounted.push(tree);
         return screenHelpers(tree);
     };
-    return { settingsScreens, settings, liveScreen, footer, renderScreen };
+    return { settingsScreens, settings, screens, panels, liveScreen, footer, renderScreen };
 }
 
 test('bottom sidebar icon opens analysis as a modal and releases it on close', async (t) => {
@@ -362,7 +364,7 @@ test('monitor switches to native token and OAuth usage with period selection and
 
 // 세션 선택·모델 전환·계승 확인을 실제 공유 화면에서 검증한다.
 test('session tools scope model changes and require confirmation before inheritance', async (t) => {
-    const { settings, renderScreen } = await loadClient(t);
+    const { panels, renderScreen } = await loadClient(t);
     const calls = [];
     globalThis.__paseodogTestRpc = async (input, name) => {
         calls.push({ name, input });
@@ -374,7 +376,7 @@ test('session tools scope model changes and require confirmation before inherita
         if (input.operation === 'fork') return { persistence: { version: 2, data: { bridgeId: 'heir' } } };
         return { config: { model: 'second/two' } };
     };
-    const screen = await renderScreen(settings('mixdog-session-tools'));
+    const screen = await renderScreen(panels.find((item) => item.id === 'mixdog-session-tools'));
     await screen.press('Project · one');
     await screen.press('Two · second');
     assert.deepEqual(calls.find((call) => call.name === 'engine-session').input, {
@@ -446,7 +448,7 @@ test('skill selection loads the selected body and read failures disable saving',
 
 // 네이티브 파일·턴 상태에 따라 복구 가능한 버튼만 활성화한다.
 test('session undo and redo buttons reflect native recovery availability', async (t) => {
-    const { settings, renderScreen } = await loadClient(t);
+    const { panels, renderScreen } = await loadClient(t);
     globalThis.__paseodogTestRpc = async (input, name) => {
         if (name === 'engine-status') return { sessions: [{ id: 'one', title: 'Project', model: 'model', state: 'idle' }] };
         if (name === 'engine-controls') return { models: [] };
@@ -459,7 +461,7 @@ test('session undo and redo buttons reflect native recovery availability', async
                 { path: 'blocked', state: 'applied', revertable: false, reason: 'missing patch' },
             ] };
     };
-    const screen = await renderScreen(settings('mixdog-session-tools'));
+    const screen = await renderScreen(panels.find((item) => item.id === 'mixdog-session-tools'));
     await screen.press('Project · model');
     await screen.press('턴별 변경 이력');
     await screen.press('최근 1번째 턴 · 3개 파일');
@@ -477,16 +479,17 @@ test('session undo and redo buttons reflect native recovery availability', async
 });
 
 test('settings register separate sections without a main model picker and dispatch scoped changes', async (t) => {
-    const { settingsScreens, settings, liveScreen, renderScreen } = await loadClient(t);
+    const { settingsScreens, settings, screens, panels, liveScreen, renderScreen } = await loadClient(t);
     assert.deepEqual(settingsScreens.map((item) => [item.id, item.title, item.icon]), [
-        ['mixdog-session-tools', '세션 계승·복구·모델', 'Bot'], ['mixdog-resources', 'MCP·스킬·플러그인', 'Bot'],
+        ['mixdog-resources', 'MCP·스킬·플러그인', 'Bot'],
         ['mixdog-account', '구독 계정', 'Bot'], ['mixdog-workflow', '워크플로', 'Bot'],
         ['mixdog-tokens', '토큰 절감', 'Bot'], ['mixdog-instructions', '지침 파일 로딩', 'Bot'],
-        ['mixdog-agents', '에이전트', 'Bot'], ['paseodog-native-config', '원본 스킬·훅 보기', 'Bot'],
-        ['mixdog-status', '실행 현황', 'Activity'],
+        ['mixdog-agents', '에이전트', 'Bot'],
     ]);
     for (const item of settingsScreens) assert.deepEqual(Object.keys(item).sort(), ['Component', 'icon', 'id', 'title']);
-    assert.equal(settings('mixdog-status').Component, liveScreen.Component);
+    assert.equal(panels.find((item) => item.id === 'mixdog-live').Component, liveScreen.Component);
+    assert.ok(panels.some((item) => item.id === 'mixdog-session-tools'));
+    assert.ok(screens.some((item) => item.id === 'paseodog-native-config'));
     const calls = [];
     const snapshot = {
         route: { provider: 'subscription', model: 'small', effort: 'low', fast: false, autoEffort: false },
@@ -620,7 +623,7 @@ test('settings register separate sections without a main model picker and dispat
     });
     let liveTree;
     await act(async () => {
-        liveTree = create(React.createElement(settings('mixdog-status').Component, {
+        liveTree = create(React.createElement(liveScreen.Component, {
             theme: { colors: { foreground: '#ffffff' } }, host: { id: 'test', label: 'test' },
             layout: { compact: true, platform: 'android' },
         }));
@@ -649,7 +652,7 @@ test('subscription login runs only inside a modal with code, back and cancel han
         return authReply(input);
     };
     // 모달은 구독 계정 화면에만 있고 다른 설정 화면에는 없다.
-    for (const item of settingsScreens.filter((entry) => entry.id !== 'mixdog-account' && entry.id !== 'mixdog-status')) {
+    for (const item of settingsScreens.filter((entry) => entry.id !== 'mixdog-account')) {
         const other = await renderScreen(item);
         assert.equal(other.tree.root.findAllByType('modal').length, 0);
         assert.ok(!other.labels().includes('구독 계정 로그인'));
@@ -750,7 +753,7 @@ test('subscription login runs only inside a modal with code, back and cancel han
 });
 
 test('native config viewer selects Claude/Codex sources, refreshes read-only and labels it as not applied', async (t) => {
-    const { settings, renderScreen } = await loadClient(t);
+    const { screens, renderScreen } = await loadClient(t);
     const calls = [];
     // 출처별 응답 생성 (조회 입력 -> 원본 보기 결과)
     const view = (source) => ({
@@ -770,7 +773,7 @@ test('native config viewer selects Claude/Codex sources, refreshes read-only and
         calls.push({ input, name });
         return view(input.source);
     };
-    const { tree } = await renderScreen(settings('paseodog-native-config'));
+    const { tree } = await renderScreen(screens.find((item) => item.id === 'paseodog-native-config'));
     const content = () => tree.root.findAllByType('text').map((node) => node.children.join('')).join('\n');
     const pressable = (label) => tree.root.findAllByType('pressable').find((node) => node.props.accessibilityLabel === label);
     assert.deepEqual(calls, [{ input: { source: 'claude' }, name: 'native-config-view' }]);

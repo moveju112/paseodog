@@ -2223,6 +2223,11 @@ export const ru: TranslationResources = {
         label: "Имя помощника",
         description: "Имя в диалогах. Оставьте пустым, чтобы использовать Dog.",
       },
+      assistantIcon: {
+        label: "Значок помощника",
+        description: "Значок рядом с именем в диалогах. Сохраняется на этом устройстве.",
+        initial: "Первая буква имени (по умолчанию)",
+      },
       hideReasoning: {
         label: "Скрывать размышления",
         description:

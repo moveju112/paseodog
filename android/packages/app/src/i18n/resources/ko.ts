@@ -2197,6 +2197,11 @@ export const ko: TranslationResources = {
         label: "도우미 닉네임",
         description: "대화에 표시할 이름입니다. 비워 두면 Dog를 사용합니다.",
       },
+      assistantIcon: {
+        label: "도우미 아이콘",
+        description: "대화의 닉네임 옆에 표시할 아이콘입니다. 이 기기에 저장됩니다.",
+        initial: "닉네임 첫 글자 (기본)",
+      },
       hideReasoning: {
         label: "추론 숨기기",
         description:

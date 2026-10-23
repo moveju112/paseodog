@@ -1922,32 +1922,36 @@ function TokensSection({ snapshot, disabled, request }: SectionProps) {
               onValueChange={setAutoClear}
             />
           </SettingRow>
-          <SettingRow title="유휴 기준 시간" hint="마지막 대화 후 경과 시간">
-            <Select
-              title="유휴 기준 시간"
-              disabled={disabled}
-              value={String(autoClear?.idleMs ?? 3600000)}
-              options={idleOptions}
-              onChange={setIdle}
-            />
-          </SettingRow>
-          <SettingRow title="최소 컨텍스트 점유율" hint="이 비율 이상 찬 세션만 자동 초기화">
-            <Select
-              title="최소 컨텍스트 점유율"
-              disabled={disabled}
-              value={String(autoClear?.minContextPercent ?? 50)}
-              options={minContextOptions}
-              onChange={setMinContext}
-            />
-          </SettingRow>
-          <SettingRow
-            title="공급자 기본값 복원"
-            hint="사용자 지정 유휴 기준을 초기화하고 공급자별 최적 기본값으로 되돌려요"
-          >
-            <Button size="sm" variant="ghost" disabled={disabled} onPress={resetAutoClear}>
-              기본값 복원
-            </Button>
-          </SettingRow>
+          {autoClear?.enabled && (
+            <>
+              <SettingRow title="유휴 기준 시간" hint="마지막 대화 후 경과 시간">
+                <Select
+                  title="유휴 기준 시간"
+                  disabled={disabled}
+                  value={String(autoClear?.idleMs ?? 3600000)}
+                  options={idleOptions}
+                  onChange={setIdle}
+                />
+              </SettingRow>
+              <SettingRow title="최소 컨텍스트 점유율" hint="이 비율 이상 찬 세션만 자동 초기화">
+                <Select
+                  title="최소 컨텍스트 점유율"
+                  disabled={disabled}
+                  value={String(autoClear?.minContextPercent ?? 50)}
+                  options={minContextOptions}
+                  onChange={setMinContext}
+                />
+              </SettingRow>
+              <SettingRow
+                title="공급자 기본값 복원"
+                hint="사용자 지정 유휴 기준을 초기화하고 공급자별 최적 기본값으로 되돌려요"
+              >
+                <Button size="sm" variant="ghost" disabled={disabled} onPress={resetAutoClear}>
+                  기본값 복원
+                </Button>
+              </SettingRow>
+            </>
+          )}
         </View>
       </SettingsSection>
 

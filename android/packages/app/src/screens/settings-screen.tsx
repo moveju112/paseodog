@@ -74,6 +74,7 @@ import { PairLinkModal } from "@/components/pair-link-modal";
 import { KeyboardShortcutsSection } from "@/screens/settings/keyboard-shortcuts-section";
 import { EditorSection } from "@/screens/settings/editor-section";
 import { ClientErrorReportingSection } from "@/screens/settings/client-error-reporting-section";
+import { DiagnosticDetails } from "@/screens/settings/diagnostic-details";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -421,6 +422,7 @@ function GeneralSection({ settings, handleLanguageChange }: GeneralSectionProps)
 }
 
 interface DiagnosticsSectionProps {
+  serverId: string | null;
   useLegacyTerminalRenderer: boolean;
   onUseLegacyTerminalRendererChange: (value: boolean) => void;
   voiceAudioEngine: ReturnType<typeof useVoiceAudioEngineOptional>;
@@ -430,6 +432,7 @@ interface DiagnosticsSectionProps {
 }
 
 function DiagnosticsSection({
+  serverId,
   useLegacyTerminalRenderer,
   onUseLegacyTerminalRendererChange,
   voiceAudioEngine,
@@ -474,24 +477,26 @@ function DiagnosticsSection({
             {t("settings.diagnostics.app.run")}
           </Button>
         </View>
-        <View style={settingsStyles.row}>
-          <View style={settingsStyles.rowContent}>
-            <Text style={settingsStyles.rowTitle}>{t("settings.diagnostics.testAudio")}</Text>
-            {playbackTestResult ? (
-              <Text style={settingsStyles.rowHint}>{playbackTestResult}</Text>
-            ) : null}
+        <DiagnosticDetails serverId={serverId}>
+          <View style={settingsStyles.row}>
+            <View style={settingsStyles.rowContent}>
+              <Text style={settingsStyles.rowTitle}>{t("settings.diagnostics.testAudio")}</Text>
+              {playbackTestResult ? (
+                <Text style={settingsStyles.rowHint}>{playbackTestResult}</Text>
+              ) : null}
+            </View>
+            <Button
+              variant="secondary"
+              size="sm"
+              onPress={handlePlayPress}
+              disabled={!voiceAudioEngine || isPlaybackTestRunning}
+            >
+              {isPlaybackTestRunning
+                ? t("settings.diagnostics.playing")
+                : t("settings.diagnostics.playTest")}
+            </Button>
           </View>
-          <Button
-            variant="secondary"
-            size="sm"
-            onPress={handlePlayPress}
-            disabled={!voiceAudioEngine || isPlaybackTestRunning}
-          >
-            {isPlaybackTestRunning
-              ? t("settings.diagnostics.playing")
-              : t("settings.diagnostics.playTest")}
-          </Button>
-        </View>
+        </DiagnosticDetails>
       </View>
     </SettingsSection>
   );
@@ -1374,6 +1379,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
           return (
             <>
               <DiagnosticsSection
+                serverId={activeHostServerId}
                 useLegacyTerminalRenderer={settings.useLegacyTerminalRenderer}
                 onUseLegacyTerminalRendererChange={handleUseLegacyTerminalRendererChange}
                 voiceAudioEngine={voiceAudioEngine}

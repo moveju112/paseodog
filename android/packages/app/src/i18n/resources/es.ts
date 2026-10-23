@@ -2239,6 +2239,11 @@ export const es: TranslationResources = {
         label: "Apodo del asistente",
         description: "Nombre mostrado en las conversaciones. Déjalo vacío para usar Dog.",
       },
+      assistantIcon: {
+        label: "Icono del asistente",
+        description: "Icono junto al apodo en las conversaciones. Se guarda en este dispositivo.",
+        initial: "Inicial del apodo (predeterminado)",
+      },
       hideReasoning: {
         label: "Ocultar razonamiento",
         description:

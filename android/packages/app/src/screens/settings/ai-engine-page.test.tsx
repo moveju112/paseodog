@@ -548,6 +548,33 @@ describe("native host AI engine settings", () => {
       ),
     );
   });
+  it("shows Auto-Clear details only while enabled and preserves saved thresholds", async () => {
+    let autoClear = { ...snapshot.autoClear };
+    host.invokePluginRpc.mockImplementation(async (_plugin, _method, input) => {
+      if (input.action === "autoClear") {
+        const { action: _action, ...patch } = input;
+        autoClear = { ...autoClear, ...patch };
+      }
+      return { ...snapshot, autoClear };
+    });
+    render(<AiEnginePage serverId="auto-clear-host" section="tokens" />);
+    const toggle = await screen.findByRole("checkbox", { name: "유휴 컨텍스트 자동 초기화" });
+    expect(screen.queryByRole("button", { name: "유휴 기준 시간" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "최소 컨텍스트 점유율" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "기본값 복원" })).toBeNull();
+    fireEvent.click(toggle);
+    await screen.findByRole("button", { name: "유휴 기준 시간" });
+    expect(screen.getByRole("button", { name: "최소 컨텍스트 점유율" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "기본값 복원" })).toBeTruthy();
+    await screen.findByText("저장했어요. 실시간으로 반영돼요.");
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "유휴 기준 시간" })).toBeNull(),
+    );
+    await waitFor(() => expect(autoClear.enabled).toBe(false));
+    expect(autoClear.idleMs).toBe(snapshot.autoClear.idleMs);
+    expect(autoClear.minContextPercent).toBe(snapshot.autoClear.minContextPercent);
+  });
   it("toggles instruction file loading without touching language or profile settings", async () => {
     host.invokePluginRpc.mockImplementation(async (_plugin, _method, input) => ({
       ...snapshot,

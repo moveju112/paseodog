@@ -18,6 +18,7 @@ interface RendererDependencies {
   StyleSheet: typeof import("react-native-unistyles").StyleSheet;
   useTranslation: typeof import("react-i18next").useTranslation;
   useAssistantNickname: () => string;
+  useAssistantIcon: () => string;
   /** 연결된 호스트 클라이언트 (서버 ID -> 클라이언트, 연결 전이면 null) */
   getClient: (serverId: string) => ContinueClient | null;
 }
@@ -40,6 +41,7 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
     StyleSheet,
     useTranslation,
     useAssistantNickname,
+    useAssistantIcon,
     getClient,
   } = deps;
   const copies: Record<
@@ -365,6 +367,7 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
   // 첫 답변 블록에 설정 닉네임·아바타를 달고 기존 Markdown 본문과 기능은 유지한다.
   function Answer({ children }: { children: ReactNode }) {
     const nickname = useAssistantNickname();
+    const icon = useAssistantIcon();
     return React.createElement(
       View,
       { testID: "assistant-answer", style: styles.answerContainer },
@@ -374,7 +377,11 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
         React.createElement(
           View,
           { style: styles.avatar, accessible: false },
-          React.createElement(Text, { style: styles.avatarText }, Array.from(nickname)[0]),
+          React.createElement(
+            Text,
+            { style: styles.avatarText, testID: "assistant-avatar-icon" },
+            icon || Array.from(nickname)[0],
+          ),
         ),
         React.createElement(
           Text,

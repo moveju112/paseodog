@@ -2234,6 +2234,11 @@ export const fr: TranslationResources = {
         label: "Surnom de l’assistant",
         description: "Nom affiché dans les conversations. Laissez vide pour utiliser Dog.",
       },
+      assistantIcon: {
+        label: "Icône de l’assistant",
+        description: "Icône à côté du surnom dans les conversations. Enregistrée sur cet appareil.",
+        initial: "Initiale du surnom (par défaut)",
+      },
       hideReasoning: {
         label: "Masquer le raisonnement",
         description:

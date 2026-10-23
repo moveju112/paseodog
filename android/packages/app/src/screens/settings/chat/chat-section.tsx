@@ -10,6 +10,7 @@ import {
 } from "@/components/settings";
 import { isNative } from "@/constants/platform";
 import { useAppSettings, type AppSettings } from "@/hooks/use-settings";
+import { ASSISTANT_ICONS } from "@/hooks/use-settings/assistant-icons";
 
 const TOOL_CALL_DETAIL_LEVELS: readonly AppSettings["toolCallDetailLevel"][] = [
   "detailed",
@@ -22,6 +23,18 @@ export function ChatSection() {
   const { t } = useTranslation();
   const { settings, updateSettings } = useAppSettings();
 
+  const assistantIconOptions = useMemo(
+    () =>
+      ASSISTANT_ICONS.map((value) => ({
+        value,
+        label: value || t("settings.general.assistantIcon.initial"),
+      })),
+    [t],
+  );
+  const changeAssistantIcon = useCallback(
+    (assistantIcon: AppSettings["assistantIcon"]) => void updateSettings({ assistantIcon }),
+    [updateSettings],
+  );
   const toolCallDetailOptions = useMemo(
     () =>
       TOOL_CALL_DETAIL_LEVELS.map((value) => ({
@@ -70,6 +83,14 @@ export function ChatSection() {
             placeholder="Dog"
             onChangeText={changeAssistantNickname}
             testID="assistant-nickname-input"
+          />
+          <SettingsSelect
+            label={t("settings.general.assistantIcon.label")}
+            hint={t("settings.general.assistantIcon.description")}
+            value={settings.assistantIcon}
+            options={assistantIconOptions}
+            onValueChange={changeAssistantIcon}
+            testID="assistant-icon-select"
           />
           <SettingsSwitch
             label={t("settings.general.autoExpandReasoning.label")}

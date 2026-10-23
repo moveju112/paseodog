@@ -2158,6 +2158,11 @@ export const zhCN: TranslationResources = {
         label: "助手昵称",
         description: "对话中显示的名称。留空则使用 Dog。",
       },
+      assistantIcon: {
+        label: "助手图标",
+        description: "对话中昵称旁显示的图标。保存在此设备上。",
+        initial: "昵称首字（默认）",
+      },
       hideReasoning: {
         label: "隐藏推理过程",
         description: "完成后仅显示最终回答；隐藏推理、进度消息和工具，保留审批请求和错误",

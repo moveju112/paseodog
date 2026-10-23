@@ -2310,6 +2310,11 @@ export const en = {
         label: "Assistant nickname",
         description: "Name shown in conversations. Leave empty to use Dog.",
       },
+      assistantIcon: {
+        label: "Assistant icon",
+        description: "Icon shown beside the nickname in conversations. Saved on this device.",
+        initial: "Nickname initial (default)",
+      },
       hideReasoning: {
         label: "Hide reasoning",
         description:

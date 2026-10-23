@@ -2185,6 +2185,11 @@ export const ar: TranslationResources = {
         label: "اسم المساعد",
         description: "الاسم المعروض في المحادثات. اتركه فارغًا لاستخدام Dog.",
       },
+      assistantIcon: {
+        label: "أيقونة المساعد",
+        description: "الأيقونة بجانب الاسم في المحادثات. تُحفظ على هذا الجهاز.",
+        initial: "الحرف الأول من الاسم (افتراضي)",
+      },
       hideReasoning: {
         label: "إخفاء التفكير",
         description:

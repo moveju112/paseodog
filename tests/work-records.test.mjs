@@ -129,9 +129,11 @@ test('work record renderer is collapsed by default, expands on press and collaps
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     const theme = { colors: { surface1: '#f5f5f5', border: '#ddd', foregroundMuted: '#777', foreground: '#111' },
         borderRadius: { md: 6 }, spacing: { 1: 4, 2: 8 }, fontSize: { sm: 12 } };
+    let icon = '';
     const render = createRenderer({ React, View: 'view', Text: 'text', Pressable: 'pressable',
         StyleSheet: { create: (make) => make(theme) },
         useAssistantNickname: () => 'Dog',
+        useAssistantIcon: () => icon,
         useTranslation: () => ({ i18n: { language: 'ko' } }) });
     const record = project({ tail: [user, thought, assistant('p', '진행', 'commentary')], head: [] }, true).tail[1];
     const row = { item: record, phase: 'complete' };
@@ -160,6 +162,15 @@ test('work record renderer is collapsed by default, expands on press and collaps
     let answer;
     await act(async () => { answer = create(render({ item: { kind: 'assistant_message', id: 'a', text: '본문', answerStart: true } }, body)); });
     assert.equal(answer.root.findAll((node) => node.type === 'text' && node.props.accessibilityRole === 'header')[0].props.children, 'Dog');
+    const avatar = () => answer.root.find((node) => node.type === 'text' && node.props.testID === 'assistant-avatar-icon').props.children;
+    assert.equal(avatar(), 'D');
+    icon = '🤖';
+    await act(async () => answer.update(render({ item: { kind: 'assistant_message', id: 'a', text: '본문', answerStart: true } }, body)));
+    assert.equal(avatar(), '🤖');
+    assert.equal(answer.root.findAllByType('body')[0].props.children, '본문');
+    icon = '';
+    await act(async () => answer.update(render({ item: { kind: 'assistant_message', id: 'a', text: '본문', answerStart: true } }, body)));
+    assert.equal(avatar(), 'D');
     const answerContainer = answer.root.find((node) => node.type === 'view' && node.props.testID === 'assistant-answer');
     assert.deepEqual(answerContainer.props.style.paddingLeft, { xs: 0, md: 40 });
     await act(async () => answer.unmount());
@@ -179,7 +190,7 @@ test('a turn that ended on a closed provider connection offers one explicit cont
     const client = { sendAgentMessage: async (agentId, text, options) => { sent.push([agentId, text, options]); if (fail) throw new Error('offline'); } };
     const render = createRenderer({ React, View: 'view', Text: 'text', Pressable: 'pressable',
         StyleSheet: { create: (make) => make(theme) }, useTranslation: () => ({ i18n: { language: 'ko' } }),
-        useAssistantNickname: () => 'Dog', getClient: (serverId) => (serverId === 'srv' ? client : null) });
+        useAssistantNickname: () => 'Dog', useAssistantIcon: () => '', getClient: (serverId) => (serverId === 'srv' ? client : null) });
     const body = (layout) => React.createElement('body', { id: layout.item.id }, layout.item.text);
     const error = { kind: 'assistant_message', id: 'e', text: '[System Error] Provider connection closed', answerStart: true };
     const session = { serverId: 'srv', agentId: 'agent-1' };

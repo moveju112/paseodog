@@ -455,7 +455,7 @@ function EngineSettings({ theme, section }: PluginSurfaceProps & { section: Sect
                 () => void request({ action: 'features', recap: !(snapshot.recap ?? true) }))}
             {button(`유휴 컨텍스트 자동 정리: ${snapshot.autoClear?.enabled ? '켜짐' : '꺼짐'}`,
                 () => void request({ action: 'autoClear', enabled: !snapshot.autoClear?.enabled }))}
-            {button('유휴 정리 기본값 복원',
+            {snapshot.autoClear?.enabled && button('유휴 정리 기본값 복원',
                 () => void request({ action: 'autoClear', reset: true }))}
             <Text style={text}>기존 대화의 수동 압축은 채팅에서 /compact를 사용하세요.</Text>
         </>}
@@ -541,15 +541,13 @@ function sectionScreen(section: Section) {
 // Paseo 기본 플러그인 설정 화면을 사용해 원본 앱 수정 없이 엔진 UI를 제공한다.
 export default function contribute(client: PluginClientContext) {
     const cleanups = [
-        client.addSettingsScreen({ id: 'mixdog-session-tools', title: '세션 계승·복구·모델', icon: 'Bot', Component: SessionTools }),
         client.addSettingsScreen({ id: 'mixdog-resources', title: 'MCP·스킬·플러그인', icon: 'Bot', Component: ResourceSettings }),
         client.addWorkspacePanel({ id: 'mixdog-session-tools', title: '세션 도구', icon: 'Bot',
             context: 'agent', Component: SessionTools }),
         ...SETTINGS_SECTIONS.map((item) => client.addSettingsScreen({
             id: item.id, title: item.title, icon: 'Bot', Component: sectionScreen(item.section) })),
-        client.addSettingsScreen({ id: 'paseodog-native-config', title: '원본 스킬·훅 보기', icon: 'Bot',
+        client.addScreen({ id: 'paseodog-native-config', title: '원본 스킬·훅 보기',
             Component: NativeConfigView }),
-        client.addSettingsScreen({ id: 'mixdog-status', title: '실행 현황', icon: 'Activity', Component: LiveStatus }),
         client.addScreen({ id: 'mixdog-live', title: 'PaseoDog 실행 현황', Component: LiveStatus }),
         client.addWorkspacePanel({ id: 'mixdog-live', title: 'PaseoDog 실행 현황', icon: 'Activity',
             context: 'agent', Component: LiveStatus }),

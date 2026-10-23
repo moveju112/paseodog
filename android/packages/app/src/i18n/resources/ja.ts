@@ -2205,6 +2205,11 @@ export const ja: TranslationResources = {
         label: "アシスタントのニックネーム",
         description: "会話に表示する名前です。空欄の場合は Dog を使います。",
       },
+      assistantIcon: {
+        label: "アシスタントのアイコン",
+        description: "会話でニックネームの横に表示するアイコンです。この端末に保存されます。",
+        initial: "ニックネームの頭文字（デフォルト）",
+      },
       hideReasoning: {
         label: "思考プロセスを非表示",
         description:

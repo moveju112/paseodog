@@ -2221,6 +2221,11 @@ export const ptBR: TranslationResources = {
         label: "Apelido do assistente",
         description: "Nome exibido nas conversas. Deixe vazio para usar Dog.",
       },
+      assistantIcon: {
+        label: "Ícone do assistente",
+        description: "Ícone ao lado do apelido nas conversas. Salvo neste dispositivo.",
+        initial: "Inicial do apelido (padrão)",
+      },
       hideReasoning: {
         label: "Ocultar raciocínio",
         description:
