@@ -19,24 +19,27 @@ function runCommand(command, args, options) {
 }
 
 // 전용 웹은 공유 앱을 일반 web 대상으로 내보내며 Electron 번들과 산출물을 공유하지 않는다.
-export async function buildWeb({ output, metroWorkers = '2' }, run = runCommand) {
+export async function buildWeb({ output, metroWorkers = '2', hosting = 'github' }, run = runCommand) {
     if (!output || !isAbsolute(output)) throw new Error('output must be an absolute path');
     if (!/^[1-9]\d*$/.test(metroWorkers)) throw new Error('metro-workers must be a positive integer');
+    if (!['github', 'cloudflare'].includes(hosting)) throw new Error('hosting must be github or cloudflare');
     const env = { ...process.env, CI: '1', APP_VARIANT: 'production',
-        PASEO_WEB_PLATFORM: '', PASEODOG_WEB_BASE_PATH: '/paseodog' };
+        PASEO_WEB_PLATFORM: '', PASEODOG_WEB_BASE_PATH: hosting === 'github' ? '/paseodog' : '' };
     await run('npm', ['run', 'build:app-deps'], { cwd: androidRoot, env });
     await run('npx', ['expo', 'export', '--platform', 'web', '--output-dir', output,
         '--max-workers', metroWorkers], { cwd: appRoot, env });
-    // Pages의 깊은 링크 새로고침도 같은 SPA로 처리하고 _expo 자산을 보존한다.
-    await copyFile(resolve(output, 'index.html'), resolve(output, '404.html'));
-    await writeFile(resolve(output, '.nojekyll'), '');
+    // Cloudflare는 최상위 404.html이 없을 때 SPA fallback을 제공한다.
+    if (hosting === 'github') {
+        await copyFile(resolve(output, 'index.html'), resolve(output, '404.html'));
+        await writeFile(resolve(output, '.nojekyll'), '');
+    }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
     try {
         const { values } = parseArgs({ options: {
-            output: { type: 'string' }, 'metro-workers': { type: 'string' },
+            output: { type: 'string' }, 'metro-workers': { type: 'string' }, hosting: { type: 'string' },
         } });
-        await buildWeb({ output: values.output, metroWorkers: values['metro-workers'] });
+        await buildWeb({ output: values.output, metroWorkers: values['metro-workers'], hosting: values.hosting });
     } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

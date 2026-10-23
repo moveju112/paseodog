@@ -52,4 +52,19 @@ test('web build stops on failure before exporting or preparing Pages files', asy
     assert.deepEqual(calls, ['npm']);
     await assert.rejects(buildWeb({ output: 'relative' }), /absolute path/);
     await assert.rejects(buildWeb({ output: '/unused', metroWorkers: '0' }), /positive integer/);
+    await assert.rejects(buildWeb({ output: '/unused', hosting: 'unknown' }), /github or cloudflare/);
+});
+
+test('Cloudflare exports root assets without overriding its built-in SPA fallback', async (t) => {
+    const output = await mkdtemp(join(tmpdir(), 'paseodog-web-'));
+    t.after(() => rm(output, { recursive: true, force: true }));
+    const html = '<!doctype html><script src="/_expo/app.js"></script>';
+    await buildWeb({ output, hosting: 'cloudflare' }, async (command, args, { env }) => {
+        assert.equal(env.PASEODOG_WEB_BASE_PATH, '');
+        assert.equal(env.PASEO_WEB_PLATFORM, '');
+        assert.equal(env.APP_VARIANT, 'production');
+        if (command === 'npx') await writeFile(join(output, 'index.html'), html);
+    });
+    assert.equal(await readFile(join(output, 'index.html'), 'utf8'), html);
+    await assert.rejects(readFile(join(output, '404.html')), { code: 'ENOENT' });
 });

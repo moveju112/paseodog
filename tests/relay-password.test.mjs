@@ -57,11 +57,12 @@ test('pairing links use the password-enabled web, migrate the old default, and p
     const { module } = await loadSource(patchedRelayPasswordSource(installed(spec), spec),
         new URL(spec.file, new URL('server/', packageRoot)), { [new URL('relay-password.js', serverRoot).href]: helper.url });
     const args = { paseoHome: home, relayEnabled: true, includeQr: false, password: 'separate-relay-secret' };
-    for (const appBaseUrl of [undefined, 'https://app.paseo.sh', 'https://app.paseo.sh/']) {
+    for (const appBaseUrl of [undefined, 'https://app.paseo.sh', 'https://app.paseo.sh/',
+        'https://moveju112.github.io/paseodog', 'https://moveju112.github.io/paseodog/']) {
         const { url } = await module.generateLocalPairingOffer({ ...args, appBaseUrl });
         const parsed = new URL(url);
-        assert.equal(parsed.origin, 'https://moveju112.github.io');
-        assert.equal(parsed.pathname, '/paseodog/');
+        assert.equal(parsed.origin, 'https://paseodog.choondoggy.com');
+        assert.equal(parsed.pathname, '/');
         assert.match(parsed.hash, /^#offer=/);
         assert.ok(!url.includes(args.password));
     }

@@ -96,7 +96,7 @@ describe("ConnectionOfferV2 (daemon E2E)", () => {
         relayPublicEndpoint: daemon.config.relayPublicEndpoint,
         appBaseUrl: daemon.config.appBaseUrl,
       });
-      expect(offerUrl.startsWith("https://moveju112.github.io/paseodog/#offer=")).toBe(true);
+      expect(offerUrl.startsWith("https://paseodog.choondoggy.com/#offer=")).toBe(true);
 
       const offer = decodeOfferFromFragmentUrl(offerUrl) as {
         v: number;

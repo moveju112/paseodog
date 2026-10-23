@@ -944,7 +944,7 @@ export default function contribute(plugin: unknown) {
           password: "bootstrap-pairing-test-secret",
         });
         expect(pairing.relayEnabled).toBe(true);
-        expect(pairing.url?.startsWith("https://moveju112.github.io/paseodog/#offer=")).toBe(true);
+        expect(pairing.url?.startsWith("https://paseodog.choondoggy.com/#offer=")).toBe(true);
       } finally {
         await daemon.stop().catch(() => undefined);
         await daemon.agentManager.flush().catch(() => undefined);
