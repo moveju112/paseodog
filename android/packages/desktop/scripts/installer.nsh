@@ -102,7 +102,7 @@ Function ${prefix}paseodogProcesses
     ${If} $4 == 0
       ; 이미 끝난 프로세스와 조회할 수 없는 시스템 프로세스는 대상이 아니다.
       ${If} $7 != 87
-      ${AndIf} $5 == "${APP_EXECUTABLE_FILENAME}"
+      ${AndIf} $5 == "${PRODUCT_FILENAME}.exe"
         Goto process_error
       ${EndIf}
       Goto scan_next

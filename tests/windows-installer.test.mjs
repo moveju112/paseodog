@@ -40,7 +40,7 @@ OutFile "${executable}"
 RequestExecutionLevel user
 ${body}
 `);
-        const result = spawnSync(compiler, ['-V2', source], {
+        const result = spawnSync(compiler, ['-WX', '-INPUTCHARSET', 'UTF8', '-V2', source], {
             encoding: 'utf8', timeout: 20_000,
             env: { ...process.env, NSISDIR: dirname(dirname(compiler)) },
         });
@@ -85,7 +85,7 @@ SectionEnd`;
     const other = compile(`installed-other/${appName.slice(0, -4)}`, appBody);
     compile('installed/installer', `Name "${title}"
 Caption "${title}"
-!define APP_EXECUTABLE_FILENAME "${appName}"
+!define PRODUCT_FILENAME "${appName.slice(0, -4)}"
 !include "${resolve(root, 'android/packages/desktop', config.nsis.include)}"
 Page instfiles
 Section
@@ -103,7 +103,7 @@ Section
   SetErrorLevel $1
 SectionEnd`);
     const invalidTarget = compile('invalid-target', `SilentInstall silent
-!define APP_EXECUTABLE_FILENAME "${appName}"
+!define PRODUCT_FILENAME "${appName.slice(0, -4)}"
 !include "${resolve(root, 'android/packages/desktop', config.nsis.include)}"
 !include "FileFunc.nsh"
 Section
