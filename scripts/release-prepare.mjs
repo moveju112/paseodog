@@ -6,10 +6,12 @@ import { createHash } from 'node:crypto';
 import { root } from './paths.mjs';
 import { runCommand } from './release-command.mjs';
 import { withTestLock } from './test.mjs';
+import { advanceReleaseVersion } from './release-version.mjs';
 
 // 준비된 전용 worktree만 전진시킨다. 의존성/Gradle/Metro 복사나 사용자 트리 정리는 하지 않는다.
-export async function prepareRelease(profile, commit, { run = runCommand, adopt = false, start = false } = {}) {
+export async function prepareRelease(profile, commit, { run = runCommand, adopt = false, start = false, nextVersion = false } = {}) {
     const requestStartedAt = new Date().toISOString();
+    if (nextVersion && !start) throw new Error('--next-version requires --start');
     if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('An exact pushed commit is required');
     if (!isAbsolute(profile.sourceRoot || '') || !isAbsolute(profile.cacheRoot || ''))
         throw new Error('sourceRoot and cacheRoot must be absolute');
@@ -52,6 +54,7 @@ export async function prepareRelease(profile, commit, { run = runCommand, adopt 
         if (remote !== commit) throw new Error('Commit must be current origin/main');
         await capture(['fetch', 'origin', 'main']);
         await capture(['merge', '--ff-only', commit]);
+        if (nextVersion) ({ commit } = await advanceReleaseVersion(source, profile.repo, run));
         const env = { ...process.env,
             ...(profile.androidHome ? { ANDROID_HOME: profile.androidHome } : {}),
             ...(profile.wineBin ? { PATH: profile.wineBin + delimiter + process.env.PATH } : {}) };
@@ -77,10 +80,10 @@ export async function prepareRelease(profile, commit, { run = runCommand, adopt 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
     try {
         const { values } = parseArgs({ options: { config: { type: 'string' }, commit: { type: 'string' },
-            adopt: { type: 'boolean' }, start: { type: 'boolean' } } });
+            adopt: { type: 'boolean' }, start: { type: 'boolean' }, 'next-version': { type: 'boolean' } } });
         if (!isAbsolute(values.config || '')) throw new Error('--config requires an absolute host profile');
         const profile = JSON.parse(await readFile(values.config, 'utf8'));
         console.log(JSON.stringify(await prepareRelease(profile, values.commit,
-            { adopt: values.adopt, start: values.start })));
+            { adopt: values.adopt, start: values.start, nextVersion: values['next-version'] })));
     } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
