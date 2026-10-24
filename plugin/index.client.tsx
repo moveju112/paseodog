@@ -9,6 +9,7 @@ import { NativeConfigView } from './client/native-config.js';
 import { SessionTools } from './client/session-tools.js';
 import { ResourceSettings } from './client/resource-settings.js';
 import { MessagePolicySettings } from './client/message-policy-settings.js';
+import { DEFAULT_TURN_MINUTES, MAX_TURN_MINUTES } from './shared/turn-duration.mjs';
 
 type Route = { provider: string; model: string; effort?: string; autoEffort: boolean; fast: boolean; contextPercent?: number | null };
 type AuthProvider = 'anthropic-oauth' | 'openai-oauth';
@@ -17,6 +18,7 @@ type AgentDefinition = { id: string; name: string; description?: string; body: s
 type WorkflowItem = { id: string; name: string; description?: string; source?: string; editable?: boolean; active: boolean };
 type WorkflowPack = { id: string; name: string; description?: string; body: string; source?: string; editable?: boolean };
 type Snapshot = {
+    maxTurnMinutes?: number;
     route: Route;
     models: { id: string; provider: string; label: string;
         effortOptions: { id: string; label: string }[]; fastCapable: boolean }[];
@@ -170,6 +172,7 @@ function EngineSettings({ theme, host, section }: PluginSurfaceProps & { section
     const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState('');
+    const [turnMinutes, setTurnMinutes] = useState(String(DEFAULT_TURN_MINUTES));
     const [target, setTarget] = useState('');
     const [query, setQuery] = useState('');
     const [showModels, setShowModels] = useState(false);
@@ -202,6 +205,7 @@ function EngineSettings({ theme, host, section }: PluginSurfaceProps & { section
         try {
             const next = await invoke(input) as Snapshot;
             setSnapshot(next);
+            setTurnMinutes(String(next.maxTurnMinutes ?? DEFAULT_TURN_MINUTES));
             if (next.workflowPack && (input.action === 'workflowPack' || input.action === 'workflowSave' || input.action === 'workflowCreate')) {
                 setEditingWorkflowId(next.workflowPack.id);
                 setWorkflowBody(next.workflowPack.body || '');
@@ -211,7 +215,8 @@ function EngineSettings({ theme, host, section }: PluginSurfaceProps & { section
                 if (next.agentDefinition?.body) setAgentEditBody(next.agentDefinition.body);
             }
             setMessage(readOnly ? '엔진에서 조회했습니다.'
-                : input.action === 'instructionFiles' ? '저장했습니다. 새 세션부터 적용됩니다.' : '즉시 반영되었습니다.');
+                : input.action === 'turnDuration' ? '저장했습니다. 다음 명령부터 적용됩니다.'
+                    : input.action === 'instructionFiles' ? '저장했습니다. 새 세션부터 적용됩니다.' : '즉시 반영되었습니다.');
         } catch (error) {
             if (previous && !readOnly) setSnapshot(previous);
             setMessage(error instanceof Error ? error.message : String(error));
@@ -368,6 +373,14 @@ function EngineSettings({ theme, host, section }: PluginSurfaceProps & { section
         </Modal>}
         {section === 'workflow' && <MessagePolicySettings key={host.id} theme={theme} />}
         {snapshot && section === 'workflow' && <>
+            <Text style={{ ...text, fontSize: 18 }}>명령 최대 실행 시간 (분)</Text>
+            <Text style={text}>기본 120분 (2시간). 이 호스트의 다음 명령부터 적용되며 실행 중인 명령은 바뀌지 않아요.</Text>
+            <TextInput accessibilityLabel="명령 최대 실행 시간 (분)" value={turnMinutes}
+                onChangeText={setTurnMinutes} keyboardType="number-pad" editable={!busy}
+                style={{ ...text, minHeight: 48, padding: 10, borderWidth: 1, borderColor: colors.foreground }} />
+            <Text style={text}>1~{MAX_TURN_MINUTES}분의 정수를 입���하세요.</Text>
+            {button('실행 시간 저장', () => void request({ action: 'turnDuration', maxTurnMinutes: Number(turnMinutes) }),
+                false, busy || !/^\d+$/.test(turnMinutes) || Number(turnMinutes) < 1 || Number(turnMinutes) > MAX_TURN_MINUTES)}
             <Text style={{ ...text, fontSize: 18 }}>자동 오케스트레이터</Text>
             <Text style={text}>이 호스트 전체에 적용돼요. 열린 세션은 다음 요청부터 반영하며 도구 승인 설정은 바꾸지 않아요.</Text>
             {(['none', 'swarm'] as const).map((mode) => button(mode === 'none' ? '단독 실행' : '에이전트 협업',

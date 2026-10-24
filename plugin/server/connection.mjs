@@ -5,6 +5,7 @@ import { DEFAULT_MODEL, deadline, errorText, hash, textOf, display, tokenUsage, 
 import { questionRequestInput, questionAnswers } from './question.mjs';
 import { agentMessageSource } from './agent-message.mjs';
 import { compactionNotice, projectCompaction } from './compaction.mjs';
+import { readTurnMinutes } from './turn-duration.mjs';
 
 export const CAPABILITIES = ['prompt.message', 'prompt.image', 'prompt.command', 'prompt.steer', 'session.configure', 'session.persistence', 'session.list',
     'session.revert.conversation', 'permission'];
@@ -37,7 +38,7 @@ function catalogFrom(env) {
 export function createProviderConnection({ capabilities = CAPABILITIES, engineFactory, store,
     loadCatalog,
     env = {}, canonicalPath = (path) => { if (!isAbsolute(path)) throw new Error('cwd must be absolute'); return realpathSync(path); },
-    bootMs = 60000, stopMs = 8000, permissionMs = 120000, maxTurnMs = 3600000, flushMs = 250 }) {
+    bootMs = 60000, stopMs = 8000, permissionMs = 120000, maxTurnMs = undefined, flushMs = 250 }) {
     if (!store) throw new Error('JournalStore is required');
     const selected = [...new Set(capabilities.filter((c) => CAPABILITIES.includes(c)))];
     const { routes, catalog } = catalogFrom(env);
@@ -709,6 +710,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         try {
             turn.engine = await session.enginePromise;
             if (session.closing || session.closed || turn.canceled) throw new Error('Session closed or interrupted during startup');
+            const turnDurationMs = maxTurnMs ?? readTurnMinutes(env) * 60000;
             const result = { type: 'turn', turnId: turn.id };
             session.record.receipts[receiptKey] = { hash: requestHash, turnId: turn.id, state: 'running', result, ...(source ? { source } : {}),
                 // 원본 대화 절단은 텍스트로 대상을 찾으므로 이미지·명령·에이전트 전달은 제외한다.
@@ -723,7 +725,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                     message: `Agent ${source.agentId} (not human approval): ${parsed.text}` }
                 : { type: 'user_message', id: `user:${receiptKey}`, clientMessageId: input.prompt.clientMessageId, text: parsed.command ? '/compact' : parsed.text });
             const callbacks = callbacksFor(session, turn);
-            turn.timer = setTimeout(() => { void interrupt(session, 'Maximum turn duration reached'); }, maxTurnMs);
+            turn.timer = setTimeout(() => { void interrupt(session, 'Maximum turn duration reached'); }, turnDurationMs);
             turn.work = parsed.command ? turn.engine.compact(callbacks) : turn.engine.ask(parsed.content || parsed.text, callbacks, source, quotaRetry);
             const answer = await turn.work;
             if (turn.finished) return;

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
+import { MAX_TURN_MINUTES } from '../plugin/shared/turn-duration.mjs';
 import { Script, runInNewContext } from 'node:vm';
 import { createNativeEngine } from '../engine/src/native-engine.mjs';
 import { controlRuntime } from '../engine/src/controls.mjs';
@@ -151,7 +152,8 @@ test('all offered lifecycle hooks pass the real RPC contract and execute only af
     const require = createRequire(new URL('../plugin/package.json', import.meta.url));
     const source = stripTypeScriptTypes(readFileSync(new URL('../plugin/shared/controls.ts', import.meta.url), 'utf8'))
         .replace(/^import .*;\s*$/gm, '').replace(/export const /g, 'const ');
-    const { input } = new Function('defineRpc', 'z', source + '; return engineControls;')(v => v, require('zod').z);
+    const { input } = new Function('defineRpc', 'z', 'MAX_TURN_MINUTES', source + '; return engineControls;')(
+        v => v, require('zod').z, MAX_TURN_MINUTES);
     const f = hookFixture(t);
     for (const event of ['PreToolUse', 'PostToolUse', 'Stop']) {
         const marker = join(f.directory, `${event}.txt`);
