@@ -133,7 +133,7 @@ export function patchedComposerSource(source) {
 }
 
 // 고정된 웹 입력창 번들만 수정하고 다른 클라이언트·공급자 동작은 건드리지 않는다.
-export function patchPaseoComposer(root, { check = false, brotliQuality = constants.BROTLI_MAX_QUALITY } = {}) {
+export function patchPaseoComposer(root, { check = false, brotliQuality = 4 } = {}) {
     if (!Number.isInteger(brotliQuality) || brotliQuality < 0 || brotliQuality > constants.BROTLI_MAX_QUALITY)
         throw new Error('Invalid Brotli quality');
     const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));

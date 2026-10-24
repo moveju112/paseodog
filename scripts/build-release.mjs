@@ -58,7 +58,7 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
     const commands = {
         dependencies: [androidRoot, ['npm', 'run', 'build:desktop-deps']],
         android: [join(androidRoot, 'packages/app/android'), ['./gradlew', '--init-script', signingInit,
-            'assembleRelease', `-PpaseodogVersionCode=${versionCode}`, `-PpaseodogVersionName=${version}`]],
+            'assembleRelease', '--profile', `-PpaseodogVersionCode=${versionCode}`, `-PpaseodogVersionName=${version}`]],
         web: [join(androidRoot, 'packages/app'), ['npx', 'expo', 'export', '--platform', 'web',
             ...(metroWorkers ? ['--max-workers', metroWorkers] : [])]],
         'desktop-main': [desktopRoot, ['npm', 'run', 'build:main']],
@@ -79,6 +79,7 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
                 env: { ...process.env, TMPDIR: temporary, CI: '1',
                     PASEODOG_BUILD_CACHE_ROOT: cacheRoot,
                     PASEODOG_RELEASE_METRICS: join(workspace, `${name}-metrics.jsonl`),
+                    ...(name === 'windows' ? { ELECTRON_BUILDER_COMPRESSION_LEVEL: '1' } : {}),
                     ...(metroWorkers ? { PASEODOG_METRO_WORKERS: metroWorkers } : {}),
                     APP_VARIANT: 'production', PASEO_WEB_PLATFORM: name === 'web' ? 'electron' : '' },
                 stdio: ['ignore', 'pipe', 'pipe'],

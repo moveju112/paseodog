@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'nod
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { brotliCompressSync, gzipSync, constants as zlibConstants } from 'node:zlib';
+import { brotliCompressSync, brotliDecompressSync, gzipSync, gunzipSync, constants as zlibConstants } from 'node:zlib';
 import { gitBlob } from '../scripts/patch-mixdog.mjs';
 import { COMPOSER_FILE, patchedComposerSource, patchPaseoComposer, withoutWorktreeSetupTip } from '../scripts/patch-paseo-composer.mjs';
 import { WHITE2_LABELS, WHITE2_OPTION, withoutWhite2Theme, withWhite2Theme } from '../scripts/patch-paseo-theme.mjs';
@@ -235,5 +235,11 @@ test('composer check rejects stale precompressed web bundles', (t) => {
     writeFileSync(path + '.gz', gzipSync(original, { level: 1 }));
     assert.throws(() => patchPaseoComposer(directory, { check: true }), /precompressed bundle is stale/);
     writeFileSync(path + '.gz', gzipSync(patched, { level: 1 }));
+    patchPaseoComposer(directory, { check: true });
+    writeFileSync(path + '.br', brotliCompressSync(original, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 1 } }));
+    writeFileSync(path + '.gz', gzipSync(original, { level: 1 }));
+    patchPaseoComposer(directory);
+    assert.equal(brotliDecompressSync(readFileSync(path + '.br')).toString(), patched);
+    assert.equal(gunzipSync(readFileSync(path + '.gz')).toString(), patched);
     patchPaseoComposer(directory, { check: true });
 });
