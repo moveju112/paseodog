@@ -17,6 +17,7 @@ import {
 } from "./ai-engine-contract";
 import { useAiEngineSettings } from "./use-ai-engine-settings";
 import { EngineAccounts } from "./engine-accounts";
+import { AgentMessageSettings } from "./agent-message-settings";
 
 // 호스트 설정 목록의 개별 항목과 1:1로 대응하는 엔진 설정 구역
 export type EngineSection =
@@ -2039,6 +2040,7 @@ export function AiEnginePage({ serverId, section }: { serverId: string; section:
           request={request}
         />
       )}
+      {section === "workflow" && <AgentMessageSettings key={serverId} serverId={serverId} />}
     </View>
   );
 }
