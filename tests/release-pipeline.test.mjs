@@ -160,7 +160,7 @@ test('verification retains completed checks across failure and output-workspace 
     assert.equal(counts.get('check.log'), 2);
 });
 
-for (const failure of [null, 'upload', 'export']) {
+for (const failure of [null, 'upload', 'export', 'install', 'pages']) {
 test(`integrated delivery overlaps upload/export, drains failures and resumes safely: ${failure ?? 'success'}`,
     { timeout: 10000 }, async t => {
     const directory = await temporary(t);
@@ -176,6 +176,8 @@ test(`integrated delivery overlaps upload/export, drains failures and resumes sa
     let assets = [];
     let exportStarted;
     const exporting = new Promise(resolve => { exportStarted = resolve; });
+    let installStarted;
+    const installing = new Promise(resolve => { installStarted = resolve; });
     const run = async (command, args) => {
         calls.push([command, ...args]);
         if (command === 'git') {
@@ -204,7 +206,16 @@ test(`integrated delivery overlaps upload/export, drains failures and resumes sa
             await mkdir(output); await writeFile(join(output, 'index.html'), 'fixture');
         }
         if (args.includes('ls') && args.includes('--json')) return '[]';
-        if (command === 'dpkg-query') return config.version.replace('-', '~');
+        if (command === 'dpkg-query') return '1.0.0~rc.7.11000';
+        if (command === 'sudo' && args.includes('dpkg')) {
+            installStarted();
+            await new Promise(resolve => setImmediate(resolve));
+            if (failure === 'install') throw new Error('install failed');
+        }
+        if (command === 'npx' && args.includes('wrangler')) {
+            await installing;
+            if (failure === 'pages') throw new Error('pages failed');
+        }
         if (args.includes('diagnostic')) return '{"diagnostic":"Provider is available"}';
         return '';
     };
@@ -223,8 +234,15 @@ test(`integrated delivery overlaps upload/export, drains failures and resumes sa
         const saved = JSON.parse(await readFile(join(directory, 'release-state.json'), 'utf8'));
         assert.equal(saved.stages['github-upload'].status, failure === 'upload' ? 'failed' : 'complete');
         assert.equal(saved.stages['browser-export'].status, failure === 'export' ? 'failed' : 'complete');
-        assert.equal(calls.some(row => row[0] === 'gh' && row[2] === 'edit'), false);
-        assert.equal(calls.some(row => row.includes('deploy')), false);
+        if (['install', 'pages'].includes(failure)) {
+            assert.equal(saved.stages['pc-install'].status, failure === 'install' ? 'failed' : 'complete');
+            assert.equal(saved.stages['pages-deploy'].status, failure === 'pages' ? 'failed' : 'complete');
+            assert.equal(calls.some(row => row.includes('reload')), false);
+            assert.equal(calls.some(row => row[0] === 'desktop'), false);
+        } else {
+            assert.equal(calls.some(row => row[0] === 'gh' && row[2] === 'edit'), false);
+            assert.equal(calls.some(row => row.includes('deploy')), false);
+        }
         await assert.rejects(readFile(join(directory, 'delivery.lock')), { code: 'ENOENT' });
         return;
     }

@@ -152,19 +152,28 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
         verifyRemoteAssets(published.assets, expected);
         await stage('github-publish', () => execute('github-publish', 'gh',
             ['release', 'edit', tag, '--repo', config.repo, '--draft=false', '--latest']), { mutation: true });
-        await stage('pages-deploy', () => execute('pages-deploy', 'npx', ['--no-install', 'wrangler', 'pages', 'deploy',
-            webOutput, '--project-name', config.pagesProject, '--branch', 'main'], join(root, 'android/packages/app')),
-        { mutation: true });
-        await checkWeb({ url: config.webUrl, output: webOutput });
-        await stage('web-patch', async () => {
-            await execute('web-patch', process.execPath, ['scripts/patch-paseo-composer.mjs']);
-            await execute('web-patch-check', process.execPath, ['scripts/patch-paseo-composer.mjs', '--check']);
-        });
-        console.log('Publication complete; waiting for idle before PC/runtime apply.');
-        await waitForIdle(listAgents);
-        const installed = (await capture('dpkg-query', ['-W', '-f=${Version}', 'paseodog'])).trim();
-        if (installed !== version.replace('-', '~')) await stage('pc-install', () =>
-            execute('pc-install', 'sudo', ['-n', 'dpkg', '-i', releaseArtifacts(workspace, version)[2]]), { mutation: true });
+        // 공개된 검증 산출물의 PC 설치와 웹 배포는 독립적이다. 둘 다 성공한 뒤에만 재로딩한다.
+        const applied = await Promise.allSettled([
+            (async () => {
+                await stage('pages-deploy', () => execute('pages-deploy', 'npx', ['--no-install', 'wrangler', 'pages', 'deploy',
+                    webOutput, '--project-name', config.pagesProject, '--branch', 'main'], join(root, 'android/packages/app')),
+                { mutation: true });
+                await checkWeb({ url: config.webUrl, output: webOutput });
+                await stage('web-patch', async () => {
+                    await execute('web-patch', process.execPath, ['scripts/patch-paseo-composer.mjs']);
+                    await execute('web-patch-check', process.execPath, ['scripts/patch-paseo-composer.mjs', '--check']);
+                });
+            })(),
+            (async () => {
+                console.log('Publication complete; waiting for idle before PC install.');
+                await waitForIdle(listAgents);
+                const installed = (await capture('dpkg-query', ['-W', '-f=${Version}', 'paseodog'])).trim();
+                if (installed !== version.replace('-', '~')) await stage('pc-install', () =>
+                    execute('pc-install', 'sudo', ['-n', 'dpkg', '-i', releaseArtifacts(workspace, version)[2]]), { mutation: true });
+            })(),
+        ]);
+        const applyFailures = applied.filter(result => result.status === 'rejected').map(result => result.reason);
+        if (applyFailures.length) throw new AggregateError(applyFailures, applyFailures.map(error => error.message).join('; '));
         await waitForIdle(listAgents);
         await stage('plugin-reload', () => execute('plugin-reload', process.execPath,
             [...wrapper, 'plugin', 'reload', 'paseodog-provider']), { mutation: true });

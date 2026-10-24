@@ -22,6 +22,7 @@ export async function runReleaseBuild(run) {
     await settleBuilds([
         android,
         (async () => {
+            await run('desktop-dependencies');
             await run('web');
             await run('desktop-main');
             const linux = run('linux');
@@ -56,7 +57,8 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
     const builder = ['npx', 'electron-builder', '--config', 'electron-builder.cjs',
         `-c.directories.output=${output}`, `-c.extraMetadata.version=${version}`, '--publish', 'never'];
     const commands = {
-        dependencies: [androidRoot, ['npm', 'run', 'build:desktop-deps']],
+        dependencies: [androidRoot, ['npm', 'run', 'build:release-app-deps']],
+        'desktop-dependencies': [androidRoot, ['npm', 'run', 'build:desktop-runtime-deps']],
         android: [join(androidRoot, 'packages/app/android'), ['./gradlew', '--init-script', signingInit,
             'assembleRelease', '--profile', `-PpaseodogVersionCode=${versionCode}`, `-PpaseodogVersionName=${version}`]],
         web: [join(androidRoot, 'packages/app'), ['npx', 'expo', 'export', '--platform', 'web',
@@ -103,7 +105,9 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
     };
     const artifacts = {
         dependencies: ['packages/highlight/dist', 'packages/client/dist', 'packages/protocol/dist',
-            'packages/relay/dist', 'packages/plugin/dist', 'packages/server/dist', 'packages/cli/dist']
+            'packages/relay/dist', 'packages/plugin/dist', 'packages/expo-two-way-audio/build']
+            .map(path => join(androidRoot, path)),
+        'desktop-dependencies': ['packages/server/dist', 'packages/cli/dist']
             .map(path => join(androidRoot, path)),
         android: [join(workspace, `PaseoDog-${version}-arm64-v8a.apk`)],
         web: [join(androidRoot, 'packages/app/dist')],
