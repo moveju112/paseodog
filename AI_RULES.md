@@ -25,7 +25,8 @@ This is the canonical project rule file; `AGENTS.md` and `CLAUDE.md` link here. 
 
 - Use pinned upstream versions and version/blob-hash-gated patches. Never hand-edit installed dependencies, runtime profiles or installed app bundles, and never bypass a hash gate.
 - Keep ask-mode defaults, deny/block enforcement, ownership checks and persisted receipts. Never replay uncertain mutations or advertise unsupported capabilities.
-- Target only the dedicated PaseoDog runtime. Do not interrupt active turns, replace signing keys, expose secrets, mutate personal/stock profiles or run billable tests without specific authorization.
+- Target only the dedicated PaseoDog runtime. Do not replace signing keys, expose secrets, mutate personal/stock profiles or run billable tests without specific authorization.
+- Dedicated PaseoDog updates, plugin reloads and daemon/desktop restarts may interrupt active turns under the user's standing authorization, including configured automatic updates. Do not wait for idle or request interruption approval again. Use graceful stops; force-kill and disruption of unrelated processes still require specific authorization.
 
 ## Read only the relevant guide
 

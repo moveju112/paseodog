@@ -42,20 +42,6 @@ export function validateReleaseConfig(input) {
     return config;
 }
 
-export function activeAgents(rows) {
-    return rows.filter(row => ['running', 'initializing'].includes(row.status));
-}
-
-// 재시작 허용을 추정하지 않는다. 독립 서비스가 모든 턴의 idle 경계를 기다린다.
-export async function waitForIdle(list, { sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
-    timeoutMs = 3600000, now = Date.now } = {}) {
-    const started = now();
-    while (activeAgents(await list()).length) {
-        if (now() - started >= timeoutMs) throw new Error('Active work remains; runtime apply is pending');
-        await sleep(10000);
-    }
-}
-
 export function detachedCommand(configPath, workspace) {
     const id = createHash('sha256').update(workspace).digest('hex').slice(0, 12);
     const args = ['--user', `--unit=paseodog-delivery-${id}`, '--collect',
@@ -101,7 +87,6 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             run(command, args, { cwd, env, log: join(workspace, `${name}.log`) });
         const tag = `v${version}`;
         const wrapper = [join(root, 'bin/paseodog.mjs')];
-        const listAgents = async () => JSON.parse(await capture(process.execPath, [...wrapper, 'agent', 'ls', '--json']));
         const assertSource = async () => {
             if ((await capture('git', ['rev-parse', 'HEAD'])).trim() !== commit
                 || (await capture('git', ['status', '--porcelain'])).trim())
@@ -165,8 +150,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
                 });
             })(),
             (async () => {
-                console.log('Publication complete; waiting for idle before PC install.');
-                await waitForIdle(listAgents);
+                console.log('Publication complete; installing the dedicated PC runtime.');
                 const installed = (await capture('dpkg-query', ['-W', '-f=${Version}', 'paseodog'])).trim();
                 if (installed !== version.replace('-', '~')) await stage('pc-install', () =>
                     execute('pc-install', 'sudo', ['-n', 'dpkg', '-i', releaseArtifacts(workspace, version)[2]]), { mutation: true });
@@ -174,12 +158,10 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
         ]);
         const applyFailures = applied.filter(result => result.status === 'rejected').map(result => result.reason);
         if (applyFailures.length) throw new AggregateError(applyFailures, applyFailures.map(error => error.message).join('; '));
-        await waitForIdle(listAgents);
         await stage('plugin-reload', () => execute('plugin-reload', process.execPath,
             [...wrapper, 'plugin', 'reload', 'paseodog-provider']), { mutation: true });
         const diagnostic = JSON.parse(await capture(process.execPath, [...wrapper, 'provider', 'diagnostic', 'paseodog', '--json']));
         if (!diagnostic.diagnostic.startsWith('Provider is available')) throw new Error('Provider not ready after reload');
-        await waitForIdle(listAgents);
         await stage('pc-launch', () => launchDesktop(config, run), { mutation: true });
         const desktopRelease = await installedRelease();
         if (desktopRelease.versionCode !== Number(versionCode)) throw new Error('Installed desktop version mismatch');
@@ -216,6 +198,6 @@ if (process.argv[1] && resolve(process.argv[1]) === self) {
             await deliverRelease(config, { retryStage: values['retry-stage'] });
         }
         else console.log(JSON.stringify({ version: config.version, phases,
-            note: 'Plan only. --start or --execute performs authorized publication and idle-only apply.' }, null, 2));
+            note: 'Plan only. --start or --execute performs authorized publication and runtime apply; active turns may be interrupted.' }, null, 2));
     } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

@@ -2,11 +2,11 @@
 
 Source changes do not authorize runtime apply. Apply only under an explicit release/apply request; ordinary implementation ends with its verified commit/push.
 
-## Target and active work
+## Target and cutover
 
 - Use the `paseodog` wrapper and dedicated home. Identify the actual host/process/home, not just a port. Stock Paseo and personal Mixdog profiles are never implicit targets.
-- Before install, reload, restart or relaunch, check active turns on the affected dedicated runtime. Wait for idle or obtain specific interruption approval; never kill work to finish faster.
-- Release apply belongs to the independent [delivery service](tasks/RELEASE.md). End the initiating turn after scheduling it: waiting inside that active turn prevents the idle gate from opening.
+- Dedicated PaseoDog install, reload, restart and relaunch may proceed while turns are active under the user's standing authorization. Do not wait for idle or request interruption approval again; running work may be interrupted. Preserve graceful shutdown and recovery checks.
+- Release apply belongs to the independent [delivery service](tasks/RELEASE.md). End the initiating turn after confirming it started; the remaining steps must not depend on that turn surviving a restart.
 - Keep the previous executable/data recoverable during cutover. A failed readiness check is incomplete apply, not success; do not keep restarting an unverified candidate.
 - Never use `scripts/install.sh` / `scripts/install.mjs` as a diagnostic. New public listeners, account/chat deletion and signing-key replacement require separate authorization.
 
