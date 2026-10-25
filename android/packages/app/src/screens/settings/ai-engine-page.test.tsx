@@ -222,6 +222,7 @@ const route = {
   fast: false,
 };
 const snapshot = {
+  maxTurnMinutes: 120,
   route,
   instructionFiles: "agents",
   compaction: { auto: true, onModelChange: true, mainBufferPercent: 0.2, mainBufferRatio: 20 },

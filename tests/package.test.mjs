@@ -14,7 +14,7 @@ test('source allowlist includes required runtime modules and release commands', 
     const entries = new Set(readFileSync(join(root, 'MANIFEST.sha256'), 'utf8').trim().split('\n')
         .map((line) => line.split('  ')[1]));
     for (const path of ['engine/src/session-actions.mjs', 'engine/src/resource-controls.mjs',
-        'plugin/client/session-tools.tsx', 'plugin/client/resource-settings.tsx', 'tests/native-session-features.test.mjs',
+        'plugin/client/session-tools.tsx', 'android/packages/app/src/screens/settings/turn-duration-settings.ts', 'tests/native-session-features.test.mjs',
         'engine/src/orchestration.mjs', 'plugin/server/compaction.mjs',
         'patches/effort-usage.mjs', 'tests/worktree-setup-tip.test.mjs', 'scripts/android-update-manifest.py',
         'scripts/check-upstream.mjs', 'scripts/live-acceptance.mjs',

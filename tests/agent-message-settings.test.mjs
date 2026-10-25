@@ -15,7 +15,7 @@ const bundle = composerFixture(read('tools/node_modules/@getpaseo/server/' + COM
 const source = stripTypeScriptTypes(read('android/packages/app/src/screens/settings/agent-message-settings.ts'))
     .replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '');
 const start = bundle.indexOf('const PaseodogAgentMessageSettings=');
-const web = bundle.slice(start, bundle.indexOf('const k=', start));
+const web = bundle.slice(start, bundle.indexOf('const PaseodogTurnDurationSettings=', start));
 const components = { View: 'view', Text: 'text', Pressable: 'pressable' };
 const compile = source => ts.transpileModule(source, {
     compilerOptions: { jsx: ts.JsxEmit.React, jsxFactory: 'React.createElement' },
@@ -56,7 +56,7 @@ for (const platform of ['app', 'web']) {
             const page = read('android/packages/app/src/screens/settings/ai-engine-page.tsx');
             Page = runInNewContext(compile(page.slice(page.indexOf('export function AiEnginePage('))
                 .replace('export function', 'function')) + ';AiEnginePage', {
-                ...common, React, AgentMessageSettings: Component,
+                ...common, React, AgentMessageSettings: Component, TurnDurationSettings: () => null,
                 useAiEngineSettings: () => ({ snapshot: null, connected: true, request() {} }),
                 layout: {}, Button: 'button',
             });
@@ -64,7 +64,7 @@ for (const platform of ['app', 'web']) {
             const anchor = bundle.indexOf('_e.AiEnginePage=function(e){');
             const end = bundle.indexOf(';function PaseodogBaseAiEnginePage', anchor);
             Page = runInNewContext('const _e={};' + bundle.slice(anchor, end) + ';_e.AiEnginePage', {
-                u: React, n: components, PaseodogAgentMessageSettings: Component,
+                u: React, n: components, PaseodogAgentMessageSettings: Component, PaseodogTurnDurationSettings: () => null,
                 PaseodogBaseAiEnginePage: () => null,
             });
         }

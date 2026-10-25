@@ -18,6 +18,7 @@ import {
 import { useAiEngineSettings } from "./use-ai-engine-settings";
 import { EngineAccounts } from "./engine-accounts";
 import { AgentMessageSettings } from "./agent-message-settings";
+import { TurnDurationSettings } from "./turn-duration-settings";
 
 // 호스트 설정 목록의 개별 항목과 1:1로 대응하는 엔진 설정 구역
 export type EngineSection =
@@ -2217,6 +2218,9 @@ export function AiEnginePage({ serverId, section }: { serverId: string; section:
           busy={busy}
           request={request}
         />
+      )}
+      {section === "workflow" && (
+        <TurnDurationSettings key={`duration:${serverId}`} serverId={serverId} />
       )}
       {section === "workflow" && <AgentMessageSettings key={serverId} serverId={serverId} />}
     </View>

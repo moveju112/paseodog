@@ -58,11 +58,6 @@ async function loadClient(t) {
         addWorkspacePanel(value) { panels.push(value); return () => {}; },
         addSidebarFooterItem(value) { footer = value; return () => {}; },
     });
-    const settings = (id) => {
-        const found = settingsScreens.find((item) => item.id === id);
-        assert.ok(found, `settings screen ${id}`);
-        return found;
-    };
     // 설정 화면 렌더링과 라벨 기반 버튼 누르기 도우미
     const renderScreen = async (screen) => {
         let tree;
@@ -75,83 +70,15 @@ async function loadClient(t) {
         mounted.push(tree);
         return screenHelpers(tree);
     };
-    return { settingsScreens, settings, screens, panels, liveScreen, footer, renderScreen };
+    return { settingsScreens, screens, panels, liveScreen, footer, renderScreen };
 }
 
-test('workflow duration uses minutes, defaults to 120 and preserves errors on failed saves', async (t) => {
-    const { settings, renderScreen } = await loadClient(t);
-    let saved = 120, fail = false;
-    const writes = [];
-    globalThis.__paseodogTestRpc = async (input, name) => {
-        if (name === 'agent-message-policy') return { allowUnrelatedSessions: true };
-        if (input.action === 'turnDuration') {
-            writes.push(input);
-            if (fail) throw new Error('save failed');
-            saved = input.maxTurnMinutes;
-        }
-        return { route: {}, models: [], compaction: {}, workflows: [], agents: [], sessions: [],
-            orchestration: 'none', maxTurnMinutes: saved };
-    };
-    const screen = await renderScreen(settings('mixdog-workflow'));
-    const field = () => screen.tree.root.findByProps({ accessibilityLabel: '명령 최대 실행 시간 (분)' });
-    const save = () => screen.tree.root.findAllByType('pressable')
-        .find(node => node.findByType('text').children.join('') === '실행 시간 저장');
-    assert.equal(field().props.value, '120');
-    for (const invalid of ['', '0', '-1', '1.5', '35792', 'abc']) {
-        await act(async () => field().props.onChangeText(invalid));
-        assert.equal(save().props.disabled, true);
-    }
-    await act(async () => field().props.onChangeText('180'));
-    await screen.press('실행 시간 저장');
-    assert.deepEqual(writes, [{ action: 'turnDuration', maxTurnMinutes: 180 }]);
-    assert.match(JSON.stringify(screen.tree.toJSON()), /다음 명령부터 적용/);
-    fail = true;
-    await act(async () => field().props.onChangeText('240'));
-    await screen.press('실행 시간 저장');
-    assert.equal(saved, 180);
-    assert.match(JSON.stringify(screen.tree.toJSON()), /save failed/);
-    await screen.press('새로고침');
-    assert.equal(field().props.value, '180');
-});
-
-test('workflow message switch persists independently and never retries an uncertain save', async (t) => {
-    const { settings, renderScreen } = await loadClient(t);
-    const requests = [];
-    let allow = true, rejectWrite = false, finishWrite;
-    globalThis.__paseodogTestRpc = async (input, name) => {
-        if (name === 'engine-controls') return {
-            route: {}, models: [], compaction: {}, workflows: [], agents: [], sessions: [], orchestration: 'swarm',
-        };
-        assert.equal(name, 'agent-message-policy');
-        requests.push(input);
-        if (input.action === 'write') {
-            if (rejectWrite) throw new Error('uncertain');
-            await new Promise(resolve => { finishWrite = resolve; });
-            allow = input.allowUnrelatedSessions;
-        }
-        return { allowUnrelatedSessions: allow };
-    };
-    const screen = await renderScreen(settings('mixdog-workflow'));
-    const toggle = () => screen.tree.root.findByProps({ accessibilityLabel: '무관한 세션 간 메시지 허용' });
-    assert.equal(toggle().props.accessibilityState.checked, true);
-    await act(async () => {
-        toggle().props.onPress();
-        toggle().props.onPress();
-    });
-    assert.equal(toggle().props.disabled, true);
-    assert.equal(requests.filter(input => input.action === 'write').length, 1);
-    await act(async () => finishWrite());
-    assert.equal(toggle().props.accessibilityState.checked, false);
-    assert.ok(screen.labels().includes('✓ 에이전트 협업'));
-    rejectWrite = true;
-    await act(async () => toggle().props.onPress());
-    assert.equal(toggle().props.disabled, true);
-    assert.match(JSON.stringify(screen.tree.toJSON()), /자동 재시도하지/);
-    assert.equal(requests.filter(input => input.action === 'write').length, 2);
-    await screen.press('세션 메시지 설정 새로고침');
-    assert.equal(toggle().props.disabled, false);
-    assert.equal(toggle().props.accessibilityState.checked, false);
-    assert.equal(requests.filter(input => input.action === 'write').length, 2);
+test('plugin registers tools and diagnostics but no duplicate settings screens', async t => {
+    const { settingsScreens, screens, panels, liveScreen } = await loadClient(t);
+    assert.deepEqual(settingsScreens, []);
+    assert.equal(panels.find(item => item.id === 'mixdog-live').Component, liveScreen.Component);
+    assert.ok(panels.some(item => item.id === 'mixdog-session-tools'));
+    assert.ok(screens.some(item => item.id === 'paseodog-native-config'));
 });
 
 test('bottom sidebar icon opens analysis as a modal and releases it on close', async (t) => {
@@ -361,25 +288,6 @@ test('usage separates OAuth quota failure from disconnected accounts and guides 
     assert.ok(content().includes('YYYY-MM-DD 형식으로 입력하면 조회해요'));
 });
 
-// 저장 응답 전에는 컨트롤을 잠그고, 실패하면 낙관적 표시를 되돌리고 오류를 남긴다.
-test('settings lock controls while a save is pending and keep its failure visible', async (t) => {
-    const { settings, renderScreen } = await loadClient(t);
-    const snapshot = { route: { provider: 'p', model: 'm', autoEffort: false, fast: false }, models: [],
-        compaction: { auto: true }, workflows: [], orchestration: 'swarm', agents: [], sessions: [] };
-    let rejectSave;
-    globalThis.__paseodogTestRpc = async (input) => input.action === 'read' ? snapshot
-        : new Promise((resolve, reject) => { rejectSave = reject; });
-    const tokens = await renderScreen(settings('mixdog-tokens'));
-    const find = (pattern) => tokens.tree.root.findAllByType('pressable')
-        .find((node) => pattern.test(node.findByType('text').children.join('')));
-    await tokens.press('자동 압축: 켜짐');
-    assert.equal(find(/^자동 압축: 꺼짐$/).props.disabled, true);
-    assert.equal(find(/유휴 컨텍스트 자동 정리/).props.disabled, true);
-    await act(async () => rejectSave(new Error('저장 실패: 엔진 응답 없음')));
-    assert.equal(find(/^자동 압축: 켜짐$/).props.disabled, false);
-    assert.match(JSON.stringify(tokens.tree.toJSON()), /저장 실패: 엔진 응답 없음/);
-});
-
 // 실행 현황은 단계 중복·원시 모드 이름·ID 없는 조회 실패 행을 사용자 문구로 표시한다.
 test('live status hides duplicate job stages, names orchestration modes and marks unavailable rows', async (t) => {
     const { liveScreen, renderScreen } = await loadClient(t);
@@ -409,30 +317,6 @@ function screenHelpers(tree) {
     };
     return { tree, press, labels };
 }
-
-test('token settings require a Main model before saving a context limit', async (t) => {
-    const { settings, renderScreen } = await loadClient(t);
-    const calls = [];
-    let route = { provider: 'subscription', model: '', fast: false, autoEffort: true };
-    globalThis.__paseodogTestRpc = async (input) => {
-        calls.push(input);
-        return { route, models: [], compaction: { auto: true }, workflows: [], agents: [], sessions: [], orchestration: 'none' };
-    };
-    const screen = await renderScreen(settings('mixdog-tokens'));
-    const limits = () => screen.tree.root.findAllByType('pressable')
-        .filter((node) => node.findByType('text').children.join('').includes('컨텍스트 한도'));
-    assert.equal(limits().length, 4);
-    assert.ok(limits().every((node) => node.props.disabled && !node.props.accessibilityState.selected));
-    assert.match(JSON.stringify(screen.tree.toJSON()), /새 대화 입력창에서 Main 모델을 먼저 선택해 주세요/);
-    assert.deepEqual(calls, [{ action: 'read' }]);
-    await screen.press('자동 압축: 켜짐');
-    assert.deepEqual(calls.at(-1), { action: 'compaction', enabled: false });
-    route = { ...route, model: 'small' };
-    await screen.press('새로고침');
-    assert.ok(limits().every((node) => !node.props.disabled));
-    await screen.press('컨텍스트 한도 50%');
-    assert.deepEqual(calls.at(-1), { action: 'main', route: { contextPercent: 50 } });
-});
 
 test('monitor switches to native token and OAuth usage with period selection and refresh', async (t) => {
     const { liveScreen, renderScreen } = await loadClient(t);
@@ -491,61 +375,6 @@ test('session tools scope model changes and require confirmation before inherita
     assert.match(JSON.stringify(screen.tree.toJSON()), /원본은 유지/);
 });
 
-// 확장 설치 입력과 오류 후 비재전송을 공유 네이티브·web 화면에서 확인한다.
-test('MCP editor confirms exact native input and never retries an uncertain mutation', async (t) => {
-    const { settings, renderScreen } = await loadClient(t);
-    const calls = [];
-    globalThis.__paseodogTestRpc = async (input, name) => {
-        assert.equal(name, 'engine-resources');
-        calls.push(input);
-        if (input.operation === 'mcpAdd') throw new Error('timeout');
-        return { mcp: [], skills: [], plugins: [] };
-    };
-    const screen = await renderScreen(settings('mixdog-resources'));
-    for (const [label, value] of [['MCP 이름', 'tools'], ['MCP 명령', 'tool'], ['MCP 인자', 'one\ntwo']]) {
-        await act(async () => screen.tree.root.findAllByType('input')
-            .find((node) => node.props.accessibilityLabel === label).props.onChangeText(value));
-    }
-    await screen.press('MCP 추가');
-    assert.equal(calls.filter((call) => call.operation === 'mcpAdd').length, 0);
-    await screen.press('확인하고 실행');
-    assert.deepEqual(calls.filter((call) => call.operation === 'mcpAdd'), [{
-        operation: 'mcpAdd', confirmed: true, data: { name: 'tools', type: 'stdio', command: 'tool', args: ['one', 'two'] },
-    }]);
-    assert.match(JSON.stringify(screen.tree.toJSON()), /자동 재시도하지 않습니다/);
-});
-
-// 스킬 선택 시 본문을 교체하고 읽기 실패 후에는 빈 본문으로 덮어쓰지 못하게 한다.
-test('skill selection loads the selected body and read failures disable saving', async (t) => {
-    const { settings, renderScreen } = await loadClient(t);
-    const calls = [];
-    globalThis.__paseodogTestRpc = async (input) => {
-        calls.push(input);
-        if (input.operation === 'skillRead') {
-            if (input.name === 'broken') throw new Error('read failed');
-            return { name: input.name, content: `body ${input.name}` };
-        }
-        return { skills: ['a', 'b', 'broken'].map((name) => ({ name })), mcp: [], plugins: [] };
-    };
-    const screen = await renderScreen(settings('mixdog-resources'));
-    await screen.press('skills');
-    await screen.press('a 내용 보기');
-    const body = () => screen.tree.root.findAllByType('input')
-        .find((node) => node.props.accessibilityLabel === '스킬 지침 본문');
-    await act(async () => body().props.onChangeText('edited a'));
-    await screen.press('b 내용 보기');
-    assert.equal(body().props.value, 'body b');
-    await screen.press('스킬 수정');
-    await screen.press('확인하고 실행');
-    assert.deepEqual(calls.find((input) => input.operation === 'skillSave').data,
-        { name: 'b', originalName: 'b', description: '', body: 'body b' });
-    await screen.press('broken 내용 보기');
-    assert.equal(body().props.value, '');
-    const save = screen.tree.root.findAllByType('pressable')
-        .find((node) => node.findByType('text').children.join('') === '스킬 수정');
-    assert.equal(save.props.disabled, true);
-});
-
 // 네이티브 파일·턴 상태에 따라 복구 가능한 버튼만 활성화한다.
 test('session undo and redo buttons reflect native recovery availability', async (t) => {
     const { panels, renderScreen } = await loadClient(t);
@@ -576,281 +405,6 @@ test('session undo and redo buttons reflect native recovery availability', async
         assert.equal(button.props.disabled, disabled, label);
     }
     assert.match(JSON.stringify(screen.tree.toJSON()), /missing patch/);
-});
-
-test('settings register separate sections without a main model picker and dispatch scoped changes', async (t) => {
-    const { settingsScreens, settings, screens, panels, liveScreen, renderScreen } = await loadClient(t);
-    assert.deepEqual(settingsScreens.map((item) => [item.id, item.title, item.icon]), [
-        ['mixdog-resources', 'MCP·스킬·플러그인', 'Bot'],
-        ['mixdog-account', '구독 계정', 'Bot'], ['mixdog-workflow', '워크플로', 'Bot'],
-        ['mixdog-tokens', '토큰 절감', 'Bot'], ['mixdog-instructions', '지침 파일 로딩', 'Bot'],
-        ['mixdog-agents', '에이전트', 'Bot'],
-    ]);
-    for (const item of settingsScreens) assert.deepEqual(Object.keys(item).sort(), ['Component', 'icon', 'id', 'title']);
-    assert.equal(panels.find((item) => item.id === 'mixdog-live').Component, liveScreen.Component);
-    assert.ok(panels.some((item) => item.id === 'mixdog-session-tools'));
-    assert.ok(screens.some((item) => item.id === 'paseodog-native-config'));
-    const calls = [];
-    const snapshot = {
-        route: { provider: 'subscription', model: 'small', effort: 'low', fast: false, autoEffort: false },
-        models: [{ provider: 'subscription', id: 'small', label: 'Small', fastCapable: true,
-            effortOptions: [{ id: 'low', label: 'Low' }, { id: 'high', label: 'High' }] }],
-        compaction: { auto: true }, workflows: [{ id: 'default', name: 'Default', active: true }],
-        orchestration: 'swarm', instructionFiles: 'all', agents: [{ id: 'worker', label: 'Worker', disabled: false,
-            route: { provider: 'subscription', model: 'small', effort: 'low', autoEffort: false, fast: false } }],
-        sessions: [{ id: 's1', running: true, model: 'small', compaction: { auto: true },
-            context: { usedTokens: 42 }, jobs: [{ id: 'j1', agent: 'worker', status: 'running' }] }],
-    };
-    const definition = { id: 'worker', name: 'Worker', description: '검증 담당',
-        body: '# Worker\n\n  keep   original\tspacing\n', custom: false, userOverride: true };
-    let reply = (input) => input.action === 'agentDefinition' ? { ...snapshot, agentDefinition: definition }
-        : input.action === 'workflowPack' ? { ...snapshot, workflowPack: { id: 'default', name: 'Default', body: '# Flow' } }
-            : input.action === 'preferences' && input.profile ? { ...snapshot, profile: input.profile } : snapshot;
-    globalThis.__paseodogTestRpc = async (input, name) => {
-        if (name === 'agent-message-policy') return { allowUnrelatedSessions: true };
-        assert.equal(name, 'engine-controls');
-        calls.push(input);
-        return reply(input);
-    };
-    const mainPicker = /^(✓ )?(Main|모델 선택|에이전트 모델 선택|추론: .*|Fast: .*|Small · subscription)$/;
-
-    // 워크플로: 오케스트레이션·워크플로 보기/편집/생성만 표시한다.
-    const workflow = await renderScreen(settings('mixdog-workflow'));
-    assert.deepEqual(calls.at(-1), { action: 'read' });
-    assert.ok(workflow.labels().includes('✓ 에이전트 협업'));
-    assert.ok(workflow.labels().includes('단독 실행'));
-    assert.ok(!workflow.labels().some((label) => /focused|balanced|^swarm$|^none$/.test(label)));
-    assert.ok(!workflow.labels().some((label) => mainPicker.test(label) || /자동 압축|Worker|지침 파일|구독 계정/.test(label)));
-    assert.doesNotMatch(JSON.stringify(workflow.tree.toJSON()), /usedTokens|s1/);
-    assert.equal(workflow.tree.root.findAllByType('modal').length, 0);
-    await workflow.press('✓ 에이전트 협업');
-    assert.deepEqual(calls.at(-1), { action: 'orchestration', mode: 'swarm' });
-    await workflow.press('전문가');
-    assert.deepEqual(calls.at(-1), { action: 'preferences', profile: { experienceLevel: 'expert' } });
-    await workflow.press('자동');
-    assert.deepEqual(calls.at(-1), { action: 'preferences', profile: { experienceLevel: '' } });
-    await workflow.press('✓ Default');
-    assert.deepEqual(calls.at(-1), { action: 'workflow', workflow: 'default' });
-    await workflow.press('현재 워크플로(Default) 내용 보기·편집');
-    assert.deepEqual(calls.at(-1), { action: 'workflowPack', workflow: 'default' });
-    const body = workflow.tree.root.findAll((node) => node.type === 'input' && node.props.accessibilityLabel === '워크플로 본문');
-    assert.equal(body[0].props.value, '# Flow');
-    await act(async () => body[0].props.onChangeText('# Flow 2'));
-    await workflow.press('워크플로 저장 및 즉시 적용');
-    assert.deepEqual(calls.at(-1), { action: 'workflowSave', workflow: 'default', body: '# Flow 2', activate: true });
-    await workflow.press('새 커스텀 워크플로 추가');
-    const field = (label) => workflow.tree.root.find((node) => node.type === 'input' && node.props.accessibilityLabel === label);
-    await act(async () => field('새 워크플로 이름').props.onChangeText(' Fast TDD '));
-    await act(async () => field('새 워크플로 설명').props.onChangeText('빠른 검증'));
-    await workflow.press('새 워크플로 생성');
-    assert.deepEqual(calls.at(-1), { action: 'workflowCreate', name: 'Fast TDD', description: '빠른 검증', activate: true });
-
-    // 토큰 절감: Main 모델·추론 선택 없이 토큰 관련 토글과 Main Fast만 표시한다.
-    const tokens = await renderScreen(settings('mixdog-tokens'));
-    assert.ok(!tokens.labels().some((label) => mainPicker.test(label) || /balanced|Worker|지침 파일/.test(label)));
-    assert.equal(tokens.tree.root.findAllByType('input').length, 0);
-    // 자동 추론은 입력창 Effort 목록으로 옮겨 설정 화면에 중복 스위치를 두지 않는다.
-    assert.ok(!tokens.labels().some((label) => /자동 추론 조절/.test(label)));
-    await tokens.press('Fast 응답: 꺼짐');
-    assert.deepEqual(calls.at(-1), { action: 'main', route: { fast: true } });
-    await tokens.press('자동 압축: 켜짐');
-    assert.deepEqual(calls.at(-1), { action: 'compaction', enabled: false });
-    await tokens.press('모델 변경 시 자동 압축: 꺼짐');
-    assert.deepEqual(calls.at(-1), { action: 'compaction', onModelChange: true });
-    await tokens.press('컨텍스트 버퍼 25%');
-    assert.deepEqual(calls.at(-1), { action: 'compaction', mainBufferPercent: 0.25 });
-    assert.ok(!tokens.labels().includes('컨텍스트 버퍼 30%'));
-    await tokens.press('유휴 컨텍스트 자동 정리: 꺼짐');
-    assert.deepEqual(calls.at(-1), { action: 'autoClear', enabled: true });
-
-    // 지침 파일 로딩: 읽기만으로는 선택형 모드를 바꾸지 않고, 클릭 시에만 all <-> off 를 보낸다.
-    snapshot.instructionFiles = 'agents';
-    const instructions = await renderScreen(settings('mixdog-instructions'));
-    assert.deepEqual(calls.at(-1), { action: 'read' });
-    assert.ok(!instructions.labels().some((label) => mainPicker.test(label) || /balanced|자동 압축|Worker/.test(label)));
-    assert.match(JSON.stringify(instructions.tree.toJSON()), /~\/\.codex\/AGENTS\.md/);
-    assert.match(JSON.stringify(instructions.tree.toJSON()), /새 세션부터/);
-    assert.match(JSON.stringify(instructions.tree.toJSON()), /agents/);
-    reply = (input) => input.action === 'instructionFiles' ? { ...snapshot, instructionFiles: input.enabled ? 'all' : 'off' } : snapshot;
-    await instructions.press('✓ 지침 파일 로딩: 켜짐');
-    assert.deepEqual(calls.at(-1), { action: 'instructionFiles', enabled: false });
-    await instructions.press('지침 파일 로딩: 꺼짐');
-    assert.deepEqual(calls.at(-1), { action: 'instructionFiles', enabled: true });
-    assert.ok(instructions.labels().includes('✓ 지침 파일 로딩: 켜짐'));
-    assert.ok(!calls.filter((input) => input.action === 'instructionFiles')
-        .some((input) => 'language' in input || 'profile' in input));
-
-    // 에이전트: Main 선택 없이 에이전트 전용 모델·추론·Fast와 원본 정의를 표시한다.
-    reply = (input) => input.action === 'agentDefinition' ? { ...snapshot, agentDefinition: definition } : snapshot;
-    const agents = await renderScreen(settings('mixdog-agents'));
-    assert.ok(!agents.labels().some((label) => /^(✓ )?Main$|^(✓ )?모델 선택$|balanced|자동 압축|지침 파일/.test(label)));
-    await agents.press('Worker · 켜짐');
-    await agents.press('에이전트 끄기');
-    assert.deepEqual(calls.at(-1), { action: 'agent', agent: 'worker', route: { disabled: true } });
-    await agents.press('에이전트 모델 선택');
-    assert.equal(agents.tree.root.findAll((node) => node.type === 'input' && node.props.accessibilityLabel === '모델 검색').length, 1);
-    await agents.press('✓ Small · subscription');
-    assert.deepEqual(calls.at(-1), { action: 'agent', agent: 'worker', route: { provider: 'subscription', model: 'small' } });
-    await agents.press('추론: High');
-    assert.deepEqual(calls.at(-1), { action: 'agent', agent: 'worker', route: { effort: 'high' } });
-    await agents.press('Fast: 꺼짐');
-    assert.deepEqual(calls.at(-1), { action: 'agent', agent: 'worker', route: { fast: true } });
-    const inputsBefore = agents.tree.root.findAllByType('input').length;
-    await agents.press('원본 에이전트 정의 보기 (읽기 전용)');
-    assert.deepEqual(calls.at(-1), { action: 'agentDefinition', agent: 'worker' });
-    const shown = agents.tree.root.findAll((node) => node.type === 'text' && node.props.accessibilityLabel === '원본 에이전트 정의');
-    assert.equal(shown.length, 1);
-    assert.equal(shown[0].children.join(''), definition.body);
-    assert.equal(agents.tree.root.findAllByType('input').length, inputsBefore);
-    assert.match(JSON.stringify(agents.tree.toJSON()), /사용자 재정의/);
-    const callCount = calls.length;
-    await agents.press('원본 에이전트 정의 닫기');
-    assert.equal(calls.length, callCount);
-    assert.equal(agents.tree.root.findAll((node) => node.props.accessibilityLabel === '원본 에이전트 정의').length, 0);
-
-    // 조회 실패는 저장 완료로 오인하지 않도록 화면에 표시한다.
-    globalThis.__paseodogTestRpc = async () => { throw new Error('설정 서버 연결 실패'); };
-    await agents.press('새로고침');
-    assert.match(JSON.stringify(agents.tree.toJSON()), /설정 서버 연결 실패/);
-
-    assert.equal(liveScreen.id, 'mixdog-live');
-    globalThis.__paseodogTestRpc = async () => ({
-        observedAt: Date.now(),
-        sessions: [{ id: 's1', state: 'waiting-approval', approvalCount: 1,
-            workflow: { id: 'default', name: 'Default' }, orchestration: 'swarm',
-            model: 'small', provider: 'subscription', effort: 'low', compaction: { auto: true },
-            jobs: [{ id: 'job_native', agent: 'worker', tag: 'review', model: 'small',
-                provider: 'subscription', status: 'running', waitingApproval: true }] }],
-    });
-    let liveTree;
-    await act(async () => {
-        liveTree = create(React.createElement(liveScreen.Component, {
-            theme: { colors: { foreground: '#ffffff' } }, host: { id: 'test', label: 'test' },
-            layout: { compact: true, platform: 'android' },
-        }));
-    });
-    assert.match(JSON.stringify(liveTree.toJSON()), /승인 대기/);
-    assert.match(JSON.stringify(liveTree.toJSON()), /job_native/);
-    assert.match(JSON.stringify(liveTree.toJSON()), /Default/);
-    await act(async () => liveTree.unmount());
-});
-
-test('subscription login runs only inside a modal with code, back and cancel handling', async (t) => {
-    const { settingsScreens, settings, renderScreen } = await loadClient(t);
-    const authCalls = [];
-    const controlCalls = [];
-    const secret = 'secret-code-123';
-    const flowIds = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002',
-        '00000000-0000-4000-8000-000000000003'];
-    let authReply;
-    globalThis.__paseodogTestRpc = async (input, name) => {
-        if (name !== 'engine-auth') {
-            controlCalls.push(input);
-            return { route: { provider: 'subscription', model: 'small', autoEffort: false, fast: false },
-                models: [], compaction: { auto: true }, workflows: [], orchestration: 'balanced', agents: [], sessions: [] };
-        }
-        authCalls.push(input);
-        return authReply(input);
-    };
-    // 모달은 구독 계정 화면에만 있고 다른 설정 화면에는 없다.
-    for (const item of settingsScreens.filter((entry) => entry.id !== 'mixdog-account')) {
-        const other = await renderScreen(item);
-        assert.equal(other.tree.root.findAllByType('modal').length, 0);
-        assert.ok(!other.labels().includes('구독 계정 로그인'));
-    }
-    controlCalls.length = 0;
-    const { tree, press, labels } = await renderScreen(settings('mixdog-account'));
-    assert.ok(!labels().some((label) => /balanced|자동 압축|Worker|지침 파일|새로고침|모델 선택/.test(label)));
-    const modal = () => tree.root.findByType('modal');
-    const modalText = () => modal().findAllByType('text').flatMap((node) => node.children).join('\n');
-    const codeInputs = () => tree.root.findAll((node) => node.type === 'input' && node.props.accessibilityLabel === '인증 코드');
-    assert.equal(modal().props.visible, false);
-    assert.equal(codeInputs().length, 0);
-
-    // 모달 열기만으로는 어떤 로그인 RPC도 호출하지 않는다.
-    await press('구독 계정 로그인');
-    assert.equal(modal().props.visible, true);
-    assert.equal(authCalls.length, 0);
-
-    authReply = async () => ({ connected: false, state: 'idle' });
-    await press('ChatGPT 구독 (OpenAI)');
-    await press('연결 상태 확인');
-    assert.deepEqual(authCalls.at(-1), { action: 'status', provider: 'openai-oauth' });
-    assert.match(modalText(), /연결된 계정 없음/);
-    // 다른 계정 공급자를 고르면 이전 공급자의 상태 문구를 지운다.
-    await press('Claude 구독 (Anthropic)');
-    assert.doesNotMatch(modalText(), /연결된 계정 없음/);
-    await press('ChatGPT 구독 (OpenAI)');
-
-    authReply = async () => ({ id: flowIds[0], state: 'pending', url: 'https://auth.example/authorize?state=x',
-        userCode: 'ABCD-EFGH', acceptsCode: true });
-    await press('로그인 시작');
-    assert.deepEqual(authCalls.at(-1), { action: 'start', provider: 'openai-oauth' });
-    assert.equal(codeInputs().length, 1);
-    assert.ok(modal().findAll((node) => node.type === 'input').includes(codeInputs()[0]));
-    assert.equal(codeInputs()[0].props.secureTextEntry, true);
-    assert.match(modalText(), /ABCD-EFGH/);
-    await press('브라우저에서 로그인 페이지 열기');
-    assert.deepEqual(globalThis.__paseodogOpenedUrls, ['https://auth.example/authorize?state=x']);
-
-    await act(async () => codeInputs()[0].props.onChangeText(`  ${secret} `));
-    authReply = async () => ({ state: 'completed' });
-    await press('코드 제출');
-    assert.deepEqual(authCalls.at(-1), { action: 'complete', provider: 'openai-oauth', id: flowIds[0], code: secret });
-    assert.equal(codeInputs().length, 0);
-    assert.doesNotMatch(JSON.stringify(tree.toJSON()), new RegExp(secret));
-    assert.match(modalText(), /로그인 완료/);
-
-    // 서버 오류는 모달 안에 표시하고 흐름을 남기지 않는다.
-    authReply = async () => { throw new Error('계정 연결에 실패했어요. 새 로그인으로 다시 시도해 주세요.'); };
-    await press('로그인 시작');
-    assert.match(modalText(), /계정 연결에 실패했어요/);
-    assert.equal(codeInputs().length, 0);
-
-    // 모달 안 취소 버튼은 진행 중인 흐름을 취소하고 모달은 유지한다.
-    authReply = async () => ({ id: flowIds[1], state: 'pending', url: 'https://auth.example/a', userCode: null, acceptsCode: true });
-    await press('로그인 시작');
-    await act(async () => codeInputs()[0].props.onChangeText(secret));
-    authReply = async () => ({ state: 'idle' });
-    await press('진행 중인 로그인 취소');
-    assert.deepEqual(authCalls.at(-1), { action: 'cancel', provider: 'openai-oauth', id: flowIds[1] });
-    assert.equal(modal().props.visible, true);
-    assert.equal(codeInputs().length, 0);
-
-    // Android 뒤로가기(onRequestClose)는 진행 중 로그인을 취소하고 입력값을 폐기한다.
-    authReply = async () => ({ id: flowIds[2], state: 'pending', url: 'https://auth.example/b', userCode: null, acceptsCode: true });
-    await press('로그인 시작');
-    await act(async () => codeInputs()[0].props.onChangeText(secret));
-    authReply = async () => ({ state: 'idle' });
-    await act(async () => modal().props.onRequestClose());
-    assert.deepEqual(authCalls.at(-1), { action: 'cancel', provider: 'openai-oauth', id: flowIds[2] });
-    assert.equal(modal().props.visible, false);
-    assert.equal(codeInputs().length, 0);
-    assert.doesNotMatch(JSON.stringify(tree.toJSON()), new RegExp(secret));
-
-    // 시작 응답 전에 닫으면 늦게 도착한 흐름을 서버에서 취소한다.
-    await press('구독 계정 로그인');
-    let resolveStart;
-    authReply = (input) => input.action === 'start'
-        ? new Promise((resolve) => { resolveStart = resolve; }) : Promise.resolve({ state: 'idle' });
-    await press('로그인 시작');
-    await press('닫기');
-    await act(async () => resolveStart({ id: flowIds[0], state: 'pending', url: 'https://auth.example/c', acceptsCode: true }));
-    assert.deepEqual(authCalls.at(-1), { action: 'cancel', provider: 'openai-oauth', id: flowIds[0] });
-    assert.equal(modal().props.visible, false);
-    assert.equal(codeInputs().length, 0);
-
-    // 늦은 시작 응답의 취소 실패도 숨기지 않고 설정 화면에 표시한다.
-    await press('구독 계정 로그인');
-    authReply = (input) => input.action === 'start'
-        ? new Promise((resolve) => { resolveStart = resolve; })
-        : Promise.reject(new Error('서버 연결 끊김'));
-    await press('로그인 시작');
-    await press('닫기');
-    await act(async () => resolveStart({ id: flowIds[1], state: 'pending', url: 'https://auth.example/d', acceptsCode: true }));
-    assert.equal(modal().props.visible, false);
-    assert.match(JSON.stringify(tree.toJSON()), /로그인 취소 확인 실패: 서버 연결 끊김/);
-    assert.equal(controlCalls.length, 0);
 });
 
 test('native config viewer selects Claude/Codex sources, refreshes read-only and labels it as not applied', async (t) => {
