@@ -51,19 +51,22 @@ test('reviewed relay patches are idempotent and refuse source drift or partial a
     }
 });
 
-test('the complete installed patch upgrades reviewed helpers and checks without modifying files', (t) => {
+test('complete relay patch checks are read-only for installed and missing helpers', (t) => {
     const directory = privateHome(t);
     for (const spec of RELAY_PASSWORD_PATCHES) {
         const target = join(directory, spec.package, spec.file);
         mkdirSync(dirname(target), { recursive: true });
-        cpSync(new URL(`${spec.package}/${spec.file}`, packageRoot), target);
+        writeFileSync(target, patchedRelayPasswordSource(installed(spec), spec));
         cpSync(new URL(`${spec.package}/package.json`, packageRoot), join(directory, spec.package, 'package.json'));
     }
     const helper = join(directory, 'server/dist/server/server/relay-password.js');
-    cpSync(new URL('relay-password.js', serverRoot), helper);
+    writeFileSync(helper, relayPasswordModule());
     const before = readFileSync(helper, 'utf8');
-    assert.throws(() => patchPaseoRelayPassword(directory, { check: true }), /patch is missing/);
+    patchPaseoRelayPassword(directory, { check: true });
     assert.equal(readFileSync(helper, 'utf8'), before);
+    rmSync(helper);
+    assert.throws(() => patchPaseoRelayPassword(directory, { check: true }), /patch is missing/);
+    assert.equal(existsSync(helper), false);
     patchPaseoRelayPassword(directory);
     const modified = statSync(helper).mtimeMs;
     patchPaseoRelayPassword(directory, { check: true });
