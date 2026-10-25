@@ -138,6 +138,8 @@ export const ru: TranslationResources = {
       cancelingAgent: "Отменить агента",
       stopAgent: "Остановить агента",
       interrupt: "Прервать",
+      confirmTitle: "Остановить агента?",
+      confirmMessage: "Текущее выполнение агента будет остановлено. Ваш черновик сохранится.",
     },
     voice: {
       enableVoiceMode: "Включить голосовой режим",

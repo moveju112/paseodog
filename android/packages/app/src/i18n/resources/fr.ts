@@ -139,6 +139,9 @@ export const fr: TranslationResources = {
       cancelingAgent: "Annulation de l’agent…",
       stopAgent: "Arrêter l’agent",
       interrupt: "Interrompre",
+      confirmTitle: "Arrêter l’agent ?",
+      confirmMessage:
+        "L’exécution en cours de l’agent sera arrêtée. Votre brouillon sera conservé.",
     },
     voice: {
       enableVoiceMode: "Activer le mode vocal",

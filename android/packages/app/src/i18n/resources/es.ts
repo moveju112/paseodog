@@ -138,6 +138,8 @@ export const es: TranslationResources = {
       cancelingAgent: "Agente de cancelación",
       stopAgent: "detener agente",
       interrupt: "Interrumpir",
+      confirmTitle: "¿Detener al agente?",
+      confirmMessage: "Se detendrá la ejecución actual del agente. Se conservará tu borrador.",
     },
     voice: {
       enableVoiceMode: "Habilitar el modo de voz",

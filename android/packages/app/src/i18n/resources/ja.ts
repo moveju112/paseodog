@@ -138,6 +138,8 @@ export const ja: TranslationResources = {
       cancelingAgent: "エージェントをキャンセル中",
       stopAgent: "エージェントを停止",
       interrupt: "中断",
+      confirmTitle: "エージェントを停止しますか？",
+      confirmMessage: "実行中のエージェントを停止します。入力中の下書きは保持されます。",
     },
     voice: {
       enableVoiceMode: "音声モードを有効にする",

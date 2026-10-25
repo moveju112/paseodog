@@ -137,6 +137,8 @@ export const zhCN: TranslationResources = {
       cancelingAgent: "正在取消 Agent",
       stopAgent: "停止 Agent",
       interrupt: "中断",
+      confirmTitle: "停止 Agent？",
+      confirmMessage: "将停止 Agent 当前的运行。你正在输入的草稿会保留。",
     },
     voice: {
       enableVoiceMode: "启用语音模式",

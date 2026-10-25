@@ -33,6 +33,7 @@ import { withSettingsBehavior, withoutSettingsBehavior } from '../patches/paseo-
 import { withSingleWorkspace, withoutSingleWorkspace } from '../patches/paseo-single-workspace.mjs';
 import { withHostSwitch, withoutHostSwitch } from '../patches/paseo-host-switch.mjs';
 import { withVersionDetails, withoutVersionDetails } from '../patches/paseo-version-details.mjs';
+import { withComposerControls, withoutComposerControls } from '../patches/paseo-composer-controls.mjs';
 
 const PRECOMPRESSED = [['.br', brotliCompressSync, brotliDecompressSync], ['.gz', gzipSync, gunzipSync]];
 
@@ -57,6 +58,7 @@ export function withoutWorktreeSetupTip(source) {
 
 // 기존 첨부파일·대기열 저장 및 배출 로직을 유지하면서 PaseoDog의 자동 턴 교체만 차단한다.
 function originalComposerSource(source, assemble) {
+    source = withoutComposerControls(source);
     source = withoutVersionDetails(source);
     source = withoutHostSwitch(source);
     source = withoutSingleWorkspace(source);
@@ -100,7 +102,7 @@ function patchComposerSource(source, assemble = value => value) {
     const hiddenSetupTip = withVersionDetails(original.replace(...worktreeSetupTip));
     // AI 엔진 설정의 압축 여유 버퍼 선택지를 Mixdog 상한에 맞춘 10/20/25%로 바꾼다.
     const resultWithChat = withChatUsability(withAgentEditorSafety(withSettingsCorrections(withOfferLink(withCompactionBuffer(withConversationFocus(withRelayPassword(withExternalLinks(withWorkRecords(withSidebarStatusShapes(withAgentsSettings(withImportCwd(withHideReasoning(withUsageOrder(withUsageDonut(withUsageColors(withWhite2Theme(withCollaboration(withAutoEffort(withAgentProgress(withSidebarToolbar(withHelpMenu(hiddenSetupTip))))))))))))))))))))));
-    return withHostSwitch(withSingleWorkspace(withSettingsBehavior(withSettingsOrganization(withDaemonUpdate(withMarkdownTable(resultWithChat))))));
+    return withComposerControls(withHostSwitch(withSingleWorkspace(withSettingsBehavior(withSettingsOrganization(withDaemonUpdate(withMarkdownTable(resultWithChat)))))));
 }
 
 // 검토된 Metro 0.11.4의 편집·구형 대기열 모듈과 툴팁/호스트/공급자/callout 참조 모듈.

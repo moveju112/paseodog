@@ -137,6 +137,8 @@ export const ko: TranslationResources = {
       cancelingAgent: "에이전트 취소 중",
       stopAgent: "에이전트 중지",
       interrupt: "중단",
+      confirmTitle: "에이전트를 중단할까?",
+      confirmMessage: "실행 중인 작업이 중단돼. 입력 중인 내용은 그대로 유지돼.",
     },
     voice: {
       enableVoiceMode: "음성 모드 켜기",
