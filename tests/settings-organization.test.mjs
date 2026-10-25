@@ -32,6 +32,21 @@ test('settings organization remains hash-gated, reversible and idempotent', () =
     assert.throws(() => withSettingsOrganization(''), /anchor mismatch/);
 });
 
+test('previous workflow settings upgrade without accepting partial patches or source drift', () => {
+    const durationStart = patched.indexOf('const PaseodogTurnDurationSettings=');
+    const durationEnd = patched.indexOf('const k=[{value:"none",label:', durationStart);
+    assert.ok(durationStart > 0 && durationEnd > durationStart);
+    const duration = patched.slice(durationStart, durationEnd);
+    const row = 'e.section==="workflow"?u.createElement(PaseodogTurnDurationSettings,{key:"duration:"+e.serverId,serverId:e.serverId}):null,';
+    assert.ok(patched.includes(row));
+    const previous = patched.replace(duration, '').replace(row, '');
+    assert.equal(patchedComposerSource(previous), patched);
+    assert.equal(withoutSettingsOrganization(previous), withoutSettingsOrganization(patched));
+    assert.throws(() => patchedComposerSource(previous + '// drift'), /hash mismatch/);
+    assert.throws(() => patchedComposerSource(patched.replace(row, '')), /Partial|hash mismatch/);
+    assert.throws(() => patchedComposerSource(patched.replace(duration, '')), /Partial|hash mismatch/);
+});
+
 // 실제 공통 진단과 고정 웹 컴포넌트의 클릭·표시·호스트 연결을 함께 검증한다.
 test('shared and web diagnostic details keep playback explicit and open the selected host viewer', async (t) => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;

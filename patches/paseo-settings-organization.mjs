@@ -17,6 +17,7 @@ const durationSource = stripTypeScriptTypes(readFileSync(new URL(
 const durationComponent = `const PaseodogTurnDurationSettings=(()=>{const {createElement,useCallback,useEffect,useRef,useState}=u,{View}=n,{Text}=o,{Pressable}=r,{AdaptiveTextInput}=_r(3930),{settingsStyles}=S,{useHostRuntimeClient,useHostRuntimeIsConnected}=_r(3762);${durationSource};return TurnDurationSettings})();`;
 const engineAnchor = '_e.AiEnginePage=function(e){';
 const engineWrapper = `_e.AiEnginePage=function(e){return u.createElement(n.View,{style:{gap:16}},u.createElement(PaseodogBaseAiEnginePage,e),e.section==="workflow"?u.createElement(PaseodogTurnDurationSettings,{key:"duration:"+e.serverId,serverId:e.serverId}):null,e.section==="workflow"?u.createElement(PaseodogAgentMessageSettings,{key:e.serverId,serverId:e.serverId}):null)};function PaseodogBaseAiEnginePage(e){`;
+const previousEngineWrapper = `_e.AiEnginePage=function(e){return u.createElement(n.View,{style:{gap:16}},u.createElement(PaseodogBaseAiEnginePage,e),e.section==="workflow"?u.createElement(PaseodogAgentMessageSettings,{key:e.serverId,serverId:e.serverId}):null)};function PaseodogBaseAiEnginePage(e){`;
 const wrappedDiagnostics = `${details}function Me(e){const section=PaseodogBaseDiagnostics(e),card=section.props.children,rows=card.props.children;return c.cloneElement(section,{},c.cloneElement(card,{},...rows.slice(0,-1),c.createElement(PaseodogDiagnosticDetails,{serverId:e.serverId},rows.at(-1))))}function PaseodogBaseDiagnostics(e){const n=(0,l.c)(53)`;
 const edits = [
     [engineAnchor, engineWrapper],
@@ -28,6 +29,14 @@ const edits = [
 
 export function withoutSettingsOrganization(source) {
     for (const [before, after] of [...edits].reverse()) source = source.replace(after, () => before);
+    // 직전 릴리즈의 두 삽입 지점이 모두 일치할 때만 해제한다. 최종 원본 blob 검증은 유지한다.
+    const previousComponent = `${messageComponent}const k=[{value:"none",label:`;
+    if (source.includes(previousEngineWrapper) || source.includes(previousComponent)) {
+        if (source.split(previousEngineWrapper).length !== 2 || source.split(previousComponent).length !== 2)
+            throw new Error('Partial previous settings organization patch');
+        source = source.replace(previousEngineWrapper, () => engineAnchor)
+            .replace(previousComponent, () => 'const k=[{value:"none",label:');
+    }
     return source;
 }
 
