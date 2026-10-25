@@ -204,6 +204,7 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
                     request = { action: 'read' };
                 }
                 const snapshot = await invokeControls(request);
+                if (request.action === 'messagePolicy') return snapshot;
                 return { ...snapshot, maxTurnMinutes: readTurnMinutes(launch.env) };
             });
             queue = run.catch(() => {});

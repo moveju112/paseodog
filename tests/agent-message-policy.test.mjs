@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { createAgentMessagePolicy } from '../android/packages/server/src/server/agent/agent-message-policy.ts';
 import { createMessagePolicyHandler } from '../engine/src/message-policy.mjs';
 import { agentMessagePolicy } from '../plugin/shared/message-policy.ts';
+import { createEngineControls } from '../plugin/server/controls.mjs';
 import { AGENT_MESSAGE_PATCHES, patchedAgentMessageSource } from '../scripts/patch-paseo-agent-messages.mjs';
 import { agentMessagePolicyEdits } from '../patches/paseo-agent-messages.mjs';
 
@@ -64,6 +65,26 @@ test('policy persists independently, defaults to existing behavior and takes eff
     assert.throws(() => agentMessagePolicy.input.parse({ action: 'write', allowUnrelatedSessions: 'false' }));
     assert.throws(() => agentMessagePolicy.input.parse({ action: 'write', allowUnrelatedSessions: false, restart: true }));
     assert.deepEqual(await fs.readdir(home), ['paseodog-message-policy.json']);
+});
+
+test('control transport preserves the strict message policy response on reads and writes', async t => {
+    const { home } = await fixture(t);
+    const handler = createMessagePolicyHandler(home);
+    const controls = createEngineControls({
+        execCommand: async (_command, args) => {
+            const { operation, allowUnrelatedSessions } = JSON.parse(args.at(-1));
+            return { stdout: JSON.stringify(await handler({ action: operation, allowUnrelatedSessions })) };
+        },
+    });
+    t.after(() => controls.close());
+    controls.bind({ command: '/engine', args: [], env: {} });
+    for (const [operation, allowUnrelatedSessions] of [['read', true], ['write', false], ['read', false], ['write', true]]) {
+        const result = await controls.read({
+            action: 'messagePolicy', operation,
+            ...(operation === 'write' ? { allowUnrelatedSessions } : {}),
+        });
+        assert.deepEqual(agentMessagePolicy.output.parse(result), { allowUnrelatedSessions });
+    }
 });
 
 test('off preserves direct parent-child, human and self messages but not siblings or unknown sessions', async t => {
