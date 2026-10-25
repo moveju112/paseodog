@@ -17,6 +17,18 @@ export const AGENT_PATCHES = [
     ...EFFORT_USAGE_PATCHES,
     ...DEFAULT_OUTPUT_STYLE_PATCHES,
     {
+        // 보안 수정된 Zod 4의 오류 필드를 사용하고 공개한 URL 개수 제한을 검증한다.
+        file: 'src/runtime/web-search/index.mjs',
+        blob: '9545161730761d6577d7b6b187c9316db3ab27bd',
+        edits: [[
+            'z.array(z.string().url()).min(1)',
+            'z.array(z.string().url()).min(1).max(10)',
+        ], [
+            "JSON.stringify({ error: 'Invalid arguments', details: error.errors })",
+            "JSON.stringify({ error: 'Invalid arguments', details: error.issues })",
+        ]],
+    },
+    {
         // local: 단계가 늦게 오는 응답도 원래 메시지 경계와 함께 보존한다.
         file: 'src/runtime/agent/orchestrator/providers/lib/send-callbacks.mjs',
         blob: '5c218137f88094953ff5199172b1f9479c5ead9b',
