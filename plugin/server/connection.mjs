@@ -6,17 +6,11 @@ import { questionRequestInput, questionAnswers } from './question.mjs';
 import { agentMessageSource } from './agent-message.mjs';
 import { compactionNotice, projectCompaction } from './compaction.mjs';
 import { readTurnMinutes } from './turn-duration.mjs';
+import { sessionDescription } from './journal.mjs';
 
 export const CAPABILITIES = ['prompt.message', 'prompt.image', 'prompt.command', 'prompt.steer', 'session.configure', 'session.persistence', 'session.list',
     'session.revert.conversation', 'permission'];
 const REVERT_CAPABILITIES = ['session.revert.conversation'];
-// 계승 목록과 세션 도구에서 같은 첫 사용자 지시로 대상을 구분한다.
-function sessionDescription(row) {
-    const prompt = row.items.find(({ item }) => item.type === 'user_message'
-        && typeof item.text === 'string' && item.text.trim())?.item;
-    const description = prompt?.text.replace(/\s+/g, ' ').trim().slice(0, 500);
-    return { title: description?.slice(0, 100) || row.cwd.split('/').pop() || row.cwd, description };
-}
 function catalogFrom(env) {
     let routes = [];
     if (env.PASEODOG_MODELS) {
@@ -926,10 +920,8 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                 if (!selected.includes('session.list')) throw new Error('Session listing not negotiated');
                 const limit = Math.max(1, Math.min(100, Number(input.limit) || 50));
                 const query = String(input.query || '').toLowerCase();
-                // 대화가 한 번도 저장되지 않은 빈 저널은 불러올 내용이 없으므로 목록에서 뺀다.
-                const rows = store.list().filter((row) => row.items.length && (!input.cwd || row.cwd === input.cwd)).map((row) => {
-                    return { ...row, ...sessionDescription(row) };
-                }).filter((row) => !query || [row.cwd, row.title, row.description].some((value) => value?.toLowerCase().includes(query)))
+                const rows = store.listSummaries().filter((row) => !input.cwd || row.cwd === input.cwd)
+                    .filter((row) => !query || [row.cwd, row.title, row.description].some((value) => value?.toLowerCase().includes(query)))
                     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, limit);
                 emit({ type: 'sessions', requestId: input.requestId, sessions: rows.map((r) => ({
                     persistence: { version: 2, data: { bridgeId: r.id } }, cwd: r.cwd, title: r.title, description: r.description,

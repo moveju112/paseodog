@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, lstatSync, symlinkSync, mkdirSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, lstatSync, symlinkSync, mkdirSync, readdirSync, utimesSync, chmodSync } from 'node:fs';
 import { tmpdir, hostname } from 'node:os';
 import { join } from 'node:path';
 import { JournalStore } from '../plugin/server/journal.mjs';
@@ -35,5 +35,136 @@ test('UI history can be bounded but receipt deduplication ledger is retained',t=
     const loaded=store.load('a');assert.equal(loaded.items.length,2000);assert.equal(loaded.historyTruncated,true);assert.ok(loaded.receipts.old);
 });
 test('state directory cannot be world-readable or a symlink',t=>{
-    const {root}=fixture(t);mkdirSync(join(root,'public'),{mode:0o755});assert.throws(()=>new JournalStore(join(root,'public')),/owner-only/);symlinkSync(root,join(root,'link'));assert.throws(()=>new JournalStore(join(root,'link')),/Unsafe/);
+    // 실행 환경의 umask와 무관하게 실제로 공개된 디렉터리를 검사한다.
+    const {root}=fixture(t);mkdirSync(join(root,'public'),{mode:0o755});chmodSync(join(root,'public'),0o755);assert.throws(()=>new JournalStore(join(root,'public')),/owner-only/);symlinkSync(root,join(root,'link'));assert.throws(()=>new JournalStore(join(root,'link')),/Unsafe/);
+});
+
+test('summary listings retain only metadata and do not reload unchanged journals', (t) => {
+    const { store } = fixture(t);
+    const record = store.create('a', '/work', 'hash');
+    record.items = [{ item: { type: 'user_message', text: '  first\nrequest  ' } },
+        { item: { type: 'assistant_message', text: 'history-only' } }];
+    record.receipts.accepted = { state: 'completed' };
+    store.save(record);
+    store.create('empty', '/work', 'hash');
+    const load = store.load.bind(store);
+    let reads = 0;
+    store.load = (id) => { reads++; return load(id); };
+    const expected = [{ id: 'a', cwd: '/work', createdAt: record.createdAt,
+        updatedAt: record.updatedAt, title: 'first request', description: 'first request' }];
+    const first = store.listSummaries();
+    assert.deepEqual(first, expected);
+    assert.equal(reads, 2);
+    first[0].title = 'caller mutation';
+    assert.deepEqual(store.listSummaries(), expected);
+    assert.equal(reads, 2);
+    assert.deepEqual(load('a'), record);
+});
+
+test('summary listings detect external replacements, additions, deletion and formerly empty journals', (t) => {
+    const { root, store } = fixture(t);
+    const writer = new JournalStore(root);
+    const record = writer.create('a', '/work', 'hash');
+    record.items = [{ item: { type: 'user_message', text: 'first' } }];
+    writer.save(record);
+    writer.create('empty', '/work', 'hash');
+    assert.equal(store.listSummaries()[0].title, 'first');
+    const path = join(root, 'a.json');
+    const before = lstatSync(path);
+    record.items[0].item.text = 'other';
+    writer.save(record);
+    utimesSync(path, before.atime, before.mtime);
+    assert.equal(store.listSummaries()[0].title, 'other');
+    const empty = writer.load('empty');
+    empty.items = [{ item: { type: 'assistant_message', text: 'no user prompt' } }];
+    writer.save(empty);
+    const added = writer.create('added', '/second', 'hash');
+    added.items = [{ item: { type: 'user_message', text: 'new' } }];
+    writer.save(added);
+    writer.remove('a');
+    assert.deepEqual(store.listSummaries().map(({ id, title }) => ({ id, title })).sort((a, b) => a.id.localeCompare(b.id)),
+        [{ id: 'added', title: 'new' }, { id: 'empty', title: 'work' }]);
+});
+
+test('summary listings invalidate same-size in-place edits even when mtime is restored', (t) => {
+    const { root, store } = fixture(t);
+    const record = store.create('a', '/work', 'hash');
+    record.items = [{ item: { type: 'user_message', text: 'first' } }];
+    store.save(record);
+    const path = join(root, 'a.json');
+    const oldTime = new Date('2020-01-01T00:00:00Z');
+    utimesSync(path, oldTime, oldTime);
+    assert.equal(store.listSummaries()[0].title, 'first');
+    const before = lstatSync(path);
+    writeFileSync(path, readFileSync(path, 'utf8').replace('"first"', '"other"'));
+    utimesSync(path, oldTime, oldTime);
+    assert.equal(lstatSync(path).size, before.size);
+    assert.equal(lstatSync(path).mtimeMs, before.mtimeMs);
+    assert.equal(store.listSummaries()[0].title, 'other');
+});
+
+test('summary listings never serve cached previews for corrupt or symlink-replaced journals', (t) => {
+    const { root, store } = fixture(t);
+    const record = store.create('a', '/work', 'hash');
+    record.items = [{ item: { type: 'user_message', text: 'original' } }];
+    store.save(record);
+    assert.equal(store.listSummaries().length, 1);
+    const path = join(root, 'a.json');
+    writeFileSync(path, 'not-json');
+    assert.deepEqual(store.listSummaries(), []);
+    store.save(record);
+    assert.equal(store.listSummaries().length, 1);
+    const target = join(root, 'outside');
+    writeFileSync(target, readFileSync(path));
+    rmSync(path);
+    symlinkSync(target, path);
+    assert.deepEqual(store.listSummaries(), []);
+    assert.deepEqual(store.listSummaries(), []);
+});
+
+test('summary listings invalidate unreadable files and recover after access is restored',
+    { skip: process.platform === 'win32' || process.getuid?.() === 0 }, (t) => {
+        const { root, store } = fixture(t);
+        const record = store.create('a', '/work', 'hash');
+        record.items = [{ item: { type: 'user_message', text: 'private' } }];
+        store.save(record);
+        assert.equal(store.listSummaries()[0].title, 'private');
+        const path = join(root, 'a.json');
+        chmodSync(path, 0o000);
+        try { assert.deepEqual(store.listSummaries(), []); }
+        finally { chmodSync(path, 0o600); }
+        assert.equal(store.listSummaries()[0].title, 'private');
+    });
+
+test('summary listings retain journal identity validation after warming the cache', (t) => {
+    const { root, store } = fixture(t);
+    const record = store.create('a', '/work', 'hash');
+    record.items = [{ item: { type: 'user_message', text: 'valid' } }];
+    store.save(record);
+    assert.equal(store.listSummaries().length, 1);
+    writeFileSync(join(root, 'a.json'), JSON.stringify({ ...record, id: 'different-session' }));
+    assert.deepEqual(store.listSummaries(), []);
+    store.save(record);
+    assert.equal(store.listSummaries()[0].id, 'a');
+});
+
+test('summary listings tolerate external replacement and deletion during a journal read', (t) => {
+    const { root, store } = fixture(t);
+    const writer = new JournalStore(root);
+    const record = writer.create('a', '/work', 'hash');
+    record.items = [{ item: { type: 'user_message', text: 'old' } }];
+    writer.save(record);
+    const load = store.load.bind(store);
+    store.load = (id) => {
+        record.items[0].item.text = 'replacement';
+        writer.save(record);
+        store.load = load;
+        return load(id);
+    };
+    assert.equal(store.listSummaries()[0].title, 'replacement');
+    assert.equal(store.listSummaries()[0].title, 'replacement');
+    writer.save(record);
+    store.load = (id) => { writer.remove(id); return load(id); };
+    assert.deepEqual(store.listSummaries(), []);
+    assert.deepEqual(store.listSummaries(), []);
 });

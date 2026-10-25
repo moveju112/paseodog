@@ -7,6 +7,18 @@ import { safeKey, plainObject } from './util.mjs';
 const MAX_BYTES = 16 * 1024 * 1024;
 const MAX_ITEMS = 2000;
 const MAX_RECEIPTS = 20000;
+// 계승 목록과 세션 도구에서 같은 첫 사용자 지시로 대상을 구분한다.
+export function sessionDescription(row) {
+    const prompt = row.items.find(({ item }) => item.type === 'user_message'
+        && typeof item.text === 'string' && item.text.trim())?.item;
+    const description = prompt?.text.replace(/\s+/g, ' ').trim().slice(0, 500);
+    return { title: description?.slice(0, 100) || row.cwd.split('/').pop() || row.cwd, description };
+}
+function sessionSummary(row) {
+    if (!row.items.length) return null;
+    return { id: row.id, cwd: row.cwd, createdAt: row.createdAt, updatedAt: row.updatedAt,
+        ...sessionDescription(row) };
+}
 function pidIdentity(pid) {
     try {
         const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
@@ -54,7 +66,7 @@ function atomicJson(path, value) {
     }
 }
 export class JournalStore {
-    constructor(root) { this.root = resolve(root); privateDir(this.root); }
+    constructor(root) { this.root = resolve(root); privateDir(this.root); this.summaryCache = new Map(); }
     file(id) { return join(this.root, `${safeKey(id, 'bridge ID')}.json`); }
     acquire(id) {
         const dir = join(this.root, `${safeKey(id)}.lock`);
@@ -124,6 +136,32 @@ export class JournalStore {
             try { return this.load(p.slice(0, -5)); } catch { return null; }
         }).filter(Boolean);
     }
+    listSummaries() {
+        const files = readdirSync(this.root).filter((p) => /^[a-zA-Z0-9_-]+\.json$/.test(p));
+        const present = new Set(files);
+        for (const file of this.summaryCache.keys()) {
+            if (!present.has(file)) this.summaryCache.delete(file);
+        }
+        const summaries = [];
+        for (const file of files) {
+            try {
+                const stat = lstatSync(join(this.root, file), { bigint: true });
+                if (!stat.isFile()) { this.summaryCache.delete(file); continue; }
+                // 외부 writer의 원자적 교체와 같은 크기·mtime의 덮어쓰기도 감지한다.
+                const revision = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}:${stat.mode}`;
+                let cached = this.summaryCache.get(file);
+                if (!cached || cached.revision !== revision) {
+                    cached = { revision, summary: sessionSummary(this.load(file.slice(0, -5))) };
+                    this.summaryCache.set(file, cached);
+                }
+                if (cached.summary) summaries.push({ ...cached.summary });
+            } catch {
+                // 손상·권한 변경·삭제된 파일의 이전 미리보기를 되살리지 않는다.
+                this.summaryCache.delete(file);
+            }
+        }
+        return summaries;
+    }
 }
 export class MemoryJournalStore {
     constructor() { this.values = new Map(); this.locks = new Set(); }
@@ -133,4 +171,5 @@ export class MemoryJournalStore {
     save(data) { this.values.set(data.id, structuredClone(data)); }
     remove(id) { this.values.delete(id); }
     list() { return [...this.values.values()].map((value) => structuredClone(value)); }
+    listSummaries() { return [...this.values.values()].map(sessionSummary).filter(Boolean); }
 }
