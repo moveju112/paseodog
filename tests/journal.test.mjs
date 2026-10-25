@@ -168,3 +168,61 @@ test('summary listings tolerate external replacement and deletion during a journ
     assert.deepEqual(store.listSummaries(), []);
     assert.deepEqual(store.listSummaries(), []);
 });
+
+test('journal writes retain exact JSON bytes including escaped and multibyte text', (t) => {
+    const { root, store } = fixture(t);
+    t.mock.method(Date, 'now', () => 1234567890123);
+    const record = store.create('bytes', '/work', 'hash');
+    record.items = [
+        { item: { id: 'a', type: 'user_message', text: '한글 🐶\n"quoted" \\slash \ud800' } },
+        { item: { id: 'b', type: 'assistant_message', text: 'response' }, timestamp: '2026-01-01T00:00:00.000Z' },
+    ];
+    record.receipts.accepted = { state: 'completed', result: { type: 'accepted' } };
+    const expected = Buffer.from(JSON.stringify(record));
+    store.save(record);
+    assert.deepEqual(readFileSync(join(root, 'bytes.json')), expected);
+    assert.deepEqual(store.load('bytes'), record);
+});
+
+test('metadata over the history threshold never causes otherwise small history to be evicted', (t) => {
+    const { store } = fixture(t);
+    const record = store.create('metadata', '/work', 'hash');
+    record.items = [{ item: { id: 'a', text: 'one' } }, { item: { id: 'b', text: 'two' } }];
+    record.metadata = 'x'.repeat(8 * 1024 * 1024);
+    const items = record.items;
+    store.save(record);
+    assert.equal(record.items, items);
+    assert.equal(record.historyTruncated, false);
+    assert.deepEqual(store.load('metadata').items, items);
+});
+
+test('history byte pruning keeps its in-place semantics, UTF-8 limit and receipt ledger', (t) => {
+    const { store } = fixture(t);
+    const record = store.create('trim', '/work', 'hash');
+    record.items = [
+        { item: { id: 'old', text: '가'.repeat(2 * 1024 * 1024) } },
+        { item: { id: 'latest', text: 'x'.repeat(3 * 1024 * 1024) } },
+    ];
+    record.receipts.accepted = { state: 'completed' };
+    const items = record.items;
+    store.save(record);
+    assert.equal(record.items, items);
+    assert.deepEqual(record.items.map((row) => row.item.id), ['latest']);
+    assert.equal(record.historyTruncated, true);
+    const restored = store.load('trim');
+    assert.deepEqual(restored.receipts, { accepted: { state: 'completed' } });
+    assert.equal(restored.items[0].item.text.length, 3 * 1024 * 1024);
+});
+
+test('a lone oversized history item stays intact but the full journal limit still fails closed', (t) => {
+    const { root, store } = fixture(t);
+    const record = store.create('large', '/work', 'hash');
+    record.items = [{ item: { id: 'only', text: 'x'.repeat(9 * 1024 * 1024) } }];
+    store.save(record);
+    assert.equal(record.historyTruncated, false);
+    assert.equal(store.load('large').items[0].item.text.length, 9 * 1024 * 1024);
+    const before = readFileSync(join(root, 'large.json'));
+    record.metadata = 'x'.repeat(8 * 1024 * 1024);
+    assert.throws(() => store.save(record), /Session journal full/);
+    assert.deepEqual(readFileSync(join(root, 'large.json')), before);
+});
