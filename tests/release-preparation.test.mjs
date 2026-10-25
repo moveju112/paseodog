@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { prepareRelease } from '../scripts/release-prepare.mjs';
 import { releasePreflight } from '../scripts/release-preflight.mjs';
 import { runCommand } from '../scripts/release-command.mjs';
+import { paseoHome } from '../scripts/paths.mjs';
 
 async function fixture(t) {
     const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-prepare-test-');
@@ -62,6 +63,55 @@ test('preparation rejects active delivery, dirty sources and uncertain mutation 
         JSON.stringify({ stages: { upload: { mutation: true, status: 'running' } } }));
     await assert.rejects(prepareRelease(profile, commit, { run, adopt: true }), /uncertain mutation/);
     assert.ok(calls.every(row => !row.includes('merge') && !row.includes('fetch')));
+});
+
+test('explicit desktop reconciliation preserves the failed receipt and rejects unresolved outcomes', async t => {
+    const profile = await fixture(t);
+    const commit = 'c'.repeat(40);
+    await mkdir(profile.previousWorkspace);
+    const statePath = join(profile.previousWorkspace, 'release-state.json');
+    const logPath = join(profile.previousWorkspace, 'delivery.log');
+    const original = JSON.stringify({ identity: { commit: 'b'.repeat(40) },
+        stages: { 'pc-launch': { status: 'failed', mutation: true } } });
+    await writeFile(statePath, original);
+    await writeFile(logPath, 'pc-launch: start\nDesktop did not exit gracefully; no force kill performed\n');
+    let processes = '123 /opt/PaseoDog/PaseoDog.bin\n';
+    let daemon = `home: ${paseoHome}\ndesktopManaged: true\n`;
+    const calls = [];
+    const run = async (command, args) => {
+        calls.push([command, ...args]);
+        if (command === 'ps') return processes;
+        if (args.includes('daemon')) return daemon;
+        if (command === 'git') {
+            if (args[0] === 'rev-parse') return '/repo/common';
+            if (args[0] === 'ls-remote') return commit;
+        }
+        return '';
+    };
+    const options = { run, adopt: true, reconcileDesktopExit: true };
+    await assert.rejects(prepareRelease(profile, commit, { run, adopt: true }), /uncertain mutation/);
+    await assert.rejects(prepareRelease(profile, commit, options), /still running/);
+    processes = '456 /opt/OtherApp/app\n';
+    await assert.rejects(prepareRelease(profile, commit, options), /independence/);
+    daemon = `home: ${paseoHome}\ndesktopManaged: false\n`;
+    await writeFile(logPath, 'Desktop launch confirmation timed out; inspect desktop.log\n');
+    await assert.rejects(prepareRelease(profile, commit, options), /before launch/);
+    await writeFile(logPath, 'Desktop did not exit gracefully; no force kill performed\n');
+    await writeFile(statePath, JSON.stringify({ stages: {
+        'pc-launch': { status: 'failed', mutation: true },
+        upload: { status: 'running', mutation: true },
+    } }));
+    await assert.rejects(prepareRelease(profile, commit, options), /uncertain mutation/);
+    assert.ok(calls.every(row => !row.includes('fetch') && !row.includes('merge')));
+    await writeFile(statePath, original);
+    const result = await prepareRelease(profile, commit, options);
+    t.after(() => rm(result.workspace, { recursive: true, force: true }));
+    assert.equal(await readFile(statePath, 'utf8'), original);
+    const receipt = JSON.parse(await readFile(join(result.workspace, 'desktop-exit-reconciliation.json'), 'utf8'));
+    assert.equal(receipt.previousCommit, 'b'.repeat(40));
+    assert.equal(receipt.outcome, 'desktop-exited-before-replacement');
+    assert.equal(receipt.previousWorkspace, profile.previousWorkspace);
+    assert.ok(calls.every(row => !row.includes('SIGKILL') && !row.includes('--retry-stage')));
 });
 
 test('preflight rejects the wrong signing reference before a command or expensive check', async t => {
