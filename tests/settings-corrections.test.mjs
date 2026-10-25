@@ -5,7 +5,7 @@ import { MAX_TURN_MINUTES } from '../plugin/shared/turn-duration.mjs';
 import { readFileSync } from 'node:fs';
 import { runInNewContext, Script } from 'node:vm';
 import { controlRuntime } from '../engine/src/controls.mjs';
-import { resolveCompactionRoute } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/session/loop/fresh-context.mjs';
+import { compactionSummaryPlan } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/session/loop/fresh-context.mjs';
 import { createCompactionSettings } from '../engine/node_modules/mixdog/src/session-runtime/settings-compaction-api.mjs';
 import { normalizeCompactionConfig } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/runtime-core/config-helpers.mjs';
 import { patchedComposerSource, COMPOSER_FILE } from '../scripts/patch-paseo-composer.mjs';
@@ -50,29 +50,37 @@ test('zero token override resets the native budget through the actual RPC contra
 
 // 공급자 선택·모델 이름·원래 세션 유지와 명시적 비활성·초기화 실패 전파를 검증한다.
 test('summary route uses its configured provider and preserves model IDs containing slashes', async () => {
+    const resolveRoute = async request => {
+        const plan = compactionSummaryPlan(request);
+        assert.equal(plan.steps.length, 1);
+        return plan.steps[0]();
+    };
     const main = { name: 'main', send() {} }, summary = { name: 'summary', send() {} };
     const session = { provider: 'main', model: 'large', compaction: { summaryModel: 'summary/org/small' } };
     const calls = [];
     const request = {
         sessionRef: session, provider: main, model: 'large',
-        config: { providers: { main: {}, summary: {} } }, allowMaintenance: false,
+        config: { providers: { main: {}, summary: {} } },
         getProviderFn: (name) => { calls.push(name); return name === 'summary' ? summary : main; },
         initProvidersFn: async () => { calls.push('init'); },
     };
-    const result = await resolveCompactionRoute(request);
+    const result = await resolveRoute(request);
     assert.equal(result.provider, summary);
     assert.equal(result.model, 'org/small');
     assert.equal(result.source, 'summary');
     assert.deepEqual(calls, ['init', 'summary']);
     assert.equal(session.provider, 'main');
     assert.equal(session.model, 'large');
-    await assert.rejects(resolveCompactionRoute({
+    await assert.rejects(resolveRoute({
         ...request, config: { providers: { summary: { enabled: false } } },
     }), /disabled/);
-    await assert.rejects(resolveCompactionRoute({
+    await assert.rejects(resolveRoute({
         ...request, initProvidersFn: async () => { throw new Error('initialization failed'); },
     }), /initialization failed/);
-    const fallback = await resolveCompactionRoute({ ...request, sessionRef: { provider: 'main', model: 'large' } });
+    const fallback = await resolveRoute({
+        ...request, sessionRef: { provider: 'main', model: 'large' },
+        config: { ...request.config, compaction: { summaryMode: 'self' } },
+    });
     assert.equal(fallback.provider, main);
     assert.equal(fallback.model, 'large');
 });

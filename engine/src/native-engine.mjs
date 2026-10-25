@@ -54,6 +54,7 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
     // Keep engine features native, but never auto-stage an unreviewed engine upgrade.
     const initialConfig = { ...baseConfig, orchestrationMode: normalizeOrchestrationMode(baseConfig.orchestrationMode),
         mcpServers: mapMcpServers(config.mcpServers),
+        heartbeat: false,
         update: { ...baseConfig.update, auto: false } };
     // 명시적으로 켠 Paseo Worker만 부모 모델을 사용하며 다른 모델로 폴백하지 않는다.
     if (process.env.PASEODOG_TEST_PARENT_WORKER === 'true') {

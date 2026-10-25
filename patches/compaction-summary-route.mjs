@@ -1,25 +1,31 @@
-// 명시한 요약 모델은 유지보수 모델보다 우선하며 실제 공급자 인스턴스로 전달한다.
+// 명시한 요약 모델은 upstream의 자동 선택 정책보다 우선하고 다른 모델로 폴백하지 않는다.
 export const COMPACTION_SUMMARY_ROUTE_PATCH = {
     file: 'src/runtime/agent/orchestrator/session/loop/fresh-context.mjs',
-    blob: 'a4bdb293a9eefe68dee178c25adda6cc6d300ae9',
+    blob: '06f24d49b71be3140742811fa83a734948ede005',
     edits: [[
-        '  const route =\n    allowMaintenance && builtinFeatureActive(config, \'memory\') && config.recap?.enabled !== false',
-        `  // PaseoDog: 명시한 provider/model을 분리하고 비활성 공급자로 우회하지 않는다.
+        '  const mode = normalizeCompactionSummaryMode(config.compaction);',
+        `  // PaseoDog: summaryModel은 summaryMode와 다른 명시적 모델 선택이다.
   const summary = sessionRef?.compaction?.summaryModel || config.compaction?.summaryModel;
-  const separator = typeof summary === 'string' ? summary.indexOf('/') : -1;
-  const explicitRoute = summary ? {
-    provider: separator > 0 ? summary.slice(0, separator) : sessionRef?.provider || provider?.name,
-    model: separator > 0 ? summary.slice(separator + 1) : summary,
-  } : null;
-  if (explicitRoute && config.providers?.[explicitRoute.provider]?.enabled === false)
-    throw new Error('compact summary provider is disabled: ' + explicitRoute.provider);
-  const route = explicitRoute || (
-    allowMaintenance && builtinFeatureActive(config, 'memory') && config.recap?.enabled !== false`,
-    ], [
-        "      : null;\n  const useMaintenance",
-        "      : null);\n  const useMaintenance",
-    ], [
-        "    source: useMaintenance ? 'maintenance' : 'session',",
-        "    source: explicitRoute ? 'summary' : useMaintenance ? 'maintenance' : 'session',",
+  if (summary) {
+    const separator = summary.indexOf('/');
+    const providerName = separator > 0 ? summary.slice(0, separator) : sessionRef?.provider || provider?.name;
+    const summaryModel = separator > 0 ? summary.slice(separator + 1) : summary;
+    if (config.providers?.[providerName]?.enabled === false)
+      throw new Error('compact summary provider is disabled: ' + providerName);
+    const explicit = async () => {
+      const sameProvider = providerName === (sessionRef?.provider || provider?.name);
+      if (!sameProvider) await initProvidersFn(config.providers || {}, { signal });
+      signal?.throwIfAborted();
+      return summaryRoute({
+        sessionRef,
+        provider: sameProvider && provider ? provider : getProviderFn(providerName),
+        providerName,
+        model: summaryModel,
+        source: 'summary',
+      });
+    };
+    return { mode: 'explicit', warm: compactionCacheWarm(sessionId, now), steps: [explicit] };
+  }
+  const mode = normalizeCompactionSummaryMode(config.compaction);`,
     ]],
 };

@@ -6,8 +6,8 @@ import { EFFORT_USAGE_PATCHES } from '../patches/effort-usage.mjs';
 import { DEFAULT_OUTPUT_STYLE_PATCHES } from '../patches/default-output-style.mjs';
 import { COMPACTION_SUMMARY_ROUTE_PATCH } from '../patches/compaction-summary-route.mjs';
 import { AGENT_ROUTE_SAFETY_EDITS, AGENT_EDITOR_SAFETY_PATCHES } from '../patches/agent-editor-safety.mjs';
-export const PIN = '1.3.1';
-export const ORIGINAL_BLOB = '6de5147ccdce6c9b3aa5f48dc740af439834b7b1';
+export const PIN = '1.3.5';
+export const ORIGINAL_BLOB = '3adfd3eeb9f354198de89d6651647d8f9afc6321';
 export const ANCHOR = '      const turnContext = await dispatchPromptSubmit(turn, session0, prompt, options);';
 export const ADDITION = '\n      // PaseoDog host-policy boundary v1 (local Apache-2.0 modification).\n      if (typeof options.beforeSessionAsk === \'function\') {\n        await options.beforeSessionAsk(session0);\n      }';
 export const MARKER = 'PaseoDog host-policy boundary v1';
@@ -28,15 +28,15 @@ export const AGENT_PATCHES = [
     {
         // local: 같은 모델의 컨텍스트 변경도 네이티브 세션·영속 기록에 즉시 반영한다.
         file: 'src/session-runtime/model-route/set-route.mjs',
-        blob: '5120d6ab5f338d9f8f1fcc94f654fe0d6a6971fb',
+        blob: '818452668b601bd4a3ed6b5fa432951abba92ced',
         edits: [[
-            '      persist.applySessionTuning();\n      return getRoute();',
-            '      persist.applySessionTuning();\n      // 컨텍스트 선택도 기존 네이티브 경로 갱신·저장 함수를 사용한다.\n      if (session && (route.contextPercent !== session.contextPercent\n        || (route.contextTokens || null) !== (session.contextTokens || null)\n        || route.selectedContextWindow !== session.selectedContextWindow)) {\n        updateSessionInPlace(deps, session);\n      }\n      return getRoute();',
+            '      persist.applySessionTuning();\n      refreshSessionFallbacks(deps, session);',
+            '      persist.applySessionTuning();\n      // 컨텍스트 선택도 기존 네이티브 경로 갱신·저장 함수를 사용한다.\n      if (session && (route.contextPercent !== session.contextPercent\n        || (route.contextTokens || null) !== (session.contextTokens || null)\n        || route.selectedContextWindow !== session.selectedContextWindow)) {\n        updateSessionInPlace(deps, session);\n      }\n      refreshSessionFallbacks(deps, session);',
         ]],
     },
     {
         file: 'src/runtime/agent/orchestrator/session/manager/pending-messages.mjs',
-        blob: '40722271524f52ee83df0013c40e81aaf2a73265',
+        blob: 'f382c402d98a37133cbe17bc7ffdf514ac66e66c',
         edits: [[
             '// Drain order: enqueue time, then source (hydrated < buffered < memory), then',
             "// 호스트가 검증한 즉시 지시와 알림만 중간 경계에서 소모한다.\nexport function pendingQueueHoldsOnlyHostSteering(sessionId) {\n  const queued = [\n    ...(_sessionPendingMessages.get(sessionId) || []),\n    ...(_hydratedPendingMessages.get(sessionId) || []),\n  ];\n  return queued.length > 0 && queued.every((entry) =>\n    entry.options?.paseodogSteering === true || pendingEntryMode(entry) === PENDING_MODE_TASK_NOTIFICATION\n  );\n}\n\n// Drain order: enqueue time, then source (hydrated < buffered < memory), then",
@@ -44,7 +44,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/session/manager/ask-turn-steering-drain.mjs',
-        blob: 'bdc078312e2328d4095c392683fb9e504bb8d8f6',
+        blob: 'a5563b17f6430d631c3704d123a29e1a687e6a7a',
         edits: [[
             '  pendingQueueHoldsOnlyNotifications,\n',
             '  pendingQueueHoldsOnlyNotifications,\n  pendingQueueHoldsOnlyHostSteering,\n',
@@ -55,7 +55,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/runtime-core/workflow/packs.mjs',
-        blob: 'dd692d1794eae53932b24b49be6a7caa8dce72b1',
+        blob: 'bafa52c74e6d9eda6ea14a08bc7d1957d5740da3',
         previousEditCount: 6,
         edits: [
             [
@@ -90,7 +90,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/config.mjs',
-        blob: '0ebac1c63784e2a81a358f24fc521b2ae7c2874f',
+        blob: '4ac0ebe7a262e91ff9282992aab4d3392be3d8e6',
         edits: [
             [
                 "    disabledAgents: [...DEFAULT_DISABLED_AGENT_ROSTER],\n    workflow: { active: 'default' },",
@@ -112,7 +112,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/runtime-core/workflow/context.mjs',
-        blob: '032015d764d4e519adae99861805f3204adeda02',
+        blob: '77187cec8a9fc824f2167ee351f05d5b99d8c060',
         edits: [[
             "    if (!pack) return '';",
             "    if (!pack || pack.id === 'none' || !String(pack.body || '').trim()) return '';",
@@ -120,7 +120,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/workflow-agents-api/workflow-packs.mjs',
-        blob: '6989100f04ec9f52726b6f0d5e3e54cbf804e785',
+        blob: '4ed20e2f010211fc2165f031cdde1be6b05c3c9d',
         edits: [[
             "    const body = String(payload.body || '').trim();\n    if (!body) throw new Error('WORKFLOW.md body must not be empty');",
             "    if (id === 'none') throw new Error('none is reserved for disabled workflow instructions');\n    const body = String(payload.body || '').trim();",
@@ -137,8 +137,12 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/tool-policy-refresh.mjs',
-        blob: '0e716329b756f5ab4d812a961ab3be0735e8368f',
+        blob: '9cc3243f0972883b754b5a99e80eb0f52afa6754',
         edits: [
+            [
+                "import { rewriteBp3Core } from './tool-policy/surface-helpers.mjs';",
+                "import { bp3Message, presentedBp3Core, rewriteBp3Core } from './tool-policy/surface-helpers.mjs';\nimport { toSessionWorkflowMeta } from '../runtime/agent/orchestrator/runtime-core/workflow.mjs';\nimport { markToolSurfaceMigrated } from '../runtime/agent/orchestrator/session/loop/tool-exposure-migration.mjs';",
+            ],
             [
                 '  function admitsRefresh(session) {',
                 '  function admitsRefresh(session, workflowOnly = false) {',
@@ -146,14 +150,6 @@ export const AGENT_PATCHES = [
             [
                 '      !sessionHasConversationMessages(session) &&\n      !sessionHasConversationMessages({ messages: session.liveTurnMessages })',
                 '      (workflowOnly || (!sessionHasConversationMessages(session) &&\n      !sessionHasConversationMessages({ messages: session.liveTurnMessages })))',
-            ],
-            [
-                '  async function stagePolicy(session, identity, config, { conversation = false } = {}) {',
-                '  async function stagePolicy(session, identity, config, { conversation = false, workflowOnly = false } = {}) {',
-            ],
-            [
-                "    const coreMemoryContext = conversation ? '' : await leadCoreMemoryContext();",
-                "    // 워크플로 갱신은 메모리 읽기 실패를 전파해 기존 기억을 지우지 않는다.\n    const coreMemoryContext = conversation ? '' : workflowOnly ? await loadCoreMemoryContext() : await leadCoreMemoryContext();",
             ],
             [
                 '  async function refreshEmptySessionToolPolicy() {',
@@ -170,11 +166,27 @@ export const AGENT_PATCHES = [
         ],
     },
     {
+        file: 'src/session-runtime/tool-policy/policy-stage.mjs',
+        blob: '7a7dc01062c33bbd1a3da4aed4d12caaed0ebe62',
+        edits: [[
+            '  async function stagePolicy(session, identity, config, { conversation = false } = {}) {',
+            '  async function stagePolicy(session, identity, config, { conversation = false, workflowOnly = false } = {}) {',
+        ], [
+            "    const coreMemoryContext = conversation ? '' : await leadCoreMemoryContext();",
+            "    // 워크플로 갱신 실패가 기존 기억을 지우지 않게 오류를 전파한다.\n    const coreMemoryContext = conversation ? '' : workflowOnly ? await loadCoreMemoryContext() : await leadCoreMemoryContext();",
+        ]],
+    },
+    {
+        file: 'src/session-runtime/tool-policy/surface-helpers.mjs',
+        blob: '30f001be760a15f33c3711604fdcee9d04a97de2',
+        edits: [['function bp3Message(session) {', 'export function bp3Message(session) {']],
+    },
+    {
         file: 'src/session-runtime/boot/providers.mjs',
-        blob: 'e1aafa3afa5c110637a11acf561c2b9c07a23df6',
+        blob: 'f1920df6a285ff24c91d4cfa8f1f93772e8ed465',
         edits: [[
             '    resolveRoute,\n    cfgMod,\n    sharedCfgMod,',
-            '    resolveRoute,\n    // 최신 사용자 설정을 읽되 호스트가 지정한 MCP·업데이트 제한만 유지한다.\n    cfgMod: boot.params.initialConfig ? { ...cfgMod, loadConfig: (...args) => { const latest = cfgMod.loadConfig(...args); return { ...latest, mcpServers: boot.params.initialConfig.mcpServers, update: { ...latest.update, auto: false } }; } } : cfgMod,\n    sharedCfgMod,',
+            '    resolveRoute,\n    // 최신 설정을 읽되 호스트의 MCP·자동 실행 제한을 유지한다.\n    cfgMod: boot.params.initialConfig ? { ...cfgMod, loadConfig: (...args) => { const latest = cfgMod.loadConfig(...args); return { ...latest, mcpServers: boot.params.initialConfig.mcpServers, heartbeat: false, update: { ...latest.update, auto: false } }; } } : cfgMod,\n    sharedCfgMod,',
         ]],
     },
     {
@@ -198,7 +210,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/session/manager/ask-session.mjs',
-        blob: '40a774b8654fbb7ac7a658fc9020fc16cf9c75af',
+        blob: '905882d22e0555c629cd331d5280a1c307a56b0d',
         edits: [[
             '  const kickFollowUpAsk = () => {',
             '  const kickFollowUpAsk = () => {\n    if (askOpts.hostManagedCompletions === true) return;',
@@ -214,7 +226,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/boot/tools.mjs',
-        blob: '701f371268c9b6f3e3a44fcb8b2ef4634f552fd1',
+        blob: '44c706cf7c706f3fd9a7294a71e4f82faead409f',
         edits: [[
             '    // SubagentStart/SubagentStop: bridge internal worker spawn/finish to the',
             '    sessionSurface: params.agentSessionSurface?.({ mgr, getAgentTool: () => boot.routedAgentTool }),\n    // SubagentStart/SubagentStop: bridge internal worker spawn/finish to the',
@@ -225,11 +237,10 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/settings-compaction-api.mjs',
-        blob: 'cdfdfb44509491a693110c0bbcf8c1a9eac1f70e',
-        previousEditCount: 1,
+        blob: '3cca7cd6f5febaea72271209a36e0066e064308d',
         edits: [[
-            '      if (hasOwn(input, \'onModelChange\')) next.onModelChange = input.onModelChange !== false;',
-            '      if (hasOwn(input, \'onModelChange\')) next.onModelChange = input.onModelChange !== false;\n      if (hasOwn(input, \'summaryModel\')) {\n        if (input.summaryModel) next.summaryModel = String(input.summaryModel).trim();\n        else delete next.summaryModel;\n      }\n      if (hasOwn(input, \'memoryTimeoutMs\')) {\n        const ms = Number(input.memoryTimeoutMs);\n        if (Number.isFinite(ms) && ms > 0) next.memoryTimeoutMs = Math.round(ms);\n        else delete next.memoryTimeoutMs;\n      }',
+            '  if (hasOwn(input, \'onModelChange\')) next.onModelChange = input.onModelChange !== false;',
+            '  if (hasOwn(input, \'onModelChange\')) next.onModelChange = input.onModelChange !== false;\n  if (hasOwn(input, \'summaryModel\')) {\n    if (input.summaryModel) next.summaryModel = String(input.summaryModel).trim();\n    else delete next.summaryModel;\n  }',
         ], [
             "const SESSION_COMPACTION_KEYS = [\n",
             "const SESSION_COMPACTION_KEYS = [\n  'summaryModel',\n",
@@ -263,7 +274,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/session/manager/session-prompt-composition.mjs',
-        blob: '7ac9cf88be850663b6a1cacf33e5aff7c635418e',
+        blob: '961f27afcb8cdc378264a7110c71689a501e73ee',
         edits: [
             [
                 '        : loadInstructionFilesContext({ mode: configuredInstructionFilesMode(), cwd }),',
@@ -277,7 +288,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/boot/apis.mjs',
-        blob: 'c022883e889a6b2e74c018590f259140e20ee417',
+        blob: '8de983eab6765243bcf765d3b6729a870c4401e1',
         edits: [[
             '        : loadInstructionFilesContext({ mode: rt.config?.instructionFiles, cwd: session.cwd }),',
             '        : loadInstructionFilesContext({ mode: rt.config?.instructionFiles, cwd: session.cwd, provider: rt.route?.provider || session?.provider, model: rt.route?.model || session?.model }),',
@@ -285,7 +296,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/workflow-agents-api/shared.mjs',
-        blob: '14680dcf98d506583f5e22f5096e35af4c2cf055',
+        blob: '42c8bda29dfa0ff1aeacc0f32fe7da7573427bb2',
         edits: [[
             'export function effectiveAgentRoute({ agentRouteFromConfig, resolveRoute }, config, agentId) {\n  return agentRouteFromConfig(config, agentId) || normalizeWorkflowRoute(resolveRoute(config, {}));\n}',
             'export function effectiveAgentRoute({ agentRouteFromConfig, resolveRoute }, config, agentId) {\n  void resolveRoute;\n  return agentRouteFromConfig(config, agentId) || { provider: \'\', model: \'\', effort: \'\', fast: false, autoEffort: true, inherited: true };\n}',
@@ -293,10 +304,10 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/workflow-agents-api/agent-route.mjs',
-        blob: '09e7ecb35fed095c1297a1e2acf45ba8b24b73b3',
+        blob: 'ac4a9ba8eb8ff0af8b71cd735388681b1018ee13',
         edits: [
             [
-                '    const inherited = normalizeWorkflowRoute(resolveRoute(getConfig(), {}));\n    return { ...(inherited || {}), inherited: true };',
+                "    const inherited = normalizeWorkflowRoute(resolveRoute(getConfig(), {}));\n    // The bot's chats follow Main from their next turn (unless they already do).\n    if (inherited && !sameRoute(before, inherited)) await publishAgentRouteChange(id, inherited);\n    return { ...(inherited || {}), inherited: true };",
                 '    void resolveRoute;\n    return { provider: \'\', model: \'\', effort: \'\', fast: false, autoEffort: true, inherited: true };',
             ],
             [
@@ -309,7 +320,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/config-storage.mjs',
-        blob: 'd85432317ed116bfa019f488d7ebf3f6a30727c1',
+        blob: 'b6979c4fd3e0eda8192ce25bb189b74b527a08a7',
         edits: [
             [
                 '  const disabled = Array.isArray(raw.disabled)\n    ? [...new Set(raw.disabled.map((n) => String(n).trim()).filter(Boolean))]\n    : [];',
@@ -342,6 +353,15 @@ export const AGENT_PATCHES = [
                 '      (followsBuiltinFeature(s) || (!disabled.has(\'*\') && !disabled.has(key))) &&',
             ],
         ],
+    },
+    {
+        // 복구할 수 없는 훅 설정 오류가 deny 정책을 조용히 없애지 않게 한다.
+        file: 'src/session-runtime/services/hook-bus/tool-gate.mjs',
+        blob: '44df75e7a868f11b6cd123b6a9e22a0c6d3eded0',
+        edits: [[
+            '      const cfg = loadConfig(input.cwd || cursor.cwd);\n      if (cfg.disabled) return null;',
+            "      const cfg = loadConfig(input.cwd || cursor.cwd);\n      if (cfg.errors?.length) throw new Error('Hooks configuration is unreadable or malformed; repair it before running tools');\n      if (cfg.disabled) return null;",
+        ]],
     },
     {
         file: 'src/session-runtime/services/hook-bus/rule-store.mjs',

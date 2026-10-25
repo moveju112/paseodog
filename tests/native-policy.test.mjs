@@ -121,6 +121,7 @@ test('native adapter passes config and enables only host-managed delegation',asy
     const tool={getStatus:()=>({jobs:[]}),onStatusChange:()=>()=>{},closeAll:async()=>({failed:[]})};
     const engine=await createNativeEngine({config:{cwd:'/work',mode:'review',systemPrompt:'rules',mcpServers:{}},route:{provider:'p',model:'m',effort:'low',fast:false,autoEffort:false}}, {modules:{loadConfig:()=>({memory:{enabled:true},autoClear:{enabled:true}}),createMixdogSessionRuntime:async(o)=>{options=o;o.agentSessionSurface({mgr:{},getAgentTool:()=>tool});return runtime;}},emit:(...x)=>events.push(x)});
     assert.equal(options.fast,false);assert.equal(options.autoEffort,false);
+    assert.equal(options.initialConfig.heartbeat, false);
     await engine.ask('hi',{onIdentity:(info)=>events.push(['identity',info])});assert.equal(asks,1);assert.equal(options.disallowDelegation,false);assert.equal(options.toolMode,'readonly');assert.equal(options.initialConfig.memory.enabled,true);assert.equal(options.initialConfig.autoClear.enabled,true);assert.equal(events[0][0],'identity');assert.equal((await s.beforeToolHook({name:'shell',args:{}})).action,'deny');await engine.close('done');
 });
 test('native restore failure and mismatched cwd cannot silently create a different session',async()=>{

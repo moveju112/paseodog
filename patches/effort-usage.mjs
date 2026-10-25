@@ -55,7 +55,7 @@ export function noteRequestEffort(value) {
         'identity.abandonedUsage.push({ usage: stored, model });',
         'identity.abandonedUsage.push({ usage: stored, model, requestEffort: identity.requestEffort });',
     ]]),
-    spec('runtime/agent/orchestrator/providers/effort-configuration.mjs', '0090d911213d935ac9817aab87643997abc9d3bf', [[
+    spec('runtime/agent/orchestrator/providers/effort-configuration.mjs', '823aaaee381275d62bf56a95903eeb55e79ad3b9', [[
         "export const EFFORT_CONFIGURATION_BETA =",
         "import { noteRequestEffort } from '../../../shared/llm/usage-context.mjs';\n\nexport const EFFORT_CONFIGURATION_BETA =",
     ], [
@@ -102,7 +102,7 @@ export function noteRequestEffort(value) {
         '  sessionUsage: ({ path, sessionIds, ownerIds }) => read(path, (db) => readSessionUsage(db, sessionIds, ownerIds)),',
         '  sessionUsage: ({ path, sessionIds, ownerIds }) => read(path, (db) => readSessionUsage(db, sessionIds, ownerIds)),\n  effortUsage: ({ path, options }) => read(path, (db) => readEffortUsage(db, options)),',
     ]]),
-    spec('session-runtime/usage-stats-api.mjs', 'd1ffc18558c5db7497718b3752b2f417a74c0dd9', [[
+    spec('session-runtime/usage-stats-api.mjs', 'bc89b1f22ac721b764c2497770dc6efa77b469cd', [[
         '    async getUsageStats(options = {}) {',
         "    async getEffortUsageStats(options) {\n      const store = ledger();\n      if (!store) throw new Error('Usage ledger is unavailable');\n      await store.settleWrites();\n      return (await store.effortUsageAsync(options)).map((row) => ({\n        provider: row.provider, model: row.model, agent: row.agent, effort: row.effort,\n        ...sessionUsageSnapshot(row), costBilled: row.costBilled, costEstimated: row.costEstimated,\n      }));\n    },\n    async getUsageStats(options = {}) {",
     ]]),

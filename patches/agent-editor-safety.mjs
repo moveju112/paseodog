@@ -11,7 +11,7 @@ export const AGENT_ROUTE_SAFETY_EDITS = [
             ['    if (onlyIfEmpty && clean(stored.provider)) return kept();',
                 '    if (onlyIfEmpty && clean(stored.provider)) return commit(kept);'],
             ['    if (keepOff && !(clean(requested.provider) && clean(requested.model))) {\n      saveDisabled(id, true);',
-                '    if (keepOff && !(clean(requested.provider) && clean(requested.model))) return commit(() => {\n      saveDisabled(id, true);'],
+                '    if (keepOff && !(clean(requested.provider) && clean(requested.model))) return commit(async () => {\n      saveDisabled(id, true);'],
             ['      return { ...stored, id, disabled: true };\n    }',
                 '      return { ...stored, id, disabled: true };\n    });'],
             ["    if (requested.disabled === false && Object.keys(requested).length === 1) {",
@@ -23,14 +23,16 @@ export const AGENT_ROUTE_SAFETY_EDITS = [
             ['      return clearOverride(id);\n    }\n    if (!clean(requested.model))',
                 '      return clearOverride(id);\n    });\n    if (!clean(requested.model))'],
             ['    if (onlyIfEmpty && !isMixy(id) && !storeBot(id)) deps.reloadFullConfig?.();',
-                '    return commit(() => {\n    if (onlyIfEmpty && !isMixy(id) && !storeBot(id)) deps.reloadFullConfig?.();'],
+                '    return commit(async () => {\n    if (onlyIfEmpty && !isMixy(id) && !storeBot(id)) deps.reloadFullConfig?.();'],
             ['    return stayOff ? { ...routeToSave, id, disabled: true } : routeToSave;',
                 '    return stayOff ? { ...routeToSave, id, disabled: true } : routeToSave;\n    });'],
+            ["      if (!Object.keys(requested).length) return { ...stored, id };",
+                "      if (!Object.keys(requested).length) return commit(() => ({ ...stored, id }));"],
 ];
 export const AGENT_EDITOR_SAFETY_PATCHES = [
     {
         file: 'src/session-runtime/workflow-agents-api/agent-editor.mjs',
-        blob: '39ac04cc6e87e68655b65e305fb522bf509bced1',
+        blob: '2d1ff64ae8ae7025124ecf719647220243af6891',
         edits: [
             [
                 "    // Opt-in (the agent profile): without `expectedRevision` the last write\n    // wins, as for the Workflows editor and the setup tool.\n    if (hasOwn(payload, 'expectedRevision') && String(payload.expectedRevision) !== definitionRevision(dataDir, id)) {\n      const conflict = new Error(`${AGENT_DEFINITION_CONFLICT}: agent \"${id}\" changed since it was loaded`);\n      conflict.code = AGENT_DEFINITION_CONFLICT;\n      throw conflict;\n    }",
@@ -50,7 +52,7 @@ export const AGENT_EDITOR_SAFETY_PATCHES = [
     assertWritable();`,
             ],
             ['    if (payload.route) await setAgentRoute(id, payload.route);',
-                '    if (applyRoute) applyRoute();'],
+                '    if (applyRoute) await applyRoute();'],
         ],
     },
 ];
