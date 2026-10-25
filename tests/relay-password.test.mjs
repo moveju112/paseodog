@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, statSync, mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, statSync, mkdtempSync, rmSync, writeFileSync, existsSync, cpSync, mkdirSync } from 'node:fs';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
-    RELAY_PASSWORD_PATCHES, patchedRelayPasswordSource, relayPasswordModule,
+    RELAY_PASSWORD_PATCHES, patchedRelayPasswordSource, relayPasswordModule, patchPaseoRelayPassword,
 } from '../scripts/patch-paseo-relay-password.mjs';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import { composerFixture } from './composer-fixture.mjs';
@@ -49,6 +49,29 @@ test('reviewed relay patches are idempotent and refuse source drift or partial a
             assert.throws(() => patchedRelayPasswordSource(patched.replace(after, () => before), spec), /Partial|hash mismatch/);
         }
     }
+});
+
+test('the complete installed patch upgrades reviewed helpers and checks without modifying files', (t) => {
+    const directory = privateHome(t);
+    for (const spec of RELAY_PASSWORD_PATCHES) {
+        const target = join(directory, spec.package, spec.file);
+        mkdirSync(dirname(target), { recursive: true });
+        cpSync(new URL(`${spec.package}/${spec.file}`, packageRoot), target);
+        cpSync(new URL(`${spec.package}/package.json`, packageRoot), join(directory, spec.package, 'package.json'));
+    }
+    const helper = join(directory, 'server/dist/server/server/relay-password.js');
+    cpSync(new URL('relay-password.js', serverRoot), helper);
+    const before = readFileSync(helper, 'utf8');
+    assert.throws(() => patchPaseoRelayPassword(directory, { check: true }), /patch is missing/);
+    assert.equal(readFileSync(helper, 'utf8'), before);
+    patchPaseoRelayPassword(directory);
+    const modified = statSync(helper).mtimeMs;
+    patchPaseoRelayPassword(directory, { check: true });
+    patchPaseoRelayPassword(directory);
+    assert.equal(statSync(helper).mtimeMs, modified);
+    assert.equal(readFileSync(helper, 'utf8'), relayPasswordModule());
+    writeFileSync(helper, `${relayPasswordModule()}\n// unexpected drift\n`);
+    assert.throws(() => patchPaseoRelayPassword(directory), /helper drift/);
 });
 
 test('pairing links use the password-enabled web, migrate the old default, and preserve custom hosting', async (t) => {
@@ -102,16 +125,16 @@ test('relay issuance stores only a private hash, confirms reissue, and never emb
 
 test('relay admission fails closed without configuration, requires the exact password, and keeps local auth', async (t) => {
     const home = privateHome(t);
-    const { module: helper } = await loadSource(relayPasswordModule(), new URL('relay-password.js', serverRoot));
-    await helper.requireRelayPassword(home, 'relay-secret');
+    const helper = await loadSource(relayPasswordModule(), new URL('relay-password.js', serverRoot));
+    await helper.module.requireRelayPassword(home, 'relay-secret');
     const spec = RELAY_PASSWORD_PATCHES.find((spec) => spec.file.endsWith('/session-admission-auth.js'));
     const { module } = await loadSource(patchedRelayPasswordSource(installed(spec), spec),
-        new URL('session-admission-auth.js', serverRoot));
-    const base = { transport: 'relay', passwordHash: undefined, localCredential: 'local-token' };
+        new URL('session-admission-auth.js', serverRoot), { [new URL('relay-password.js', serverRoot).href]: helper.url });
+    const base = { transport: 'relay', paseoHome: home, passwordHash: undefined, localCredential: 'local-token' };
     assert.deepEqual(await module.resolveSessionAdmission({ ...base, credential: undefined }), { rejection: 'password_required' });
     assert.deepEqual(await module.resolveSessionAdmission({ ...base, credential: { kind: 'password', password: 'relay-secret' } }),
         { rejection: 'password_required' });
-    const relayPasswordHash = helper.readRelayPasswordHash(home);
+    const relayPasswordHash = helper.module.readRelayPasswordHash(home);
     for (const credential of [undefined, { kind: 'password', password: 'wrong' }, { kind: 'localCredential', token: 'local-token' }]) {
         assert.ok('rejection' in await module.resolveSessionAdmission({ ...base, relayPasswordHash, credential }));
     }
@@ -131,25 +154,31 @@ test('existing short relay passwords still verify while new short passwords are 
     await assert.rejects(helper.requireRelayPassword(home, 'shorter'), /Incorrect relay password/);
 });
 
-test('relay admission throttles failed and in-flight guesses without counting successful logins', async (t) => {
+test('relay lockout persists after five consecutive failures and only access reset unlocks it', async (t) => {
     const home = privateHome(t);
-    const { module: helper } = await loadSource(relayPasswordModule(), new URL('relay-password.js', serverRoot));
-    await helper.requireRelayPassword(home, 'relay-secret');
+    const helper = await loadSource(relayPasswordModule(), new URL('relay-password.js', serverRoot));
+    await helper.module.requireRelayPassword(home, 'relay-secret');
     const spec = RELAY_PASSWORD_PATCHES.find((spec) => spec.file.endsWith('/session-admission-auth.js'));
-    // 다른 테스트와 모듈 상태(시도 기록)를 공유하지 않도록 별도 URL로 불러온다.
     const { module } = await loadSource(patchedRelayPasswordSource(installed(spec), spec) + '\n// throttle test\n',
-        new URL('session-admission-auth.js', serverRoot));
-    const input = { transport: 'relay', passwordHash: undefined, localCredential: null,
-        relayPasswordHash: helper.readRelayPasswordHash(home) };
-    const login = (password) => module.resolveSessionAdmission({ ...input, credential: { kind: 'password', password } });
-    for (let index = 0; index < 11; index++) assert.ok('admission' in await login('relay-secret'));
-    const guesses = await Promise.all(Array.from({ length: 11 }, () => login('wrong')));
-    assert.ok(guesses.every((result) => result.rejection === 'incorrect_password'));
+        new URL('session-admission-auth.js', serverRoot), { [new URL('relay-password.js', serverRoot).href]: helper.url });
+    const input = { transport: 'relay', paseoHome: home, passwordHash: undefined, localCredential: null };
+    const login = (password) => module.resolveSessionAdmission({ ...input,
+        relayPasswordHash: helper.module.readRelayPasswordHash(home), credential: { kind: 'password', password } });
+    for (let index = 0; index < 4; index++) assert.deepEqual(await login('wrong'), { rejection: 'incorrect_password' });
+    assert.ok('admission' in await login('relay-secret'));
+    for (let index = 0; index < 5; index++) assert.deepEqual(await login('wrong'), { rejection: 'incorrect_password' });
     assert.deepEqual(await login('relay-secret'), { rejection: 'incorrect_password' });
-    const realNow = Date.now;
-    Date.now = () => realNow() + 10 * 60_000;
-    try { assert.ok('admission' in await login('relay-secret')); }
-    finally { Date.now = realNow; }
+    const stateFile = join(home, 'relay-login-failures');
+    assert.equal(statSync(stateFile).mode & 0o777, 0o600);
+    assert.equal(readFileSync(stateFile, 'utf8'), '5\n');
+    const restarted = await loadSource(relayPasswordModule() + '\n// fresh process state\n', new URL('relay-password.js', serverRoot));
+    assert.equal(await restarted.module.verifyRelayLoginPassword(home, 'relay-secret', helper.module.readRelayPasswordHash(home)), false);
+    await helper.module.requireRelayPassword(home, 'relay-secret');
+    assert.deepEqual(await login('relay-secret'), { rejection: 'incorrect_password' });
+    assert.ok('admission' in await module.resolveSessionAdmission({ ...input, transport: 'direct', credential: undefined }));
+    await helper.module.resetRelayAccess(home, 'new-relay-secret');
+    assert.equal(existsSync(stateFile), false);
+    assert.ok('admission' in await login('new-relay-secret'));
 });
 
 // 원본에 앞쪽 편집 N개만 적용한 이전 배포본은 업그레이드하고, 그 밖의 중간 상태는 거부한다.
