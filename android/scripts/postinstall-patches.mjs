@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, relative } from "node:path";
+import { patchQueryStringDecoder } from "./patch-query-string-decoder.mjs";
 
 // In CI we often install a single workspace (e.g. server/relay/website). Only apply patches
 // when the patched dependency is actually present.
@@ -98,6 +99,10 @@ for (const [cwd, files] of patchFilesByCwd) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+if (existsSync("node_modules/query-string")) {
+  patchQueryStringDecoder("node_modules/query-string");
 }
 
 process.exit(0);
