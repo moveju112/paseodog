@@ -4,7 +4,7 @@ import { loadNativeModules } from './native-engine.mjs';
 import { nativeDefaultWorkflowBody } from './native-templates.mjs';
 import { createJsonLineDecoder, encodeFrame } from '../../plugin/server/json-lines.mjs';
 import { errorText } from '../../plugin/server/util.mjs';
-import { readClaudeUsage, readUsageMetrics } from './usage.mjs';
+import { readOAuthUsage, readUsageMetrics } from './usage.mjs';
 import { normalizeOrchestrationMode } from './orchestration-mode.mjs';
 import { flushPendingSessionConfigWrites } from 'mixdog/src/session-runtime/config-lifecycle/config-writers.mjs';
 import { resourceControls } from './resource-controls.mjs';
@@ -48,7 +48,7 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
         return generate(request);
     }
     if (action === 'resources') return resourceControls(runtime, request);
-    if (action === 'usage') return await readClaudeUsage(runtime);
+    if (action === 'usage') return await readOAuthUsage(runtime, request.provider);
     if (action === 'metrics') return await readUsageMetrics(runtime, request);
     const cachedModels = Array.isArray(options.cachedModels) && options.cachedModels.length > 0 && request.refresh !== true
         ? options.cachedModels

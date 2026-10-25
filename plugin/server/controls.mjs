@@ -211,10 +211,10 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
             return run;
         },
         // 설정 스냅샷 캐시를 건드리지 않고 Mixdog의 사용량 캐시·갱신 경로를 호출한다.
-        usage() {
+        usage(provider = 'anthropic-oauth') {
             const run = queue.then(async () => {
                 if (!launch) throw new Error('PaseoDog 공급자를 새로고침한 뒤 다시 열어주세요.');
-                return await invokeControls({ action: 'usage' });
+                return await invokeControls({ action: 'usage', provider });
             });
             queue = run.catch(() => {});
             return run;
