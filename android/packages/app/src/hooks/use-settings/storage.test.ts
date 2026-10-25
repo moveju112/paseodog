@@ -44,6 +44,56 @@ function makeDeps(
 }
 
 describe("loadAppSettingsFromStorage", () => {
+  it("persists and removes a local assistant photo without changing the nickname or icon", async () => {
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+    const photo = "data:image/jpeg;base64,/9j/2Q==";
+    await saveAppSettings({
+      queryClient,
+      deps,
+      updates: { assistantNickname: "Doggy", assistantIcon: "🐶", assistantPhoto: photo },
+    });
+    const restored = await loadAppSettingsFromStorage(deps);
+    expect(restored.assistantPhoto).toBe(photo);
+    expect(restored.assistantNickname).toBe("Doggy");
+    expect(restored.assistantIcon).toBe("🐶");
+    await saveAppSettings({ queryClient, deps, updates: { assistantPhoto: "" } });
+    const cleared = await loadAppSettingsFromStorage(deps);
+    expect(cleared.assistantPhoto).toBe("");
+    expect(cleared.assistantIcon).toBe("🐶");
+    expect(cleared.assistantNickname).toBe("Doggy");
+  });
+
+  it("rejects external, executable, oversized and malformed profile images without losing valid settings", async () => {
+    for (const assistantPhoto of [
+      undefined,
+      null,
+      7,
+      {},
+      [],
+      "https://example.com/photo.jpg",
+      "file:///private/photo.jpg",
+      "data:image/svg+xml;base64,PHN2Zz4=",
+      "data:image/png;base64,AAAA",
+      "data:image/jpeg;base64,/9j/!",
+      "data:image/jpeg;base64,/9j/" + "A".repeat(128 * 1024),
+    ]) {
+      const deps = makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({
+            assistantPhoto,
+            assistantNickname: "Doggy",
+            assistantIcon: "🤖",
+          }),
+        }),
+      });
+      const settings = await loadAppSettingsFromStorage(deps);
+      expect(settings.assistantPhoto).toBe("");
+      expect(settings.assistantNickname).toBe("Doggy");
+      expect(settings.assistantIcon).toBe("🤖");
+    }
+  });
+
   it("keeps the initial avatar by default and persists a selected assistant icon", async () => {
     for (const value of [undefined, null, "unknown", 7, {}, ["🐶"]]) {
       const deps = makeDeps({

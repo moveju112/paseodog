@@ -1,4 +1,5 @@
 import { ASSISTANT_ICONS } from '../android/packages/app/src/hooks/use-settings/assistant-icons.ts';
+import { withAssistantPhoto, withoutAssistantPhoto } from './paseo-assistant-photo.mjs';
 
 const options = '[{value:"",label:v("settings.general.assistantIcon.initial")},'
     + ASSISTANT_ICONS.filter(Boolean).map((value) => JSON.stringify({ value, label: value })).join(',') + ']';
@@ -37,10 +38,11 @@ export function withAssistantIcon(source) {
         if (source.split(before).length !== 2) throw new Error('Paseo assistant icon anchor mismatch');
         source = source.replace(before, () => after);
     }
-    return source;
+    return withAssistantPhoto(source, picker);
 }
 
 export function withoutAssistantIcon(source) {
+    source = withoutAssistantPhoto(source, picker);
     const counts = ASSISTANT_ICON_EDITS.map(([, after]) => source.split(after).length - 1);
     if (counts.some((count) => count > 1) || (counts.some(Boolean) && counts.includes(0)))
         throw new Error('Partial Paseo assistant icon patch');

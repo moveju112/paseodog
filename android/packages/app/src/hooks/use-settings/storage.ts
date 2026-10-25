@@ -30,6 +30,7 @@ import { z } from "zod";
 import { APP_SETTINGS_KEY, LEGACY_SETTINGS_KEY } from "./keys";
 import { migrateAppSettings } from "./migrations";
 import { ASSISTANT_ICONS, type AssistantIcon } from "./assistant-icons";
+import { normalizeAssistantPhoto } from "./assistant-photo";
 
 export { APP_SETTINGS_KEY } from "./keys";
 export const APP_SETTINGS_QUERY_KEY = ["app-settings"];
@@ -113,6 +114,7 @@ export interface AppSettings {
   /** 대화에 표시할 도우미 닉네임 (비어 있으면 Dog). */
   assistantNickname: string;
   assistantIcon: AssistantIcon;
+  assistantPhoto: string;
   toolCallDetailLevel: ToolCallDetailLevel;
   chatOutlineEnabled: boolean;
   /** Show the git diff summary button (+added -removed) above the composer. */
@@ -178,6 +180,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   hideReasoning: false,
   assistantNickname: "Dog",
   assistantIcon: "",
+  assistantPhoto: "",
   toolCallDetailLevel: "detailed",
   chatOutlineEnabled: true,
   showGitDiffSummary: true,
@@ -279,6 +282,7 @@ const StoredAppSettingsSchema = z
     hideReasoning: z.boolean().catch(false),
     assistantNickname: z.string().trim().min(1).catch("Dog"),
     assistantIcon: z.enum(ASSISTANT_ICONS).catch(""),
+    assistantPhoto: z.string().transform(normalizeAssistantPhoto).catch(""),
     toolCallDetailLevel: z
       .enum(["overview", "detailed", "hidden"])
       .or(z.literal("concise").transform(() => "overview" as const))

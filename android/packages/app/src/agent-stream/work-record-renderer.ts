@@ -14,11 +14,13 @@ interface RendererDependencies {
   React: typeof import("react");
   View: ComponentType<ComponentProps<typeof import("react-native").View>>;
   Text: ComponentType<ComponentProps<typeof import("react-native").Text>>;
+  Image: ComponentType<ComponentProps<typeof import("react-native").Image>>;
   Pressable: ComponentType<ComponentProps<typeof import("react-native").Pressable>>;
   StyleSheet: typeof import("react-native-unistyles").StyleSheet;
   useTranslation: typeof import("react-i18next").useTranslation;
   useAssistantNickname: () => string;
   useAssistantIcon: () => string;
+  useAssistantPhoto: () => string;
   /** 연결된 호스트 클라이언트 (서버 ID -> 클라이언트, 연결 전이면 null) */
   getClient: (serverId: string) => ContinueClient | null;
 }
@@ -37,11 +39,13 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
     React,
     View,
     Text,
+    Image,
     Pressable,
     StyleSheet,
     useTranslation,
     useAssistantNickname,
     useAssistantIcon,
+    useAssistantPhoto,
     getClient,
   } = deps;
   const copies: Record<
@@ -228,6 +232,7 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
       width: 28,
       height: 28,
       borderRadius: 9,
+      overflow: "hidden",
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: theme.colorScheme === "light" ? "#e7efe9" : theme.colors.surface1,
@@ -368,6 +373,8 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
   function Answer({ children }: { children: ReactNode }) {
     const nickname = useAssistantNickname();
     const icon = useAssistantIcon();
+    const photo = useAssistantPhoto();
+    const [failedPhoto, setFailedPhoto] = React.useState<string | null>(null);
     return React.createElement(
       View,
       { testID: "assistant-answer", style: styles.answerContainer },
@@ -377,11 +384,21 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
         React.createElement(
           View,
           { style: styles.avatar, accessible: false },
-          React.createElement(
-            Text,
-            { style: styles.avatarText, testID: "assistant-avatar-icon" },
-            icon || Array.from(nickname)[0],
-          ),
+          photo && failedPhoto !== photo
+            ? React.createElement(Image, {
+                key: photo,
+                source: { uri: photo },
+                style: { width: 28, height: 28 },
+                resizeMode: "cover",
+                accessible: false,
+                testID: "assistant-avatar-photo",
+                onError: () => setFailedPhoto(photo),
+              })
+            : React.createElement(
+                Text,
+                { style: styles.avatarText, testID: "assistant-avatar-icon" },
+                icon || Array.from(nickname)[0],
+              ),
         ),
         React.createElement(
           Text,
