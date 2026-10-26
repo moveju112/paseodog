@@ -6,7 +6,7 @@ import { EFFORT_USAGE_PATCHES } from '../patches/effort-usage.mjs';
 import { DEFAULT_OUTPUT_STYLE_PATCHES } from '../patches/default-output-style.mjs';
 import { COMPACTION_SUMMARY_ROUTE_PATCH } from '../patches/compaction-summary-route.mjs';
 import { SESSION_TITLE_ROUTE_PATCH } from '../patches/session-title-route.mjs';
-import { BUILTIN_AGENT_FILES, BUILTIN_AGENT_PATCHES } from '../patches/builtin-agents.mjs';
+import { BUILTIN_AGENT_FILES, BUILTIN_AGENT_PATCHES, SOLO_BASIC_ROLE_IDS } from '../patches/builtin-agents.mjs';
 import { AGENT_ROUTE_SAFETY_EDITS, AGENT_EDITOR_SAFETY_PATCHES } from '../patches/agent-editor-safety.mjs';
 export const PIN = '1.3.5';
 export const ORIGINAL_BLOB = '3adfd3eeb9f354198de89d6651647d8f9afc6321';
@@ -129,9 +129,17 @@ export const AGENT_PATCHES = [
     {
         file: 'src/runtime/agent/orchestrator/runtime-core/workflow/context.mjs',
         blob: '77187cec8a9fc824f2167ee351f05d5b99d8c060',
+        // 기본 역할 예외를 추가하기 전 설치본(첫 수정만 적용)도 그대로 갱신한다.
+        previousEditCount: 1,
         edits: [[
             "    if (!pack) return '';",
             "    if (!pack || pack.id === 'none' || !String(pack.body || '').trim()) return '';",
+        ], [
+            'export function createWorkflowContext({ packs, agents }) {',
+            `// PaseoDog: 켜진 기본 역할은 워크플로 위임과 별개로 단독 모드에서도 조건부로 호출한다.\nconst SOLO_BASIC_ROLE_IDS = new Set(${JSON.stringify(SOLO_BASIC_ROLE_IDS)});\nconst SOLO_BASIC_ROLES = \`\n\nException: the basic role agents ${SOLO_BASIC_ROLE_IDS.join(', ')} are not workflow\ndelegation. When one is listed in Available Agents, call it on your own judgment\nonly when its description's condition is met, with a bounded brief: load the\ndeferred \\\`agent\\\` tool for it. Every other agent still needs an explicit user request.\`;\n\nexport function createWorkflowContext({ packs, agents }) {`,
+        ], [
+            "        orchestrationContext: mode === 'none' && !workflowIds.length ? '' : orchestrationInstructions(mode),",
+            "        orchestrationContext: mode === 'none' && !workflowIds.length ? ''\n          : orchestrationInstructions(mode)\n            + (mode === 'none' && workflowIds.some((id) => SOLO_BASIC_ROLE_IDS.has(id)) ? SOLO_BASIC_ROLES : ''),",
         ]],
     },
     {

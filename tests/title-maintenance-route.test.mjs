@@ -8,9 +8,9 @@ import { generateConversationTitle } from '../engine/src/session-title.mjs';
 import { resolveMaintenanceRoute } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/agent-runtime/maintenance-route.mjs';
 import { resultText } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/agent-runtime/completion-text.mjs';
 import { roleProviderCacheOpts } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/agent-runtime/cache-strategy.mjs';
-import { AGENT_PATCHES, ADDITION, PIN, patch } from '../scripts/patch-mixdog.mjs';
+import { AGENT_PATCHES, ADDITION, PIN, patch, patchedAgentSource } from '../scripts/patch-mixdog.mjs';
 import { SESSION_TITLE_ROUTE_PATCH } from '../patches/session-title-route.mjs';
-import { BUILTIN_AGENTS, BUILTIN_AGENT_FILES } from '../patches/builtin-agents.mjs';
+import { BUILTIN_AGENTS, BUILTIN_AGENT_FILES, SOLO_BASIC_ROLE_IDS } from '../patches/builtin-agents.mjs';
 import { withEffectiveDisabledAgents } from '../engine/node_modules/mixdog/src/runtime/shared/agent-route-config.mjs';
 import { builtinFeatureActive } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/runtime-core/builtin-features.mjs';
 import { stripAgentSectionDefaults } from '../engine/node_modules/mixdog/src/runtime/shared/defaults-separation.mjs';
@@ -262,4 +262,43 @@ test('unavailable title provider never uses an initialized main provider', async
     });
     await assert.rejects(generate('작업 제목'), /Session title provider is unavailable: openai-oauth/);
     assert.deepEqual(providers, ['openai-oauth']);
+});
+
+// 단독 모드에서도 켜진 기본 역할만 설명의 조건에서 메인이 직접 호출하고 다른 에이전트는 사용자 요청을 기다린다.
+test('solo mode exposes enabled basic roles for conditional use while other agents still need a request', async () => {
+    const spec = AGENT_PATCHES.find(({ file }) => file.endsWith('runtime-core/workflow/context.mjs'));
+    const installed = readFileSync(new URL(`../engine/node_modules/mixdog/${spec.file}`, import.meta.url), 'utf8');
+    const source = patchedAgentSource(installed, spec);
+    assert.equal(patchedAgentSource(source, spec), source);
+    const runtime = '../engine/node_modules/mixdog/src/runtime';
+    const orchestration = await import(`${runtime}/agent/orchestrator/runtime-core/orchestration.mjs`);
+    const ids = await import(`${runtime}/agent/orchestrator/runtime-core/workflow-ids.mjs`);
+    const createWorkflowContext = vm.runInNewContext(source.replace(/^import .+;\n/gm, '')
+        .replace('export function createWorkflowContext', 'function createWorkflowContext') + '\ncreateWorkflowContext;', {
+        ...orchestration, ...ids,
+        clean: (await import(`${runtime}/agent/orchestrator/runtime-core/session-text.mjs`)).clean,
+        configuredOrchestrationMode: (await import(`${runtime}/shared/orchestration.mjs`)).configuredOrchestrationMode,
+    });
+    const context = (mode, enabled) => createWorkflowContext({
+        packs: { activeWorkflowId: () => 'none', loadWorkflowPack: () => ({ id: 'none' }) },
+        agents: {
+            delegatableAgentIds: () => enabled,
+            loadAgentDefinition: (_dir, id) => ({ id, name: id, description: `${id} condition` }),
+        },
+    }).activeWorkflowContext({ orchestrationMode: mode }, '/fixture').context;
+    const solo = context('none', ['advisor', 'failure-analyst']);
+    assert.match(solo, /Orchestration Mode: Solo/);
+    assert.match(solo, /Exception: the basic role agents/);
+    assert.match(solo, /failure-analyst \(failure-analyst\): failure-analyst condition/);
+    assert.doesNotMatch(context('none', ['advisor']), /Exception/);
+    assert.equal(context('none', []), '');
+    assert.doesNotMatch(context('swarm', ['failure-analyst']), /Exception/);
+    for (const id of SOLO_BASIC_ROLE_IDS) {
+        assert.ok(BUILTIN_AGENTS.some((agent) => agent.id === id), id);
+        assert.ok(isBasicAgent({ id }), id);
+    }
+    // 예외 문단만 남은 부분 적용은 거부한다.
+    const [first, , third] = spec.edits;
+    const partial = installed.replace(first[1], first[0]).replace(third[0], third[1]);
+    assert.throws(() => patchedAgentSource(partial, spec), /Partial|hash mismatch/);
 });

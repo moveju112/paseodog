@@ -27,6 +27,9 @@ export const BUILTIN_AGENTS = [
     },
 ];
 
+// 워크플로 위임과 별개로 단독 모드에서도 설명의 조건이 맞을 때 메인이 직접 호출하는 기본 역할.
+export const SOLO_BASIC_ROLE_IDS = Object.freeze(['context-explorer', 'failure-analyst', 'handoff-summarizer']);
+
 export const BUILTIN_AGENT_FILES = BUILTIN_AGENTS.flatMap(({ id, name, description, body }) => [
     {
         file: `src/agents/${id}/AGENT.md`,

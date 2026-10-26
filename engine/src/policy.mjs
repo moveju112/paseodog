@@ -1,5 +1,6 @@
 // Tool-policy guard, not an OS sandbox. Shell approval authorizes its whole command.
 import { createHash } from 'node:crypto';
+import { SOLO_BASIC_ROLE_IDS } from '../../patches/builtin-agents.mjs';
 const READ_TOOLS = new Set(['read', 'head', 'tail', 'grep', 'glob', 'list', 'tree', 'find', 'find_files', 'diff', 'code_graph']);
 const MARKER = Symbol('paseodog-policy');
 const PROMPT_TAG = 'paseodog_host_prompt_v1';
@@ -40,7 +41,9 @@ export function attachHostPolicy(session, { mode = 'ask', systemPrompt = '', onI
         const rewritten = ['ask', 'modify', 'rewrite'].includes(action);
         const name = rewritten && decision?.name ? decision.name : input.name;
         const args = rewritten && decision?.args ? decision.args : input.args;
-        const managed = orchestration && ['agent', 'task'].includes(String(name).toLowerCase());
+        const agentTool = ['agent', 'task'].includes(String(name).toLowerCase());
+        // 단독 모드도 기본 역할 spawn은 협업 모드의 위임과 같은 정책으로 처리한다.
+        const managed = agentTool && (orchestration || (args?.type === 'spawn' && SOLO_BASIC_ROLE_IDS.includes(args?.agent)));
         if (managed && (args?.allTerminals || args?.global || args?.recover))
             return { action: 'deny', reason: 'Cross-session agent control is disabled in PaseoDog' };
         if (mode === 'review' && !managed && !READ_TOOLS.has(String(name).toLowerCase())) return { action: 'deny', reason: 'Review mode permits only the explicit read-tool allowlist' };

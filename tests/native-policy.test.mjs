@@ -30,6 +30,18 @@ test('bypass skips approval for tools but preserves upstream denies and host res
     assert.equal((await session.beforeToolHook({ name: 'blocked', args: {} })).action, 'block');
     assert.equal((await session.beforeToolHook({ name: 'agent', args: { global: true } })).action, 'deny');
 });
+// 단독 모드의 기본 역할 spawn은 협업 위임과 같은 정책을 받고 다른 에이전트는 review에서 거부된다.
+test('solo basic-role spawns follow delegation policy while other solo spawns stay restricted', async () => {
+    const session = makeSession();
+    attachHostPolicy(session, { mode: 'review' });
+    assert.equal((await session.beforeToolHook({ name: 'agent', args: { type: 'spawn', agent: 'failure-analyst' } })).action, 'ask');
+    assert.equal((await session.beforeToolHook({ name: 'agent', args: { type: 'spawn', agent: 'advisor' } })).action, 'deny');
+    assert.equal((await session.beforeToolHook({ name: 'agent', args: { type: 'send', agent: 'failure-analyst' } })).action, 'deny');
+    attachHostPolicy(session, { mode: 'bypass' });
+    assert.equal((await session.beforeToolHook({ name: 'agent',
+        args: { type: 'spawn', agent: 'context-explorer', global: true } })).action, 'deny');
+    assert.equal((await session.beforeToolHook({ name: 'agent', args: { type: 'spawn', agent: 'handoff-summarizer' } })).action, 'rewrite');
+});
 // 재작성된 호출을 그대로 전달하고 승인 모드로 돌아오면 다시 질문한다.
 test('bypass preserves rewritten arguments and is not sticky across mode changes', async () => {
     const session = makeSession();
