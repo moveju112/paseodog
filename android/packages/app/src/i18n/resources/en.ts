@@ -1,4 +1,14 @@
 export const en = {
+  workspaceFolders: {
+    create: "Create virtual folder",
+    name: "Folder name",
+    rename: "Rename virtual folder",
+    delete: "Delete folder only (keep workspaces)",
+    empty: "Assign workspaces using their menu",
+    actions: "{{name}} folder actions",
+    moveTo: "Move to folder: {{name}}",
+    remove: "Remove from folder",
+  },
   paneFind: {
     connectionFailure: "Could not search this chat. Check the host connection and retry.",
     historyChangedFailure: "The chat changed while searching. Search again.",

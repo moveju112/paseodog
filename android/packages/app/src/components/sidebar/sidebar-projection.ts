@@ -20,6 +20,8 @@ import {
   type SidebarShortcutSection,
 } from "@/utils/sidebar-shortcuts";
 import { statusWorkspaceGroups, type SidebarWorkspaceGroup } from "./sidebar-labels";
+import type { SidebarWorkspaceFoldersState } from "@/stores/sidebar-workspace-folders-store";
+import { projectWorkspaceFolders } from "./sidebar-workspace-folders-model";
 
 export interface SidebarProjection {
   pinnedGroups: PinnedSidebarGroups;
@@ -46,6 +48,7 @@ export interface SidebarProjectionInput {
   pinnedCollapsed: boolean;
   collapsedProjectKeys: ReadonlySet<string>;
   collapsedWorkspaceGroupKeys: ReadonlySet<string>;
+  workspaceFolders?: SidebarWorkspaceFoldersState;
   t: TFunction;
 }
 
@@ -63,21 +66,33 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
   // two cannot disagree and a new grouping mode is a compile error here rather than a silent
   // fall-through to the project rows.
   const workspaceGroups = buildWorkspaceGroups(input, unpinnedWorkspaces);
+  // 키보드 순서도 실제 표시 순서와 같아야 접힌 폴더의 숨겨진 작업으로 이동하지 않는다.
+  const folderProjection = input.workspaceFolders
+    ? projectWorkspaceFolders(input.projects, pinnedGroups, workspaceGroups, input.workspaceFolders)
+    : null;
+  const visiblePinnedGroups = folderProjection?.pinnedGroups ?? pinnedGroups;
+  const visibleWorkspaceGroups = folderProjection?.workspaceGroups ?? workspaceGroups;
 
   const sections: SidebarShortcutSection[] = [];
   if (!input.pinnedCollapsed) {
-    sections.push({ workspaces: pinnedGroups.pinnedChats });
+    sections.push({ workspaces: visiblePinnedGroups.pinnedChats });
+  }
+  for (const folder of input.workspaceFolders?.folders ?? []) {
+    sections.push({
+      workspaces: folderProjection?.rowsByFolder.get(folder.id) ?? [],
+      collapsed: folder.collapsed,
+    });
   }
   if (input.groupMode === "project") {
     sections.push(
-      ...pinnedGroups.unpinnedProjects.map((project) => ({
+      ...visiblePinnedGroups.unpinnedProjects.map((project) => ({
         workspaces: project.workspaces,
         collapsed: input.collapsedProjectKeys.has(project.viewKey),
       })),
     );
   } else {
     sections.push(
-      ...workspaceGroups.map((group) => ({
+      ...visibleWorkspaceGroups.map((group) => ({
         workspaces: group.rows,
         collapsed: input.collapsedWorkspaceGroupKeys.has(group.key),
       })),

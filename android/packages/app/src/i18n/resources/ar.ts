@@ -2,6 +2,16 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
+  workspaceFolders: {
+    create: "إنشاء مجلد افتراضي",
+    name: "اسم المجلد",
+    rename: "إعادة تسمية المجلد الافتراضي",
+    delete: "حذف المجلد فقط (الاحتفاظ بمساحات العمل)",
+    empty: "عيّن مساحات العمل من قائمتها",
+    actions: "إجراءات مجلد {{name}}",
+    moveTo: "نقل إلى المجلد: {{name}}",
+    remove: "إزالة التعيين للمجلد",
+  },
   paneFind: {
     connectionFailure: "تعذر البحث في هذه المحادثة. تحقق من الاتصال بالمضيف وأعد المحاولة.",
     historyChangedFailure: "تغيّرت المحادثة أثناء البحث. أعد البحث.",

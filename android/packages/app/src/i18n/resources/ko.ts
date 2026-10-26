@@ -2,6 +2,16 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  workspaceFolders: {
+    create: "가상 폴더 만들기",
+    name: "폴더 이름",
+    rename: "가상 폴더 이름 변경",
+    delete: "폴더만 삭제 (워크스페이스 유지)",
+    empty: "워크스페이스 메뉴에서 폴더를 배정하세요",
+    actions: "{{name}} 폴더 메뉴",
+    moveTo: "폴더로 이동: {{name}}",
+    remove: "폴더 배정 해제",
+  },
   paneFind: {
     connectionFailure: "이 채팅을 검색할 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
     historyChangedFailure: "검색 중에 채팅이 변경되었습니다. 다시 검색하세요.",

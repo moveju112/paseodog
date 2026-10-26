@@ -2,6 +2,16 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
+  workspaceFolders: {
+    create: "Criar pasta virtual",
+    name: "Nome da pasta",
+    rename: "Renomear pasta virtual",
+    delete: "Excluir somente a pasta (manter espaços de trabalho)",
+    empty: "Atribua espaços de trabalho pelo menu deles",
+    actions: "Ações da pasta {{name}}",
+    moveTo: "Mover para a pasta: {{name}}",
+    remove: "Remover da pasta",
+  },
   paneFind: {
     connectionFailure:
       "Não foi possível pesquisar nesta conversa. Verifique a conexão com o host e tente novamente.",

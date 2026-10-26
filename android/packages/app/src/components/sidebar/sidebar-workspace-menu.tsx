@@ -1,5 +1,6 @@
-import { useMemo, type ComponentProps, type PropsWithChildren, type ReactNode } from "react";
+import { useCallback, useMemo, type ComponentProps, type PropsWithChildren, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useSidebarWorkspaceFoldersStore } from "@/stores/sidebar-workspace-folders-store";
 import { type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
@@ -127,6 +128,41 @@ function WorkspaceMenuItem({
   return <DropdownMenuItem {...props}>{children}</DropdownMenuItem>;
 }
 
+// 행별 안정적인 콜백을 만들어 폴더 메뉴가 다시 렌더링되어도 불필요한 메뉴 갱신을 피한다.
+function WorkspaceFolderMenuItem({
+  surface,
+  workspaceKey,
+  folder,
+  disabled,
+}: {
+  surface: MenuSurface;
+  workspaceKey: string;
+  folder: { id: string; name: string } | null;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation();
+  const assignWorkspace = useSidebarWorkspaceFoldersStore((state) => state.assignWorkspace);
+  const folderId = folder?.id ?? null;
+  const assign = useCallback(
+    () => assignWorkspace(workspaceKey, folderId),
+    [assignWorkspace, workspaceKey, folderId],
+  );
+  return (
+    <WorkspaceMenuItem
+      surface={surface}
+      testID={folder
+        ? `sidebar-workspace-folder-assign-${workspaceKey}-${folder.id}`
+        : `sidebar-workspace-folder-remove-${workspaceKey}`}
+      disabled={disabled}
+      onSelect={assign}
+    >
+      {folder
+        ? t("workspaceFolders.moveTo", { name: folder.name })
+        : t("workspaceFolders.remove")}
+    </WorkspaceMenuItem>
+  );
+}
+
 function SidebarWorkspaceMenuItems({
   surface,
   workspaceKey,
@@ -147,6 +183,8 @@ function SidebarWorkspaceMenuItems({
   openInFileManagerPath,
 }: SidebarWorkspaceMenuItemsProps & { surface: MenuSurface }): ReactNode {
   const { t } = useTranslation();
+  const folders = useSidebarWorkspaceFoldersStore((state) => state.folders);
+  const folderId = useSidebarWorkspaceFoldersStore((state) => state.workspaceFolderByKey[workspaceKey]);
   const archiveTrailing = useMemo(
     () => (archiveShortcutKeys ? <Shortcut chord={archiveShortcutKeys} /> : null),
     [archiveShortcutKeys],
@@ -217,6 +255,23 @@ function SidebarWorkspaceMenuItems({
         >
           {isPinned ? t("sidebar.workspace.actions.unpin") : t("sidebar.workspace.actions.pin")}
         </WorkspaceMenuItem>
+      ) : null}
+      {/* 두 메뉴 표면이 같은 로컬 배정을 사용하며 서버의 경로나 라벨을 변경하지 않는다. */}
+      {folders.map((folder) => (
+        <WorkspaceFolderMenuItem
+          key={folder.id}
+          surface={surface}
+          workspaceKey={workspaceKey}
+          folder={folder}
+          disabled={folderId === folder.id}
+        />
+      ))}
+      {folderId ? (
+        <WorkspaceFolderMenuItem
+          surface={surface}
+          workspaceKey={workspaceKey}
+          folder={null}
+        />
       ) : null}
       {serverId && workspaceId ? (
         <DropdownMenuSubTrigger

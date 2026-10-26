@@ -2,6 +2,16 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  workspaceFolders: {
+    create: "Créer un dossier virtuel",
+    name: "Nom du dossier",
+    rename: "Renommer le dossier virtuel",
+    delete: "Supprimer le dossier uniquement (garder les espaces de travail)",
+    empty: "Affectez les espaces de travail depuis leur menu",
+    actions: "Actions du dossier {{name}}",
+    moveTo: "Déplacer vers le dossier : {{name}}",
+    remove: "Retirer du dossier",
+  },
   paneFind: {
     connectionFailure:
       "Impossible de rechercher dans cette conversation. Vérifiez la connexion à l’hôte et réessayez.",

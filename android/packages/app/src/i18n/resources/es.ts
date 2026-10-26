@@ -2,6 +2,16 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const es: TranslationResources = {
+  workspaceFolders: {
+    create: "Crear carpeta virtual",
+    name: "Nombre de carpeta",
+    rename: "Renombrar carpeta virtual",
+    delete: "Eliminar solo la carpeta (conservar espacios de trabajo)",
+    empty: "Asigna espacios de trabajo desde su menú",
+    actions: "Acciones de la carpeta {{name}}",
+    moveTo: "Mover a la carpeta: {{name}}",
+    remove: "Quitar de la carpeta",
+  },
   paneFind: {
     connectionFailure:
       "No se pudo buscar en este chat. Comprueba la conexión con el host y vuelve a intentarlo.",

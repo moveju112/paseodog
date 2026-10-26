@@ -2,6 +2,16 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  workspaceFolders: {
+    create: "创建虚拟文件夹",
+    name: "文件夹名称",
+    rename: "重命名虚拟文件夹",
+    delete: "仅删除文件夹（保留工作区）",
+    empty: "从工作区菜单分配文件夹",
+    actions: "{{name}} 文件夹操作",
+    moveTo: "移至文件夹：{{name}}",
+    remove: "取消文件夹分配",
+  },
   paneFind: {
     connectionFailure: "无法搜索此聊天。请检查主机连接后重试。",
     historyChangedFailure: "搜索期间聊天已更改。请重新搜索。",

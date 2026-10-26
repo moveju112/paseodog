@@ -63,6 +63,9 @@ import {
   type SidebarWorkspacePlacement,
 } from "@/hooks/use-sidebar-workspaces-list";
 import { useSidebarOrderStore } from "@/stores/sidebar-order-store";
+import { useSidebarWorkspaceFoldersStore } from "@/stores/sidebar-workspace-folders-store";
+import { projectWorkspaceFolders } from "@/components/sidebar/sidebar-workspace-folders-model";
+import { SidebarWorkspaceFolderSections } from "@/components/sidebar/sidebar-workspace-folders";
 import {
   hasActiveSidebarLabelFilter,
   useSidebarViewStore,
@@ -1949,6 +1952,58 @@ export function SidebarWorkspaceList({
   // that produced the rows, so the question "what is on screen" is answered once.
   const projectIconByProjectViewKey = useProjectIcons({ projects: projectIconTargets });
 
+  const folders = useSidebarWorkspaceFoldersStore((state) => state.folders);
+  const workspaceFolderByKey = useSidebarWorkspaceFoldersStore((state) => state.workspaceFolderByKey);
+  const folderProjection = useMemo(
+    () => projectWorkspaceFolders(projects, pinnedGroups, workspaceGroups, { folders, workspaceFolderByKey }),
+    [projects, pinnedGroups, workspaceGroups, folders, workspaceFolderByKey],
+  );
+  const activeWorkspaceSelection = useActiveWorkspaceSelection();
+  const showShortcutBadges = useShowShortcutBadges();
+  // 기존 작업 행을 그대로 사용해 가상 폴더 안에서도 선택·메뉴·호스트 표시를 유지한다.
+  const renderFolderWorkspace = useCallback(
+    (workspace: SidebarWorkspacePlacement) => (
+      <MemoWorkspaceRowItem
+        key={workspace.workspaceKey}
+        workspace={workspace}
+        workspaceEntry={workspaceEntriesByKey.get(workspace.workspaceKey) ?? null}
+        hostBadge={hostBadgeByServerId.get(workspace.serverId) ?? null}
+        leadingProjectName={workspace.projectName}
+        leadingProjectIconDataUri={projectIconByProjectViewKey.get(workspace.projectViewKey) ?? null}
+        shortcutNumber={shortcutIndexByWorkspaceKey.get(workspace.workspaceKey) ?? null}
+        showShortcutBadge={showShortcutBadges}
+        canCopyBranchName={workspace.projectKind === "git"}
+        canPin={supportsPinningByServerId.get(workspace.serverId) === true}
+        onToggleWorkspacePin={onToggleWorkspacePin}
+        selectionEnabled={parseHostWorkspaceRouteFromPathname(pathname) !== null}
+        activeWorkspaceSelection={activeWorkspaceSelection}
+        onWorkspacePress={onWorkspacePress}
+      />
+    ),
+    [
+      workspaceEntriesByKey,
+      hostBadgeByServerId,
+      projectIconByProjectViewKey,
+      shortcutIndexByWorkspaceKey,
+      showShortcutBadges,
+      supportsPinningByServerId,
+      onToggleWorkspacePin,
+      pathname,
+      activeWorkspaceSelection,
+      onWorkspacePress,
+    ],
+  );
+  const folderHeader = (
+    <>
+      {listHeaderComponent}
+      <SidebarWorkspaceFolderSections
+        folders={folders}
+        rowsByFolder={folderProjection.rowsByFolder}
+        renderWorkspace={renderFolderWorkspace}
+      />
+    </>
+  );
+
   // A filter that matches nothing swaps the list's body and nothing above it. It used to replace
   // this whole subtree, which unmounted the header — and the header is where the display menu's
   // trigger lives, so filtering the last row away closed the menu you were filtering from.
@@ -1965,8 +2020,8 @@ export function SidebarWorkspaceList({
   const content =
     groupMode !== "project" ? (
       <SidebarGroupedModeList
-        workspaceGroups={workspaceGroups}
-        pinnedGroups={pinnedGroups}
+        workspaceGroups={folderProjection.workspaceGroups}
+        pinnedGroups={folderProjection.pinnedGroups}
         workspaceEntriesByKey={workspaceEntriesByKey}
         projectIconByProjectViewKey={projectIconByProjectViewKey}
         shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
@@ -1975,7 +2030,7 @@ export function SidebarWorkspaceList({
         supportsPinningByServerId={supportsPinningByServerId}
         onToggleWorkspacePin={onToggleWorkspacePin}
         onPinnedWorkspaceReorder={handlePinnedWorkspaceReorder}
-        listHeaderComponent={listHeaderComponent}
+        listHeaderComponent={folderHeader}
         sidebarFilterEmpty={sidebarFilterEmpty}
         parentGestureRef={parentGestureRef}
         dragGestureHostActive={dragGestureHostActive}
@@ -1983,7 +2038,7 @@ export function SidebarWorkspaceList({
     ) : (
       <ProjectModeList
         projects={projects}
-        pinnedGroups={pinnedGroups}
+        pinnedGroups={folderProjection.pinnedGroups}
         workspaceEntriesByKey={workspaceEntriesByKey}
         projectIconByProjectViewKey={projectIconByProjectViewKey}
         collapsedProjectKeys={collapsedProjectKeys}
@@ -1993,7 +2048,7 @@ export function SidebarWorkspaceList({
         onAddProject={onAddProject}
         onImportSession={onImportSession}
         listFooterComponent={listFooterComponent}
-        listHeaderComponent={listHeaderComponent}
+        listHeaderComponent={folderHeader}
         sidebarFilterEmpty={sidebarFilterEmpty}
         hasActiveProjectFilter={hasActiveProjectFilter}
         parentGestureRef={parentGestureRef}
@@ -2091,7 +2146,7 @@ function ProjectModeList({
   listFooterComponent,
   listHeaderComponent,
   sidebarFilterEmpty,
-  hasActiveProjectFilter,
+  hasActiveProjectFilter: _hasActiveProjectFilter,
   parentGestureRef,
   dragGestureHostActive,
   pathname,
@@ -2119,7 +2174,6 @@ function ProjectModeList({
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
   onPinnedWorkspaceReorder: (workspaces: SidebarWorkspacePlacement[]) => void;
 }) {
-  const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
   const [creatingWorkspaceIds, setCreatingWorkspaceIds] = useState<Set<string>>(() => new Set());
   const creatingWorkspaceTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
@@ -2446,18 +2500,8 @@ function ProjectModeList({
           )}
         </View>
       ) : null}
-      {/* The header carries the display menu, which is the only way back out of a filter, so it
-        stays for as long as a filter is what emptied the list. It is absent only when the
-        sidebar is genuinely empty, where a section heading would sit over nothing.
-        Every filter that can empty this branch needs a term here: a project filter pinned to a
-        project whose chats are all pinned leaves `unpinnedProjects` empty, and without its term
-        the header would go with it, taking the only route back to the filter page. */}
-      {unpinnedProjects.length > 0 ||
-      hasActiveHostFilter ||
-      hasActiveProjectFilter ||
-      sidebarFilterEmpty
-        ? listHeaderComponent
-        : null}
+      {/* 빈 목록에서도 가상 폴더 생성과 기존 빈 폴더 관리 진입점을 유지한다. */}
+      {listHeaderComponent}
       {sidebarFilterEmpty ? <SidebarFilterEmptyState /> : projectBody}
       {listFooterComponent}
     </>

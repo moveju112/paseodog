@@ -2,6 +2,16 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  workspaceFolders: {
+    create: "仮想フォルダーを作成",
+    name: "フォルダー名",
+    rename: "仮想フォルダーの名前を変更",
+    delete: "フォルダーのみ削除（ワークスペースを保持）",
+    empty: "ワークスペースのメニューからフォルダーを指定",
+    actions: "{{name}} フォルダーの操作",
+    moveTo: "フォルダーへ移動: {{name}}",
+    remove: "フォルダーの割り当てを解除",
+  },
   paneFind: {
     connectionFailure:
       "このチャットを検索できませんでした。ホストへの接続を確認して再試行してください。",

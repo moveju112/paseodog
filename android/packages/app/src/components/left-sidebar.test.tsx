@@ -124,6 +124,10 @@ vi.mock("@/components/sidebar/sidebar-nav-rows", () => ({ SidebarNavRows: () => 
 vi.mock("@/components/sidebar/sidebar-help-menu", () => ({ SidebarHelpMenu: () => null }));
 vi.mock("@/components/sidebar-resize-handle", () => ({ SidebarResizeHandle: () => null }));
 vi.mock("@/components/sidebar-workspace-list", () => ({ SidebarWorkspaceList: () => null }));
+// 하단 도구줄 테스트는 작업 폴더 메뉴·모달의 native animation까지 로드하지 않는다.
+vi.mock("@/components/sidebar/sidebar-workspace-folders", () => ({
+  SidebarWorkspaceFolderCreateButton: () => null,
+}));
 vi.mock("@/components/sidebar/sidebar-recent-sessions", () => ({
   SidebarRecentSessions: () => null,
 }));

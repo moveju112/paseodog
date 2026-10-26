@@ -67,6 +67,7 @@ import {
 import { SidebarAgentListSkeleton } from "./sidebar-agent-list-skeleton";
 import { SidebarCalloutSlot } from "./sidebar-callout-slot";
 import { SidebarWorkspaceList } from "./sidebar-workspace-list";
+import { SidebarWorkspaceFolderCreateButton } from "./sidebar/sidebar-workspace-folders";
 
 type SidebarTheme = ReturnType<typeof useUnistyles>["theme"];
 
@@ -849,6 +850,7 @@ function WorkspacesSectionHeader() {
     <View style={styles.workspacesSectionHeader}>
       <Text style={styles.workspacesSectionTitle}>Workspaces</Text>
       <View style={styles.workspacesSectionActions}>
+        <SidebarWorkspaceFolderCreateButton />
         <Tooltip delayDuration={300}>
           <TooltipTrigger asChild>
             <View>

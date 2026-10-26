@@ -2,6 +2,16 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  workspaceFolders: {
+    create: "Создать виртуальную папку",
+    name: "Название папки",
+    rename: "Переименовать виртуальную папку",
+    delete: "Удалить только папку (сохранить рабочие области)",
+    empty: "Назначьте папку через меню рабочей области",
+    actions: "Действия с папкой {{name}}",
+    moveTo: "Переместить в папку: {{name}}",
+    remove: "Убрать из папки",
+  },
   paneFind: {
     connectionFailure:
       "Не удалось выполнить поиск в чате. Проверьте подключение к хосту и повторите попытку.",
