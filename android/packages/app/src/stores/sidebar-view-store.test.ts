@@ -30,6 +30,28 @@ function createMemoryStorage(entries: Record<string, string | null>): MemoryStor
 }
 
 describe("sidebar view store", () => {
+  it("selects one host and persists it without the previous host's project filter", () => {
+    useSidebarViewStore.setState({ hostFilters: ["old"], projectFilters: ["old-project"] });
+    useSidebarViewStore.getState().selectHost("new");
+    expect(useSidebarViewStore.getState().hostFilters).toEqual(["new"]);
+    expect(useSidebarViewStore.getState().projectFilters).toEqual([]);
+    const { groupMode, hostFilters, projectFilters, labelFilter } = useSidebarViewStore.getState();
+    expect(
+      migrateSidebarViewState({ groupMode, hostFilters, projectFilters, labelFilter }).hostFilters,
+    ).toEqual(["new"]);
+  });
+  it("persists single-workspace mode without losing filters", () => {
+    const state = {
+      groupMode: "single" as const,
+      hostFilters: ["host-a"],
+      projectFilters: ["project-a"],
+      labelFilter: { labels: ["urgent"] },
+    };
+    useSidebarViewStore.getState().setGroupMode("single");
+    expect(useSidebarViewStore.getState().groupMode).toBe("single");
+    expect(migrateSidebarViewState(state)).toEqual(state);
+  });
+
   beforeEach(() => {
     useSidebarViewStore.setState({
       groupMode: "project",

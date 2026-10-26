@@ -4,6 +4,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitBlob } from './patch-mixdog.mjs';
+import { MCP_BOOTSTRAP_IDENTITY_EDITS, withoutMcpIdentity, withMcpIdentity } from '../patches/paseo-mcp-identity.mjs';
 
 const storageMethod = `    // 저장 큐 안에서 이전 제목·출처·보관 상태를 함께 검사한다.
     async setGeneratedTitle(agentId, title, expectedTitle, isCurrent = () => true) {
@@ -88,6 +89,9 @@ export const SESSION_TITLE_PATCHES = [
 
 // 원본·완성된 패치만 받으며 모든 파일의 정확한 blob과 유일한 앵커를 검증한다.
 export function patchedSessionTitleSource(source, spec) {
+    const identityBase = spec.file === 'bootstrap.js' ? withoutMcpIdentity(source, MCP_BOOTSTRAP_IDENTITY_EDITS) : source;
+    const hadIdentity = identityBase !== source;
+    source = identityBase;
     for (const [legacy, current] of spec.legacy ?? []) {
         if (source.split(legacy).length > 2) throw new Error(`Paseo session-title patch drift: ${spec.file}`);
         source = source.replace(legacy, () => current);
@@ -101,7 +105,7 @@ export function patchedSessionTitleSource(source, spec) {
         result = result.replace(before, after);
     }
     if (source !== original && source !== result) throw new Error(`Partial Paseo session-title patch: ${spec.file}`);
-    return result;
+    return hadIdentity ? withMcpIdentity(result, MCP_BOOTSTRAP_IDENTITY_EDITS) : result;
 }
 
 // 공용 관찰자 원본을 타입만 제거해 패키지 옆에 설치하고, 대상 다섯 파일을 모두 검증 후 적용한다.

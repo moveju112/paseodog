@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { JournalStore } from '../plugin/server/journal.mjs';
 import { fixture, until } from './helpers.mjs';
 
 // 저장된 사용자 메시지로 가져오기 목록을 채우고 실제 메시지 전송 경로까지 확인한다.
@@ -57,4 +61,30 @@ test('session list bounds title and preview without truncating stored prompts', 
     assert.equal(event.sessions[0].title, text.slice(0, 100));
     assert.equal(event.sessions[0].description, text.slice(0, 500));
     assert.equal(f.store.load('long').items[0].item.text, text);
+});
+
+test('disk-backed provider listings refresh cached search results without changing saved history', async (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'paseodog-session-preview-'));
+    const f = fixture({}, { store: new JournalStore(root) });
+    t.after(async () => { await f.connection.close(); rmSync(root, { recursive: true, force: true }); });
+    const writer = new JournalStore(root);
+    const record = writer.create('saved', '/work/project', 'hash');
+    record.items = [{ item: { type: 'user_message', text: '  original\nrequest  ' } }];
+    writer.save(record);
+    writer.create('empty', '/work/project', 'hash');
+    const request = async (requestId, query) => {
+        await f.connection.send({ type: 'sessions', requestId, cwd: '/work/project', query, limit: 1 });
+        return (await until(f.events, (event) => event.requestId === requestId)).sessions;
+    };
+    const expected = (text) => [{ persistence: { version: 2, data: { bridgeId: 'saved' } },
+        cwd: record.cwd, title: text, description: text, updatedAt: new Date(record.updatedAt).toISOString() }];
+    assert.deepEqual(await request('cold', 'ORIGINAL'), expected('original request'));
+    assert.deepEqual(await request('warm', 'ORIGINAL'), expected('original request'));
+    record.items[0].item.text = 'changed request';
+    writer.save(record);
+    assert.deepEqual(await request('old-query', 'original'), []);
+    assert.deepEqual(await request('new-query', 'changed'), expected('changed request'));
+    assert.deepEqual(writer.load('saved'), record);
+    writer.remove('saved');
+    assert.deepEqual(await request('deleted', 'changed'), []);
 });

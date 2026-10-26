@@ -55,7 +55,11 @@ function canUseAutoEffort(
     );
   }
   const module = host.snapshot.value?.toolModules?.autoEffort;
-  return module?.supported !== false && module?.enabled === true;
+  return (
+    Boolean(host.snapshot.value?.route.model?.trim()) &&
+    module?.supported !== false &&
+    module?.enabled === true
+  );
 }
 
 // 세션 또는 호스트의 확인된 상태와 저장 진행·실패를 Effort 항목에 표시한다.

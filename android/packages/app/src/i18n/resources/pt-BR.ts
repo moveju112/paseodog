@@ -148,6 +148,8 @@ export const ptBR: TranslationResources = {
       cancelingAgent: "Cancelando agente",
       stopAgent: "Parar agente",
       interrupt: "Interromper",
+      confirmTitle: "Parar o agente?",
+      confirmMessage: "A execução atual do agente será interrompida. Seu rascunho será mantido.",
     },
     voice: {
       enableVoiceMode: "Ativar modo de voz",
@@ -1198,6 +1200,7 @@ export const ptBR: TranslationResources = {
       heading: "Exibição",
       grouping: {
         label: "Agrupamento",
+        single: "Espaço de trabalho único",
         project: "Projeto",
         status: "Status",
         labels: "Etiquetas",
@@ -2230,6 +2233,11 @@ export const ptBR: TranslationResources = {
       assistantNickname: {
         label: "Apelido do assistente",
         description: "Nome exibido nas conversas. Deixe vazio para usar Dog.",
+      },
+      assistantIcon: {
+        label: "Ícone do assistente",
+        description: "Ícone ao lado do apelido nas conversas. Salvo neste dispositivo.",
+        initial: "Inicial do apelido (padrão)",
       },
       hideReasoning: {
         label: "Ocultar raciocínio",

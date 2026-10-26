@@ -5,17 +5,12 @@ import { DEFAULT_MODEL, deadline, errorText, hash, textOf, display, tokenUsage, 
 import { questionRequestInput, questionAnswers } from './question.mjs';
 import { agentMessageSource } from './agent-message.mjs';
 import { compactionNotice, projectCompaction } from './compaction.mjs';
+import { readTurnMinutes } from './turn-duration.mjs';
+import { sessionDescription } from './journal.mjs';
 
 export const CAPABILITIES = ['prompt.message', 'prompt.image', 'prompt.command', 'prompt.steer', 'session.configure', 'session.persistence', 'session.list',
     'session.revert.conversation', 'permission'];
 const REVERT_CAPABILITIES = ['session.revert.conversation'];
-// 계승 목록과 세션 도구에서 같은 첫 사용자 지시로 대상을 구분한다.
-function sessionDescription(row) {
-    const prompt = row.items.find(({ item }) => item.type === 'user_message'
-        && typeof item.text === 'string' && item.text.trim())?.item;
-    const description = prompt?.text.replace(/\s+/g, ' ').trim().slice(0, 500);
-    return { title: description?.slice(0, 100) || row.cwd.split('/').pop() || row.cwd, description };
-}
 function catalogFrom(env) {
     let routes = [];
     if (env.PASEODOG_MODELS) {
@@ -37,7 +32,7 @@ function catalogFrom(env) {
 export function createProviderConnection({ capabilities = CAPABILITIES, engineFactory, store,
     loadCatalog,
     env = {}, canonicalPath = (path) => { if (!isAbsolute(path)) throw new Error('cwd must be absolute'); return realpathSync(path); },
-    bootMs = 60000, stopMs = 8000, permissionMs = 120000, maxTurnMs = 3600000, flushMs = 250 }) {
+    bootMs = 60000, stopMs = 8000, permissionMs = 120000, maxTurnMs = undefined, flushMs = 250 }) {
     if (!store) throw new Error('JournalStore is required');
     const selected = [...new Set(capabilities.filter((c) => CAPABILITIES.includes(c)))];
     const { routes, catalog } = catalogFrom(env);
@@ -188,9 +183,12 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         return { model: model?.id || session.config.model || DEFAULT_MODEL, mode: session.config.mode || 'ask',
             ...(session.config.thinkingOption ? { thinkingOption: session.config.thinkingOption } : {}),
             models: catalog.models, modes: catalog.modes, thinkingOptions: model?.thinkingOptions || [],
-            settings: session.autoEffortAvailable && model?.thinkingOptions?.length ? [{ type: 'toggle', id: 'autoEffort', label: 'Auto effort',
+            settings: [...(session.autoEffortAvailable && model?.thinkingOptions?.length ? [{ type: 'toggle', id: 'autoEffort', label: 'Auto effort',
                 description: 'Applies to the next turn in this session',
-                value: session.config.settings.autoEffort }] : [] };
+                value: session.config.settings.autoEffort }] : []),
+                ...(route?.fastCapable === true ? [{ type: 'toggle', id: 'fast', label: 'Fast',
+                    description: 'Applies to the next turn in this session; additional charges may apply',
+                    value: currentRoute.fast === true }] : [])] };
     }
     function identity(session, info) {
         if (session.closed || session.active?.canceled) return;
@@ -201,6 +199,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             ...session.record.nativeRoute,
             model: info.state.model, provider: info.state.provider,
             effort: session.config.thinkingOption ?? info.state.effort ?? session.record.nativeRoute?.effort,
+            fast: info.state.fast ?? session.record.nativeRoute?.fast ?? session.route?.fast,
         };
         flush(session);
         if (info.state?.model) {
@@ -274,7 +273,11 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             }
             if (Object.hasOwn(config.settings, 'autoEffort')) requestedRoute.autoEffort = config.settings.autoEffort;
             else if (config.thinkingOption && !input.persistence) requestedRoute.autoEffort = false;
+            // 분기에서 복사한 명시적 Fast 값을 Main 기본값보다 우선한다. 복원은 아래 저장 경로를 따른다.
+            if (Object.hasOwn(config.settings, 'fast')) requestedRoute.fast = config.settings.fast;
             let effortRoute = routes.find((row) => row.provider === requestedRoute.provider && row.model === requestedRoute.model);
+            if (!input.persistence && config.settings.fast === true && effortRoute?.fastCapable !== true)
+                throw new Error('Fast is unavailable for the current model');
             if (!input.persistence && input.config.thinkingOption && !(effortRoute?.effortOptions || [])
                 .some((option) => (typeof option === 'string' ? option : option.id) === requestedRoute.effort))
                 throw new Error('Unsupported effort for current model');
@@ -586,13 +589,21 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             nativeChanges.route = { ...nativeChanges.route, ...tuning };
         }
         if (modeChange) { nextConfig.mode = changes.mode ?? 'ask'; nativeChanges.mode = nextConfig.mode; }
-        if (Object.hasOwn(changes, 'settings')) {
+        if (Object.hasOwn(changes.settings || {}, 'fast')) {
+            if (Object.keys(changes).length !== 1 || Object.keys(changes.settings).length !== 1
+                || typeof changes.settings.fast !== 'boolean')
+                throw new Error('Change boolean Fast separately from other settings');
+            if (!sessionConfig(session).settings.some((setting) => setting.id === 'fast'))
+                throw new Error('Fast is unavailable for the current model');
+            nativeChanges.route = { fast: changes.settings.fast };
+        } else if (Object.hasOwn(changes, 'settings')) {
             if (!changes.settings || typeof changes.settings !== 'object' || Array.isArray(changes.settings)
                 || Object.keys(changes.settings).length !== 1 || typeof changes.settings.autoEffort !== 'boolean')
                 throw new Error('Only boolean autoEffort session setting is supported');
             nextConfig.settings.autoEffort = changes.settings.autoEffort;
             nativeChanges.autoEffort = changes.settings.autoEffort;
-            if (changes.settings.autoEffort === true && !sessionConfig(session).settings.length)
+            if (changes.settings.autoEffort === true
+                && !sessionConfig(session).settings.some((setting) => setting.id === 'autoEffort'))
                 throw new Error('Auto effort is unavailable for the current model or native module');
         }
         if (Object.hasOwn(changes, 'thinkingOption')) {
@@ -694,6 +705,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         try {
             turn.engine = await session.enginePromise;
             if (session.closing || session.closed || turn.canceled) throw new Error('Session closed or interrupted during startup');
+            const turnDurationMs = maxTurnMs ?? readTurnMinutes(env) * 60000;
             const result = { type: 'turn', turnId: turn.id };
             session.record.receipts[receiptKey] = { hash: requestHash, turnId: turn.id, state: 'running', result, ...(source ? { source } : {}),
                 // 원본 대화 절단은 텍스트로 대상을 찾으므로 이미지·명령·에이전트 전달은 제외한다.
@@ -708,7 +720,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                     message: `Agent ${source.agentId} (not human approval): ${parsed.text}` }
                 : { type: 'user_message', id: `user:${receiptKey}`, clientMessageId: input.prompt.clientMessageId, text: parsed.command ? '/compact' : parsed.text });
             const callbacks = callbacksFor(session, turn);
-            turn.timer = setTimeout(() => { void interrupt(session, 'Maximum turn duration reached'); }, maxTurnMs);
+            turn.timer = setTimeout(() => { void interrupt(session, 'Maximum turn duration reached'); }, turnDurationMs);
             turn.work = parsed.command ? turn.engine.compact(callbacks) : turn.engine.ask(parsed.content || parsed.text, callbacks, source, quotaRetry);
             const answer = await turn.work;
             if (turn.finished) return;
@@ -909,10 +921,8 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                 if (!selected.includes('session.list')) throw new Error('Session listing not negotiated');
                 const limit = Math.max(1, Math.min(100, Number(input.limit) || 50));
                 const query = String(input.query || '').toLowerCase();
-                // 대화가 한 번도 저장되지 않은 빈 저널은 불러올 내용이 없으므로 목록에서 뺀다.
-                const rows = store.list().filter((row) => row.items.length && (!input.cwd || row.cwd === input.cwd)).map((row) => {
-                    return { ...row, ...sessionDescription(row) };
-                }).filter((row) => !query || [row.cwd, row.title, row.description].some((value) => value?.toLowerCase().includes(query)))
+                const rows = store.listSummaries().filter((row) => !input.cwd || row.cwd === input.cwd)
+                    .filter((row) => !query || [row.cwd, row.title, row.description].some((value) => value?.toLowerCase().includes(query)))
                     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, limit);
                 emit({ type: 'sessions', requestId: input.requestId, sessions: rows.map((r) => ({
                     persistence: { version: 2, data: { bridgeId: r.id } }, cwd: r.cwd, title: r.title, description: r.description,

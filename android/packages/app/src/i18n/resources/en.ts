@@ -143,6 +143,8 @@ export const en = {
       cancelingAgent: "Canceling agent",
       stopAgent: "Stop agent",
       interrupt: "Interrupt",
+      confirmTitle: "Stop the agent?",
+      confirmMessage: "The current agent run will stop. Your draft will be kept.",
     },
     voice: {
       enableVoiceMode: "Enable Voice mode",
@@ -1180,6 +1182,7 @@ export const en = {
       heading: "Display",
       grouping: {
         label: "Grouping",
+        single: "Single workspace",
         project: "Project",
         status: "Status",
         labels: "Labels",
@@ -2319,6 +2322,11 @@ export const en = {
       assistantNickname: {
         label: "Assistant nickname",
         description: "Name shown in conversations. Leave empty to use Dog.",
+      },
+      assistantIcon: {
+        label: "Assistant icon",
+        description: "Icon shown beside the nickname in conversations. Saved on this device.",
+        initial: "Nickname initial (default)",
       },
       hideReasoning: {
         label: "Hide reasoning",

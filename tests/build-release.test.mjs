@@ -88,7 +88,7 @@ test('desktop packaging starts before a pending APK completes and dependencies r
         if (name === 'windows') finishAndroid();
     });
     await build;
-    assert.deepEqual(calls, ['dependencies', 'android', 'web', 'desktop-main', 'linux', 'windows']);
+    assert.deepEqual(calls, ['dependencies', 'android', 'desktop-dependencies', 'web', 'desktop-main', 'linux', 'windows']);
 });
 
 // 독립 작업 중 실패해도 이미 시작한 빌드를 남기지 않고 모두 종료 후 실패를 알린다.
@@ -111,6 +111,23 @@ test('release scheduling never overlaps Android with both desktop packagers', as
 });
 
 // 독립 작업 중 실패해도 이미 시작한 빌드를 남기지 않고 모두 종료 후 실패를 알린다.
+test('Windows uses the free Android slot without waiting for an independent Linux package', async () => {
+    let finishAndroid, finishLinux;
+    const android = new Promise(resolve => { finishAndroid = resolve; });
+    const linux = new Promise(resolve => { finishLinux = resolve; });
+    const calls = [];
+    await runReleaseBuild(async name => {
+        calls.push(name);
+        if (name === 'android') await android;
+        if (name === 'linux') { finishAndroid(); await linux; }
+        if (name === 'windows') {
+            assert.ok(calls.includes('linux'));
+            finishLinux();
+        }
+    });
+    assert.equal(calls.filter(name => name === 'dependencies').length, 1);
+});
+
 test('failed builds drain their siblings and never start dependent stages', async () => {
     let androidCompleted = false;
     const calls = [];
@@ -123,7 +140,7 @@ test('failed builds drain their siblings and never start dependent stages', asyn
         }
     }), /web failed/);
     assert.equal(androidCompleted, true);
-    assert.deepEqual(calls, ['dependencies', 'android', 'web']);
+    assert.deepEqual(calls, ['dependencies', 'android', 'desktop-dependencies', 'web']);
     await assert.rejects(runReleaseBuild(async () => { throw new Error('deps failed'); }), /deps failed/);
 });
 

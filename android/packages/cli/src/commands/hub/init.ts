@@ -717,7 +717,9 @@ async function withSpinner<T>(
 
 async function requiredText(
   environment: HubGuidedSetupEnvironment,
-  options: Parameters<typeof text>[0],
+  options: Omit<Parameters<typeof text>[0], "validate"> & {
+    validate?: Extract<Parameters<typeof text>[0]["validate"], (value: string) => unknown>;
+  },
 ): Promise<string> {
   const request = {
     ...options,

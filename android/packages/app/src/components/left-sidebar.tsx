@@ -56,7 +56,11 @@ import { usePanelStore } from "@/stores/panel-store";
 import { useOwnsWindowChromeCorner, WindowChromeSafeArea } from "@/utils/desktop-window";
 import { useCloseAgentListGesture } from "@/mobile-panels/gestures";
 import { MobilePanelOverlay } from "@/mobile-panels/presentation";
-import { buildSettingsAddHostRoute, buildSettingsRoute } from "@/utils/host-routes";
+import {
+  buildHostRootRoute,
+  buildSettingsAddHostRoute,
+  buildSettingsRoute,
+} from "@/utils/host-routes";
 import { openHostOverview } from "@/navigation/settings-navigation";
 import {
   UsageSidebarItem,
@@ -345,22 +349,22 @@ function SidebarHostPicker({
   onOpenHostSettings: (serverId: string) => void;
 }) {
   const hosts = useHosts();
+  const hostFilters = useSidebarViewStore((state) => state.hostFilters);
+  const selectedHost = hostFilters.length === 1 ? hostFilters[0] : "";
   const triggerRef = useRef<View | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleSelect = useCallback(
-    (id: string) => {
-      onOpenHostSettings(id);
-    },
-    [onOpenHostSettings],
-  );
+  const handleSelect = useCallback((id: string) => {
+    useSidebarViewStore.getState().selectHost(id);
+    router.replace(buildHostRootRoute(id));
+  }, []);
 
   const handleOpen = useCallback(() => setIsOpen(true), []);
 
   return (
     <HostPicker
       hosts={hosts}
-      value=""
+      value={selectedHost}
       onSelect={handleSelect}
       open={isOpen}
       onOpenChange={setIsOpen}
@@ -846,8 +850,9 @@ function DesktopSidebar({
 }
 
 function WorkspacesSectionHeader() {
+  const isCompact = useIsCompactFormFactor();
   return (
-    <View style={styles.workspacesSectionHeader}>
+    <View style={styles.workspacesSectionHeader(isCompact)}>
       <Text style={styles.workspacesSectionTitle}>Workspaces</Text>
       <View style={styles.workspacesSectionActions}>
         <SidebarWorkspaceFolderCreateButton />
@@ -893,7 +898,7 @@ const styles = StyleSheet.create((theme) => ({
   sidebarHeaderGroupBelowChrome: {
     paddingTop: 0,
   },
-  workspacesSectionHeader: {
+  workspacesSectionHeader: (isCompact: boolean) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -902,10 +907,11 @@ const styles = StyleSheet.create((theme) => ({
     // lands at spacing[2] left to align with project icons. Settings2's painted path stops
     // inside its 14px SVG, so 4px aligns the ink rather than the SVG box to the row rail.
     paddingLeft: theme.spacing[2],
-    paddingRight: 4,
+    // Reserve the floating close button's width, right margin and hitSlop on mobile.
+    paddingRight: isCompact ? theme.spacing[2] + 1.5 + 32 + 8 : 4,
     paddingTop: theme.spacing[1],
     paddingBottom: theme.spacing[1],
-  },
+  }),
   workspacesSectionTitle: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,

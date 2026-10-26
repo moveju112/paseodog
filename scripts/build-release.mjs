@@ -18,20 +18,26 @@ async function settleBuilds(builds) {
 // 공통 의존성은 한 번만 빌드하고 웹이 준비되는 즉시 PC 패키징을 시작한다.
 export async function runReleaseBuild(run) {
     await run('dependencies');
+    const android = run('android');
     await settleBuilds([
-        run('android'),
+        android,
         (async () => {
+            await run('desktop-dependencies');
             await run('web');
             await run('desktop-main');
-            // APK와 PC 두 플랫폼을 한꺼번에 실행하면 메모리 압박으로 Gradle이 종료될 수 있다.
-            await run('linux');
-            await run('windows');
+            const linux = run('linux');
+            // APK 또는 Linux가 끝나 빈 자리가 생기면 Windows를 시작한다. 최대 두 작업은 유지한다.
+            const windows = (async () => {
+                await Promise.race([android, linux]);
+                await run('windows');
+            })();
+            await settleBuilds([linux, windows]);
         })(),
     ]);
 }
 
 // 고유 산출물 폴더와 재사용 캐시를 분리하고 플랫폼별 Metro 임시 경로를 고정한다.
-export async function buildRelease({ workspace, cacheRoot, signingInit, versionCode, version, metroWorkers }) {
+export async function buildRelease({ workspace, cacheRoot, signingInit, versionCode, version, metroWorkers, checkpoint }) {
     for (const value of [workspace, cacheRoot, signingInit]) {
         if (!value || !isAbsolute(value)) throw new Error('workspace, cache-root and signing-init must be absolute');
     }
@@ -39,7 +45,7 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
         throw new Error('Explicit release version and positive version-code are required');
     }
     if (resolve(workspace) === resolve(cacheRoot)) throw new Error('Workspace must differ from cache-root');
-    if (metroWorkers !== undefined && !/^[1-9]\d*$/.test(metroWorkers)) {
+    if (metroWorkers !== undefined && !/^[1-9]\d*$/.test(String(metroWorkers))) {
         throw new Error('metro-workers must be a positive integer');
     }
     if (Number(versionCode) !== release.versionCode || version !== `${release.version}.${release.versionCode}`)
@@ -51,27 +57,31 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
     const builder = ['npx', 'electron-builder', '--config', 'electron-builder.cjs',
         `-c.directories.output=${output}`, `-c.extraMetadata.version=${version}`, '--publish', 'never'];
     const commands = {
-        dependencies: [androidRoot, ['npm', 'run', 'build:desktop-deps']],
+        dependencies: [androidRoot, ['npm', 'run', 'build:release-app-deps']],
+        'desktop-dependencies': [androidRoot, ['npm', 'run', 'build:desktop-runtime-deps']],
         android: [join(androidRoot, 'packages/app/android'), ['./gradlew', '--init-script', signingInit,
-            'assembleRelease', `-PpaseodogVersionCode=${versionCode}`, `-PpaseodogVersionName=${version}`]],
+            'assembleRelease', '--profile', `-PpaseodogVersionCode=${versionCode}`, `-PpaseodogVersionName=${version}`]],
         web: [join(androidRoot, 'packages/app'), ['npx', 'expo', 'export', '--platform', 'web',
             ...(metroWorkers ? ['--max-workers', metroWorkers] : [])]],
         'desktop-main': [desktopRoot, ['npm', 'run', 'build:main']],
         linux: [desktopRoot, [...builder, '--linux', 'deb', 'AppImage']],
         windows: [desktopRoot, [...builder, '--win', 'nsis', '--x64']],
     };
-    await runReleaseBuild(async name => {
+    const execute = async name => {
         const temporary = join(cacheRoot, name);
         await mkdir(temporary, { recursive: true });
         const [cwd, command] = commands[name];
         const start = performance.now();
-        const log = createWriteStream(join(workspace, `${name}.log`), { flags: 'wx' });
+        const log = createWriteStream(join(workspace, `${name}.log`), { flags: checkpoint ? 'a' : 'wx' });
         console.log(`${new Date().toISOString()} ${name}: start`);
         await new Promise((resolveRun, reject) => {
             const child = spawn('systemd-run', ['--user', '--scope', '-q',
                 '-p', 'MemoryHigh=16G', '-p', 'MemorySwapMax=2G', ...command], {
                 cwd,
                 env: { ...process.env, TMPDIR: temporary, CI: '1',
+                    PASEODOG_BUILD_CACHE_ROOT: cacheRoot,
+                    PASEODOG_RELEASE_METRICS: join(workspace, `${name}-metrics.jsonl`),
+                    ...(name === 'windows' ? { ELECTRON_BUILDER_COMPRESSION_LEVEL: '1' } : {}),
                     ...(metroWorkers ? { PASEODOG_METRO_WORKERS: metroWorkers } : {}),
                     APP_VARIANT: 'production', PASEO_WEB_PLATFORM: name === 'web' ? 'electron' : '' },
                 stdio: ['ignore', 'pipe', 'pipe'],
@@ -92,7 +102,24 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
             await copyFile(join(cwd, 'app/build/outputs/apk/release/app-arm64-v8a-release.apk'),
                 join(workspace, `PaseoDog-${version}-arm64-v8a.apk`));
         }
-    });
+    };
+    const artifacts = {
+        dependencies: ['packages/highlight/dist', 'packages/client/dist', 'packages/protocol/dist',
+            'packages/relay/dist', 'packages/plugin/dist', 'packages/expo-two-way-audio/build']
+            .map(path => join(androidRoot, path)),
+        'desktop-dependencies': ['packages/server/dist', 'packages/cli/dist']
+            .map(path => join(androidRoot, path)),
+        android: [join(workspace, `PaseoDog-${version}-arm64-v8a.apk`)],
+        web: [join(androidRoot, 'packages/app/dist')],
+        'desktop-main': [join(desktopRoot, 'dist')],
+        linux: [join(output, `PaseoDog-${version}-amd64.deb`), join(output, `PaseoDog-${version}-x86_64.AppImage`),
+            join(output, 'latest-linux.yml')],
+        windows: [join(output, `PaseoDog-Setup-${version}-x64.exe`),
+            join(output, `PaseoDog-Setup-${version}-x64.exe.blockmap`), join(output, 'latest.yml')],
+    };
+    await runReleaseBuild(name => checkpoint
+        ? checkpoint(`build-${name}`, () => execute(name), { artifacts: artifacts[name] })
+        : execute(name));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

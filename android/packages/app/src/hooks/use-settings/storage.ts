@@ -29,9 +29,13 @@ import {
 import { z } from "zod";
 import { APP_SETTINGS_KEY, LEGACY_SETTINGS_KEY } from "./keys";
 import { migrateAppSettings } from "./migrations";
+import { ASSISTANT_ICONS, type AssistantIcon } from "./assistant-icons";
+import { normalizeAssistantPhoto } from "./assistant-photo";
 
 export { APP_SETTINGS_KEY } from "./keys";
 export const APP_SETTINGS_QUERY_KEY = ["app-settings"];
+export const APP_SETTINGS_SAVE_ERROR_KEY = ["app-settings-save-error"];
+const pendingSaves = new WeakMap<QueryClient, Promise<void>>();
 
 export type SendBehavior = ActiveTurnBehavior | "queue";
 export type ReleaseChannel = "stable" | "beta";
@@ -109,6 +113,8 @@ export interface AppSettings {
   hideReasoning: boolean;
   /** 대화에 표시할 도우미 닉네임 (비어 있으면 Dog). */
   assistantNickname: string;
+  assistantIcon: AssistantIcon;
+  assistantPhoto: string;
   toolCallDetailLevel: ToolCallDetailLevel;
   chatOutlineEnabled: boolean;
   /** Show the git diff summary button (+added -removed) above the composer. */
@@ -173,6 +179,8 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   autoExpandReasoning: false,
   hideReasoning: false,
   assistantNickname: "Dog",
+  assistantIcon: "",
+  assistantPhoto: "",
   toolCallDetailLevel: "detailed",
   chatOutlineEnabled: true,
   showGitDiffSummary: true,
@@ -273,6 +281,8 @@ const StoredAppSettingsSchema = z
     autoExpandReasoning: z.boolean().catch(false),
     hideReasoning: z.boolean().catch(false),
     assistantNickname: z.string().trim().min(1).catch("Dog"),
+    assistantIcon: z.enum(ASSISTANT_ICONS).catch(""),
+    assistantPhoto: z.string().transform(normalizeAssistantPhoto).catch(""),
     toolCallDetailLevel: z
       .enum(["overview", "detailed", "hidden"])
       .or(z.literal("concise").transform(() => "overview" as const))
@@ -376,24 +386,43 @@ export interface SettingsDeps {
   desktop: DesktopSettingsBridge;
 }
 
-export async function saveAppSettings(input: {
+export function saveAppSettings(input: {
   queryClient: QueryClient;
   updates: AppSettingsUpdate;
   deps: SettingsDeps;
 }): Promise<void> {
-  const storedCurrent =
-    input.queryClient.getQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY) ??
-    (await loadAppSettingsFromStorage(input.deps));
-  const current = normalizeAppSettings(storedCurrent);
-  const updates = typeof input.updates === "function" ? input.updates(current) : input.updates;
-  const next = { ...current, ...updates };
-  input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
-  await writeAppSettings(
-    input.deps.storage,
-    (await readSettingsObject(input.deps.storage, APP_SETTINGS_KEY)) ??
-      StoredAppSettingsSchema.parse({}),
-    next,
+  // 저장을 직렬화하고 성공값만 공개한다. 실패한 변경이 다음 저장에 섞이거나 화면에 남지 않는다.
+  const save = async () => {
+    try {
+      const storedCurrent =
+        input.queryClient.getQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY) ??
+        (await loadAppSettingsFromStorage(input.deps));
+      const current = normalizeAppSettings(storedCurrent);
+      const updates = typeof input.updates === "function" ? input.updates(current) : input.updates;
+      const next = normalizeAppSettings({ ...current, ...updates });
+      await writeAppSettings(
+        input.deps.storage,
+        (await readSettingsObject(input.deps.storage, APP_SETTINGS_KEY)) ??
+          StoredAppSettingsSchema.parse({}),
+        next,
+      );
+      input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
+      input.queryClient.setQueryData(APP_SETTINGS_SAVE_ERROR_KEY, null);
+    } catch (error) {
+      input.queryClient.setQueryData(
+        APP_SETTINGS_SAVE_ERROR_KEY,
+        "설정을 저장하지 못했어요. 이전 설정을 유지했어요. 저장 공간·권한을 확인하고 다시 변경해 주세요.",
+      );
+      throw error;
+    }
+  };
+  const pending = pendingSaves.get(input.queryClient) ?? Promise.resolve();
+  const result = pending.then(save);
+  pendingSaves.set(
+    input.queryClient,
+    result.catch(() => {}),
   );
+  return result;
 }
 
 export async function loadAppSettingsFromStorage(deps: SettingsDeps): Promise<AppSettings> {

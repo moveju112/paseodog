@@ -2,6 +2,7 @@ import { processEngineFactory } from './process-engine.mjs';
 import { createJsonLineDecoder, encodeFrame } from './json-lines.mjs';
 import { deadline, engineEnvironment } from './util.mjs';
 import { createQuotaRefreshPolicy } from './quota-refresh.mjs';
+import { readTurnMinutes, writeTurnMinutes } from './turn-duration.mjs';
 
 // 상주형 제어 프로세스와 통신하는 경량 JSONL 클라이언트를 생성한다.
 function createControlDaemon({ launch, spawnProcess, terminateProcess }) {
@@ -198,16 +199,22 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
         read(request = {}) {
             const run = queue.then(async () => {
                 if (!launch) throw new Error('PaseoDog 공급자를 새로고침한 뒤 다시 열어주세요.');
-                return await invokeControls(request);
+                if (request.action === 'turnDuration') {
+                    writeTurnMinutes(launch.env, request.maxTurnMinutes);
+                    request = { action: 'read' };
+                }
+                const snapshot = await invokeControls(request);
+                if (request.action === 'messagePolicy') return snapshot;
+                return { ...snapshot, maxTurnMinutes: readTurnMinutes(launch.env) };
             });
             queue = run.catch(() => {});
             return run;
         },
         // 설정 스냅샷 캐시를 건드리지 않고 Mixdog의 사용량 캐시·갱신 경로를 호출한다.
-        usage() {
+        usage(provider = 'anthropic-oauth') {
             const run = queue.then(async () => {
                 if (!launch) throw new Error('PaseoDog 공급자를 새로고침한 뒤 다시 열어주세요.');
-                return await invokeControls({ action: 'usage' });
+                return await invokeControls({ action: 'usage', provider });
             });
             queue = run.catch(() => {});
             return run;

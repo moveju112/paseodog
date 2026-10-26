@@ -147,6 +147,8 @@ export const ko: TranslationResources = {
       cancelingAgent: "에이전트 취소 중",
       stopAgent: "에이전트 중지",
       interrupt: "중단",
+      confirmTitle: "에이전트를 중단할까?",
+      confirmMessage: "실행 중인 작업이 중단돼. 입력 중인 내용은 그대로 유지돼.",
     },
     voice: {
       enableVoiceMode: "음성 모드 켜기",
@@ -1179,6 +1181,7 @@ export const ko: TranslationResources = {
       heading: "표시",
       grouping: {
         label: "그룹화",
+        single: "단일 워크스페이스",
         project: "프로젝트",
         status: "상태",
         labels: "레이블",
@@ -2206,6 +2209,11 @@ export const ko: TranslationResources = {
       assistantNickname: {
         label: "도우미 닉네임",
         description: "대화에 표시할 이름입니다. 비워 두면 Dog를 사용합니다.",
+      },
+      assistantIcon: {
+        label: "도우미 아이콘",
+        description: "대화의 닉네임 옆에 표시할 아이콘입니다. 이 기기에 저장됩니다.",
+        initial: "닉네임 첫 글자 (기본)",
       },
       hideReasoning: {
         label: "추론 숨기기",

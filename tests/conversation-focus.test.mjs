@@ -4,8 +4,10 @@ import { readFileSync } from 'node:fs';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { Script } from 'node:vm';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { CONVERSATION_FOCUS_EDITS, withConversationFocus, withoutConversationFocus } from '../patches/paseo-conversation-focus.mjs';
 import { WORK_RECORD_EDITS } from '../patches/paseo-work-records.mjs';
+import { withoutAssistantIcon } from '../patches/paseo-assistant-icon.mjs';
 
 test('the injected web renderer retains its disconnect check without module closures', () => {
     const code = WORK_RECORD_EDITS.find(([before]) => before.startsWith('function ae('))[1];
@@ -25,12 +27,15 @@ test('the injected web renderer retains its disconnect check without module clos
 
 test('focus web patch is reversible, idempotent, exact-blob gated and rejects partial application', () => {
     const source = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const patched = patchedComposerSource(source);
+    const patched = composerFixture(source);
     new Script(patched);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.equal(withConversationFocus(withoutConversationFocus(patched)), patched);
     const [before, after] = CONVERSATION_FOCUS_EDITS[0];
-    assert.throws(() => patchedComposerSource(patched.replace(after, before)), /Partial/);
+    const nicknameOnly = withoutAssistantIcon(patched);
+    const partial = nicknameOnly.replace(after, before);
+    assert.notEqual(partial, nicknameOnly);
+    assert.throws(() => patchedComposerSource(partial), /Partial/);
     assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
 });
 
@@ -42,10 +47,12 @@ test('assistant heading updates its nickname without replacing Markdown content'
     const createRenderer = new Function(code + '\nreturn createWorkRecordRenderer;')();
     let nickname = 'Dog';
     const render = createRenderer({
-        React, View: 'view', Text: 'text', Pressable: 'pressable',
+        React, View: 'view', Text: 'text', Image: 'image', Pressable: 'pressable',
         StyleSheet: { create: () => ({}) },
         useTranslation: () => ({ i18n: { language: 'ko' } }),
         useAssistantNickname: () => nickname,
+        useAssistantIcon: () => '',
+        useAssistantPhoto: () => '',
         getClient: () => null,
     });
     const row = { item: { kind: 'assistant_message', answerStart: true, text: '**본문**' } };

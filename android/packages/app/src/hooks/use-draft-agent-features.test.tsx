@@ -47,7 +47,7 @@ afterEach(cleanup);
 describe("draft Auto creation configuration", () => {
     it.each([true, false])("submits confirmed Main Auto=%s separately from remembered Low", async (autoEffort) => {
         host.client.invokePluginRpc.mockResolvedValue({
-            route: { autoEffort }, toolModules: { autoEffort: { enabled: true, supported: true } },
+            route: { autoEffort, model: "model" }, toolModules: { autoEffort: { enabled: true, supported: true } },
         });
         const { result } = renderHook(() => useDraftAgentFeatures({
             serverId: "host", provider: "paseodog", cwd: "/work", modeId: "ask",
@@ -75,7 +75,7 @@ describe("draft Auto creation configuration", () => {
         let resolve!: (value: unknown) => void;
         host.client.invokePluginRpc.mockImplementation(async (_plugin, _method, command) => {
             if (command.action === "main") return new Promise((accept) => { resolve = accept; });
-            return { route: { autoEffort: true }, toolModules: { autoEffort: { enabled: true } } };
+            return { route: { autoEffort: true, model: "model" }, toolModules: { autoEffort: { enabled: true } } };
         });
         const select = vi.fn();
         const { result } = renderHook(() => ({
@@ -94,7 +94,7 @@ describe("draft Auto creation configuration", () => {
         expect(select).not.toHaveBeenCalled();
         expect(result.current.draft.featureValues?.autoEffort).toBe(true);
         await act(async () => resolve({
-            route: { autoEffort: false }, toolModules: { autoEffort: { enabled: true } },
+            route: { autoEffort: false, model: "model" }, toolModules: { autoEffort: { enabled: true } },
         }));
         expect(select).toHaveBeenCalledExactlyOnceWith("low");
         expect(result.current.draft.featureValues?.autoEffort).toBe(false);

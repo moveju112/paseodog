@@ -1,42 +1,47 @@
-# Task: build and release
+# Release execution contract
 
-Read Git-ignored `config/rules.local.md` for default targets (S25 arm64-v8a APK + Linux .deb) and signing-key location. Release from the pushed commit.
+Only for an explicit build/release request. Read ignored `config/rules.local.md` for machine/cache/signing settings. Use a clean dedicated source checkout/worktree, not a tree another session is editing. Source checkout and output workspace are distinct.
 
-## Required Cloudflare Pages delivery
+## Prepare and start once
 
-Every requested build/release also includes the following web delivery after GitHub publication, without a separate approval loop. `npm run build:release` alone does not deploy Pages; the operator must complete these steps before reporting delivery complete.
+1. Finish approved code edits before release. For a new build from already-pushed source, add `--next-version --start` to the preparer: it selects a code above source/installed/recent published and draft releases, updates release metadata/changelog/hashes, commits only those three files and pushes without force or retry. A dirty tree, Git failure or uncertain prior delivery stops preparation; preserve its state for inspection. It then verifies and builds the new exact commit. Without `--next-version`, prepare explicit version metadata before verification. Do not change the prebuild fallback offset. Reuse the dedicated prepared source worktree; do not copy dependencies or native build directories for each release.
+2. Use `npm run deliver:prepare -- --config <absolute-host-profile.json> --commit <exact-pushed-commit> --start`. The profile extends the configuration below with `sourceRoot`, `previousWorkspace` for first adoption, and optional `androidHome`/`wineBin`. `--adopt` registers an existing dedicated worktree once, after checking its previous delivery is inactive. The preparer refuses dirty/foreign/active worktrees, fast-forwards only, and prebuilds only for changed native configuration. It never copies dependencies or installs/upgrades packages; missing setup is a blocker.
+3. Run affected-path lint and necessary package checks not covered by the executor. For implementation before commit, use `npm run deliver:release -- --config <absolute-config.json> --verify-only`, then commit/push the same source bytes. For already-pushed release work, let the prepared-source service do verification; do not also run it manually.
+4. The preparer starts the independent user-systemd delivery service. The lower-level `deliver:release -- --config <absolute-config.json> --start` remains available when the dedicated source is already prepared. Do not invoke both paths for one request.
+5. Keep ownership until the requested verification, publication and PC/runtime application are confirmed. Inspect the service outcome and perform authorized recovery; starting an independent service is not completion.
 
-1. From the same pushed commit, export a separate browser bundle: `node scripts/build-web.mjs --hosting cloudflare --output <absolute-release-workspace>/web-cloudflare --metro-workers <local-rule-count>`. Follow section B's resource/cache rules. Do not upload the Electron bundle or the default GitHub Pages export.
-2. From `android/packages/app`, run `npx --no-install wrangler pages deploy <absolute-release-workspace>/web-cloudflare --project-name paseodog --branch main` using the existing Cloudflare login. This updates the existing `paseodog` Pages project serving `https://paseodog.choondoggy.com/`; no DNS change is needed for routine updates.
-3. Verify the production deployment succeeds, then check HTTPS access, the address/password connection UI, and a deep-link refresh at `https://paseodog.choondoggy.com/` in a real browser. Do not run billable inference for this check. Report Pages deployment separately from artifact publication and PC apply; authentication, deployment or browser-check failures leave web delivery incomplete.
+## Exceptions only
 
-## A. Version
+- Do not manually replay successful verification, build, upload, publication or apply stages. Do not ask for approval again within the existing scope; new credentials, force-kill and destructive recovery remain separate boundaries.
+- Use `--status` and the failed stage's log, not repeated polling, repository surveys or full-log rereads. Reuse passing checks only while their inputs match.
+- Inspect service/checkpoint state before resuming a stopped delivery. `--unlock-stopped` rejects live owners. An uncertain mutation requires remote/runtime reconciliation and authorization covering the exact retry before `--execute --retry-stage <name>`.
+- If source must change, create the next verified commit/workspace; retain old checkpoints/artifacts. Do not copy receipts to force a cache hit.
+- Do not hand-assemble an alternative delivery pipeline when the executor fails. Fix its demonstrated defect within authorization or report the blocker. An explicitly requested partial build uses the appropriate existing build script without publication.
 
-1. versionCode = latest release `paseodog-android-update.json` `versionCode` + 1 (also above `dpkg -s paseodog`). Pass it as `-PpaseodogVersionCode=<vc>`; do not edit the `app.config.js` offset (prebuild fallback only).
-   `evidence: android/packages/app/plugins/with-android-version-code.js:16`
-2. Write user-facing changes in the current version section of `CHANGELOG.md`.
+Keep the JSON configuration in the unique release workspace, never in Git:
 
-## B. Build (resource limits)
+```json
+{
+  "workspace": "/data/tmp/ubuntu/paseodog-release-<unique>",
+  "cacheRoot": "<absolute reusable cache from local rules>",
+  "signingInit": "<absolute approved signing init>",
+  "signingKey": "<absolute existing key>",
+  "previousApk": "<absolute previously published signed APK>",
+  "androidTools": "<absolute SDK build-tools version directory>",
+  "metroWorkers": "2",
+  "appTests": ["src/<affected behavior>.test.ts"],
+  "repo": "moveju112/paseodog",
+  "pagesProject": "paseodog",
+  "webUrl": "https://paseodog.choondoggy.com/"
+}
+```
 
-3. Temp workspace: `mktemp -d /data/tmp/ubuntu/paseodog-release-XXXXXX` (systemd-tmpfiles 3-day TTL).
-4. Use `npm run build:release -- --workspace <unique-output> --cache-root <reusable-cache> --signing-init <absolute-init-script> --version-code <vc> --version <제품 버전>.<vc>` with `ANDROID_HOME` from local rules. This builds shared dependencies once and starts PC packaging as soon as web export finishes, without waiting for APK. Each stage has its own `systemd-run --user --scope -p MemoryHigh=16G -p MemorySwapMax=2G`. Keep default Gradle workers; use `--metro-workers <measured-count>` from local rules when default Metro concurrency causes memory pressure (applies equally to Android/web). Allocate the cache root once with `mktemp -d /data/tmp/ubuntu/paseodog-build-cache-XXXXXX`, record its path ONLY in `config/rules.local.md`, and reuse it across releases (existing 3-day inactivity cleanup). Never put Metro caches under a new per-release output directory; Android/web use distinct persistent `TMPDIR`s. `PASEODOG_RESET_METRO_CACHE=1` explicitly restores Android cache reset for troubleshooting. The desktop entry point is `electron-builder.cjs`, which combines the common YAML filters with each platform's exclusions without creating a second unrestricted copy pass.
-5. APK: run `CI=1 APP_VARIANT=production npx expo prebuild --platform android --no-install` in `android/packages/app` ONLY when `app.config.js`, `plugins/`, `modules/*/app.plugin*` or native dependencies changed (prebuild invalidates native build caches); otherwise reuse the generated project. Then in `android/packages/app/android/`, with the signing init script, `./gradlew assembleRelease -PpaseodogVersionCode=<vc> -PpaseodogVersionName=<제품 버전>.<vc>`.
-   The runner overlaps APK with web export and then one desktop packager. Linux and Windows packaging run sequentially: three simultaneous heavyweight builds caused a measured `systemd-oomd` kill. Do not start a third heavyweight stage to fill the APK's remaining time.
-6. Confirm the signing key file matches the init script's `signingConfigs.debug.storeFile`. If the key is missing, stop and report; NEVER create a new key. Per APK: `zipalign`, `apksigner verify`, package ID, version, ABI.
-7. .deb: after step 4's deps build, `cd android/packages/app && CI=1 PASEO_WEB_PLATFORM=electron npx expo export --platform web && cd ../.. && npm run build:package --workspace=@getpaseo/desktop -- --linux deb AppImage -c.extraMetadata.version=<제품 버전>.<versionCode>` (same as `npm run build:desktop` minus deps; one invocation so `latest-linux.yml` lists both the .deb and the AppImage; tar.gz is skipped). Windows: `--win nsis --x64` with the same version (installer only, no zip). If the change touches only Android-native files (`android/packages/app/plugins/`, `modules/*/android/`, Android-only config), skip the Linux build and re-upload the previous latest release's `.deb` + `latest-linux.yml` unchanged.
-   `evidence: android/package.json:96`
-8. If source changes after a build, rebuild only affected artifacts.
+## Executor boundary and completion
 
-## C. Publish
-
-9. One release version everywhere: `<ver>` = `<제품 버전>.<versionCode>` (e.g. `1.0.0-rc.7.11052`). Copy the APK as `PaseoDog-<ver>-arm64-v8a.apk`, then update JSON: `python3 scripts/android-update-manifest.py --version-code <vc> --version-name <ver> --tag v<ver> --target-abi arm64-v8a --output paseodog-android-update.json <apk>`.
-    `evidence: scripts/android-update-manifest.py:59`
-10. Tag `v<ver>` (check duplicates), title `PaseoDog <ver>`. Upload to ONE draft release: APK, `paseodog-android-update.json`, .deb, AppImage, `latest-linux.yml`, Windows `.exe` + `.exe.blockmap` + `latest.yml`, and `SHA256SUMS`. The phone reads `releases/latest/download/paseodog-android-update.json` and the desktop updater reads `releases/latest`, so the tag name itself is free.
-    `evidence: android/packages/desktop/electron-builder.yml:48`
-11. Compare remote asset names and byte sizes with local (no re-download), then publish and mark latest.
-    `evidence: android/packages/app/src/components/paseodog-update-row.tsx:44`
-
-## D. PC apply and wrap-up
-
-12. Install the same .deb on this PC with `sudo dpkg -i`, relaunch the app, and reload plugin / restart daemon as needed — [RUNTIME_DAEMON.md](../RUNTIME_DAEMON.md) "How to apply".
-13. Commit title in Korean: `<변경 요약> 및 <vc> 릴리즈`.
+- `appTests` must name real relevant tests. Before expensive checks, preflight validates signing paths, installed lock versions and actual agent-message patch inputs. Successful syntax/root/plugin/app checks are saved independently under `cacheRoot/verification-v2`, including timings; failure in one check does not discard successes in the others. Root tests also retain successful file receipts under the same immutable input key; a retry reruns only failed files, with at most four workers.
+- Reuse is input-bound: root checks conservatively include the whole source and installed lock/composer/message inputs; plugin types include plugin/engine/root package inputs; app checks include Android/shared plugin/root package inputs. The app-test list invalidates only that check. Node/options/platform/architecture and `verificationEpoch` are part of every key. Changing dependencies outside pinned lockfiles requires increasing the host profile's `verificationEpoch`; never alter receipts manually.
+- Keep the existing cache layout and worker limits, at most two heavyweight build tasks. Do not add another packager to fill apparent idle time.
+- Existing-key continuity, artifact hashes/version/ABI, GitHub assets, browser/deep-link checks and dedicated runtime readiness remain delivery requirements. Missing credentials, unsupported signing and failed checks must be explicit.
+- Dedicated PC/runtime apply waits for idle. Graceful shutdown, ownership verification and failure recovery remain required.
+- Report executor-observed source commit, artifacts/signature status, publication, Pages and installed/running versions separately. Do not claim the runner guarantees anything beyond its observed checks.
+- Acceptance target: at most 300 seconds from the user's build request through artifacts, publication, web and server apply. Include preparation, verification, queue/idle waits and retries; never redefine this as time to start building. Report overruns as unmet, not success. The operational goal is one delivery start with no AI intervention on successful stages; a sample or warm verification is not full-delivery evidence.

@@ -3,6 +3,7 @@ import { QueryClient } from "@tanstack/react-query";
 import {
   APP_SETTINGS_KEY,
   APP_SETTINGS_QUERY_KEY,
+  APP_SETTINGS_SAVE_ERROR_KEY,
   DEFAULT_APP_SETTINGS,
   DEFAULT_CLIENT_SETTINGS,
   DEFAULT_CODE_FONT_SIZE,
@@ -43,6 +44,78 @@ function makeDeps(
 }
 
 describe("loadAppSettingsFromStorage", () => {
+  it("persists and removes a local assistant photo without changing the nickname or icon", async () => {
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+    const photo = "data:image/jpeg;base64,/9j/2Q==";
+    await saveAppSettings({
+      queryClient,
+      deps,
+      updates: { assistantNickname: "Doggy", assistantIcon: "🐶", assistantPhoto: photo },
+    });
+    const restored = await loadAppSettingsFromStorage(deps);
+    expect(restored.assistantPhoto).toBe(photo);
+    expect(restored.assistantNickname).toBe("Doggy");
+    expect(restored.assistantIcon).toBe("🐶");
+    await saveAppSettings({ queryClient, deps, updates: { assistantPhoto: "" } });
+    const cleared = await loadAppSettingsFromStorage(deps);
+    expect(cleared.assistantPhoto).toBe("");
+    expect(cleared.assistantIcon).toBe("🐶");
+    expect(cleared.assistantNickname).toBe("Doggy");
+  });
+
+  it("rejects external, executable, oversized and malformed profile images without losing valid settings", async () => {
+    for (const assistantPhoto of [
+      undefined,
+      null,
+      7,
+      {},
+      [],
+      "https://example.com/photo.jpg",
+      "file:///private/photo.jpg",
+      "data:image/svg+xml;base64,PHN2Zz4=",
+      "data:image/png;base64,AAAA",
+      "data:image/jpeg;base64,/9j/!",
+      "data:image/jpeg;base64,/9j/" + "A".repeat(128 * 1024),
+    ]) {
+      const deps = makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({
+            assistantPhoto,
+            assistantNickname: "Doggy",
+            assistantIcon: "🤖",
+          }),
+        }),
+      });
+      const settings = await loadAppSettingsFromStorage(deps);
+      expect(settings.assistantPhoto).toBe("");
+      expect(settings.assistantNickname).toBe("Doggy");
+      expect(settings.assistantIcon).toBe("🤖");
+    }
+  });
+
+  it("keeps the initial avatar by default and persists a selected assistant icon", async () => {
+    for (const value of [undefined, null, "unknown", 7, {}, ["🐶"]]) {
+      const deps = makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({ assistantIcon: value }),
+        }),
+      });
+      expect((await loadAppSettingsFromStorage(deps)).assistantIcon).toBe("");
+    }
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+    await saveAppSettings({
+      queryClient,
+      updates: { assistantNickname: "Mixy", assistantIcon: "🤖" },
+      deps,
+    });
+    expect((await loadAppSettingsFromStorage(deps)).assistantIcon).toBe("🤖");
+    expect((await loadAppSettingsFromStorage(deps)).assistantNickname).toBe("Mixy");
+    await saveAppSettings({ queryClient, updates: { assistantIcon: "" }, deps });
+    expect((await loadAppSettingsFromStorage(deps)).assistantIcon).toBe("");
+    expect((await loadAppSettingsFromStorage(deps)).assistantNickname).toBe("Mixy");
+  });
   // 누락·빈 값·오류는 Dog로, 사용자가 지정한 닉네임은 재시작 후에도 유지한다.
   it("normalizes and persists the assistant nickname", async () => {
     for (const value of [undefined, "", "   ", null, 7, {}, ["Dog"]]) {
@@ -600,6 +673,73 @@ describe("loadAppSettingsFromStorage", () => {
 });
 
 describe("saveAppSettings", () => {
+  it("keeps confirmed settings and an actionable error after a failed diagnostics opt-out", async () => {
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+    await saveAppSettings({ queryClient, updates: { clientErrorReportingEnabled: true }, deps });
+    const setItem = deps.storage.setItem;
+    deps.storage.setItem = async () => {
+      throw new Error("disk full");
+    };
+    await expect(
+      saveAppSettings({
+        queryClient,
+        updates: { clientErrorReportingEnabled: false },
+        deps,
+      }),
+    ).rejects.toThrow("disk full");
+    expect(queryClient.getQueryData(APP_SETTINGS_QUERY_KEY)).toMatchObject({
+      clientErrorReportingEnabled: true,
+    });
+    expect(await loadAppSettingsFromStorage(deps)).toMatchObject({
+      clientErrorReportingEnabled: true,
+    });
+    expect(queryClient.getQueryData(APP_SETTINGS_SAVE_ERROR_KEY)).toContain("저장하지 못했어요");
+    deps.storage.setItem = setItem;
+    await saveAppSettings({ queryClient, updates: { clientErrorReportingEnabled: false }, deps });
+    expect(await loadAppSettingsFromStorage(deps)).toMatchObject({
+      clientErrorReportingEnabled: false,
+    });
+    expect(queryClient.getQueryData(APP_SETTINGS_SAVE_ERROR_KEY)).toBeNull();
+  });
+
+  it("does not publish an unconfirmed value or carry a failed update into the next save", async () => {
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(APP_SETTINGS_QUERY_KEY, DEFAULT_CLIENT_SETTINGS);
+    let rejectWrite: (error: Error) => void = () => {};
+    let started: () => void = () => {};
+    const writing = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const setItem = deps.storage.setItem;
+    deps.storage.setItem = () => {
+      started();
+      return new Promise<void>((_resolve, reject) => {
+        rejectWrite = reject;
+      });
+    };
+    const first = saveAppSettings({
+      queryClient,
+      updates: { clientErrorReportingEnabled: false },
+      deps,
+    });
+    const failed = expect(first).rejects.toThrow("disk full");
+    await writing;
+    expect(queryClient.getQueryData(APP_SETTINGS_QUERY_KEY)).toMatchObject({
+      clientErrorReportingEnabled: true,
+    });
+    const second = saveAppSettings({ queryClient, updates: { hideReasoning: true }, deps });
+    deps.storage.setItem = setItem;
+    rejectWrite(new Error("disk full"));
+    await failed;
+    await second;
+    expect(await loadAppSettingsFromStorage(deps)).toMatchObject({
+      clientErrorReportingEnabled: true,
+      hideReasoning: true,
+    });
+  });
+
   it("applies consecutive functional updates to the latest cached settings", async () => {
     const deps = makeDeps();
     const queryClient = new QueryClient();

@@ -65,6 +65,36 @@ function project(overrides: ProjectOverrides = {}): SidebarProjectEntry {
 }
 
 describe("buildSidebarProjectRowModel", () => {
+  it.each(["git", "directory"] as const)(
+    "opens the only workspace directly in single mode for %s projects",
+    (projectKind) => {
+      const target = workspace({ serverId: "other-host", workspaceId: "only" });
+      const result = buildSidebarProjectRowModel({
+        project: project({ projectKind, workspaces: [target] }),
+        collapsed: true,
+        singleWorkspaceMode: true,
+      });
+      expect(result).toEqual({
+        kind: "workspace",
+        workspace: target,
+        chevron: null,
+        trailingAction: { kind: "none" },
+      });
+    },
+  );
+
+  it("keeps empty and multi-workspace projects as sections in single mode", () => {
+    for (const workspaces of [[], [workspace(), workspace({ workspaceId: "second" })]]) {
+      const result = buildSidebarProjectRowModel({
+        project: project({ workspaces }),
+        collapsed: false,
+        singleWorkspaceMode: true,
+      });
+      expect(result.kind).toBe("project_section");
+      expect(result.trailingAction.kind).toBe("new_workspace");
+    }
+  });
+
   it("renders a non-git single-workspace project as an expandable section", () => {
     const result = buildSidebarProjectRowModel({
       project: project({

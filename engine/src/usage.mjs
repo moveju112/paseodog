@@ -1,21 +1,31 @@
-// Mixdog 대시보드의 공개 할당량만 Paseo 사용량 형식으로 전달한다.
-export async function readClaudeUsage(runtime) {
+const quotaProviders = {
+    'anthropic-oauth': { label: 'Claude', windowPrefix: 'claude' },
+    'openai-oauth': { label: 'Codex', windowPrefix: 'codex' },
+};
+
+// 인증 갱신은 전용 런타임에 맡기고 공개 할당량만 Paseo 형식으로 전달한다.
+export async function readOAuthUsage(runtime, provider = 'anthropic-oauth') {
+    if (!Object.hasOwn(quotaProviders, provider)) throw new Error('Unsupported usage provider');
+    const { label, windowPrefix } = quotaProviders[provider];
     const dashboard = await runtime.getUsageDashboard({
         refresh: true,
         refreshSetup: false,
-        refreshProviders: ['anthropic-oauth'],
+        refreshProviders: [provider],
     });
-    const row = dashboard.rows.find((item) => item.id === 'anthropic-oauth');
-    if (!row?.authenticated) {
-        return { status: 'error', error: 'PaseoDog 설정에서 Claude 계정을 연결해 주세요.' };
+    const row = dashboard.rows.find((item) => item.id === provider);
+    if (!row) {
+        return { status: 'error', error: `PaseoDog에서 ${label} 인증 상태를 확인하지 못했어요. 새로고침으로 다시 확인해 주세요.` };
+    }
+    if (!row.authenticated) {
+        return { status: 'error', error: `PaseoDog 설정에서 ${label} 계정을 연결해 주세요.` };
     }
     if (!row.windows?.length) {
-        return { status: 'error', error: 'PaseoDog에서 Claude 사용량을 가져오지 못했어요.' };
+        return { status: 'error', error: `PaseoDog에서 ${label} 사용량을 가져오지 못했어요. 새로고침으로 다시 확인해 주세요.` };
     }
     return {
         status: 'available',
         windows: row.windows.map((window, index) => ({
-            id: `claude-${index}`,
+            id: `${windowPrefix}-${index}`,
             label: window.label,
             summary: index < 2,
             usedPct: window.usedPct ?? null,
@@ -74,14 +84,19 @@ export async function readUsageMetrics(runtime, request = {}) {
     const efforts = await runtime.getEffortUsageStats?.({
         fromMs: stats.range.fromMs, toMs: stats.range.toMs,
     }) || [];
+    // 요청별 속도의 단순 평균 대신 측정된 출력과 시간을 합산한다.
+    const speedOutput = efforts.reduce((sum, row) => sum + (row.speedOutput || 0), 0);
+    const speedMs = efforts.reduce((sum, row) => sum + (row.speedMs || 0), 0);
     return {
         generatedAt: stats.generatedAt,
         ...(quotaError ? { quotaError } : {}),
         range: { fromMs: stats.range.fromMs, toMs: stats.range.toMs },
-        totals: metricProjection(stats.totals),
+        totals: { ...metricProjection(stats.totals),
+            outputTokensPerSecond: speedMs > 0 ? Math.round(speedOutput * 10000 / speedMs) / 10 : null },
         efforts: efforts.map((row) => ({
             provider: row.provider, model: row.model,
-            agent: row.agent || null, effort: row.effort || null, ...metricProjection(row),
+            agent: row.agent || null, effort: row.effort || null,
+            fast: typeof row.fast === 'boolean' ? row.fast : null, ...metricProjection(row),
         })),
         providers: stats.providers.map((row) => ({
             provider: row.provider, providerKind: row.providerKind, ...metricProjection(row),

@@ -10,22 +10,27 @@ import { createAuthSession } from './auth-session.mjs';
 import { agentMessageSource, agentMessageContent, pendingAgentMessage } from '../../plugin/server/agent-message.mjs';
 import { nativeSessionAction } from './session-actions.mjs';
 import { migrateCompactionBuffer } from './compaction-buffer.mjs';
+import { compactBeforeModelSwitch } from './model-switch.mjs';
 import { turnFailureRecord } from 'mixdog/src/runtime/agent/orchestrator/session/turn-failure.mjs';
 import { RETRY_CONTINUE_INSTRUCTION } from 'mixdog/src/tui/session/quota-resume.mjs';
+import { readSessionWorkspace } from 'mixdog/src/session-runtime/workspace/workspace-state.mjs';
+import { checkoutFolder, samePath } from 'mixdog/src/runtime/shared/worktrees/paths.mjs';
 
 export async function loadNativeModules() {
     const runtimeUrl = import.meta.resolve('mixdog/src/mixdog-session-runtime.mjs');
     const root = resolve(dirname(fileURLToPath(runtimeUrl)), '..');
     patch(root, { check: true });
-    const [{ createMixdogSessionRuntime }, cfg, pending, autoEffort, effortConfiguration, registry] = await Promise.all([
+    const [{ createMixdogSessionRuntime }, cfg, pending, autoEffort, effortConfiguration, registry, worktrees] = await Promise.all([
         import(runtimeUrl), import('mixdog/src/runtime/agent/orchestrator/config.mjs'),
         import('mixdog/src/runtime/agent/orchestrator/session/manager/pending-messages.mjs'),
         import('mixdog/src/runtime/agent/orchestrator/session/manager/ask-turn-auto-effort.mjs'),
         import('mixdog/src/runtime/agent/orchestrator/providers/effort-configuration.mjs'),
         import('mixdog/src/runtime/agent/orchestrator/providers/registry.mjs'),
+        import('mixdog/src/runtime/shared/worktrees/manager.mjs'),
     ]);
     if (typeof createMixdogSessionRuntime !== 'function' || typeof cfg.loadConfig !== 'function') throw new Error('Mixdog native API mismatch');
     return { createMixdogSessionRuntime, loadConfig: () => cfg.loadConfig({ secrets: true }),
+        getSessionWorktree: worktrees.getSessionWorktree,
         // 네이티브의 모듈 활성화·플랫폼 지원과 현재 모델의 실제 노력도 변경 경로를 함께 확인한다.
         autoEffortAvailable(session) {
             return autoEffort.autoEffortMode() === 'on'
@@ -53,6 +58,7 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
     // Keep engine features native, but never auto-stage an unreviewed engine upgrade.
     const initialConfig = { ...baseConfig, orchestrationMode: normalizeOrchestrationMode(baseConfig.orchestrationMode),
         mcpServers: mapMcpServers(config.mcpServers),
+        heartbeat: false,
         update: { ...baseConfig.update, auto: false } };
     // 명시적으로 켠 Paseo Worker만 부모 모델을 사용하며 다른 모델로 폴백하지 않는다.
     if (process.env.PASEODOG_TEST_PARENT_WORKER === 'true') {
@@ -79,6 +85,7 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
         }
     }
     let closed = false;
+    let configurationGeneration = 0;
     let quotaFailure = null;
     let currentEffortOptions = args.effortOptions;
     const effortSettings = { ...config.settings };
@@ -114,7 +121,21 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
             const resumed = await runtime.resume(args.nativeSessionId);
             if (runtime.session?.remoteAttached === true) throw new Error('Native session is owned by another live Mixdog process; close that writer before attaching');
             if (!resumed || resumed.id !== args.nativeSessionId) throw new Error('Native session not found; refusing a blank replacement');
-            if (resolve(resumed.cwd) !== resolve(config.cwd)) throw new Error('Native session cwd differs from Paseo workspace');
+            if (!samePath(resumed.cwd, config.cwd)) {
+                // 프로젝트 정체성은 고정하고 이 세션이 소유한 관리형 worktree만 실행 경로로 허용한다.
+                const workspace = readSessionWorkspace(runtime.session);
+                const entry = workspace?.worktreeId ? await native.getSessionWorktree(resumed.id) : null;
+                if (!entry || runtime.session.id !== resumed.id
+                    || workspace.transition.state !== 'idle' || entry.state !== 'ready'
+                    || entry.id !== workspace.worktreeId || entry.ownerSessionId !== resumed.id
+                    || entry.branch !== workspace.branch
+                    || !samePath(workspace.projectPath, config.cwd)
+                    || !samePath(entry.projectPath, config.cwd)
+                    || !samePath(entry.repoCommonDir, workspace.repoCommonDir)
+                    || !samePath(workspace.cwd, resumed.cwd)
+                    || !samePath(checkoutFolder(entry.path, entry.projectSubdir), resumed.cwd))
+                    throw new Error('Native session cwd differs from Paseo workspace');
+            }
             // A journal/session-file mismatch must fail BEFORE any model inference.
             // Effort may change independently through Mixdog automatic reasoning, so do not pin it.
             for (const field of ['provider', 'model']) {
@@ -246,6 +267,11 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
                 // 비율 선택이 이전의 절대 토큰 한도에 가려지지 않도록 원본의 해제 값을 전달한다.
                 if (Object.hasOwn(next, 'contextPercent') && !Object.hasOwn(next, 'contextTokens'))
                     selected.contextTokens = null;
+                const generation = configurationGeneration;
+                if (modelSelection) await compactBeforeModelSwitch(runtime, selected, native.loadConfig, () => {
+                    if (closed || generation !== configurationGeneration)
+                        throw new Error('모델 변경이 취소됐어요.');
+                });
                 await runtime.setRoute(selected, { applyToCurrentSession: true, sessionOnly: true, keepMainModel: true });
                 if (changes.effortOptions) currentEffortOptions = changes.effortOptions;
                 if (modelSelection) {
@@ -322,6 +348,7 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
             };
         },
         async abort(reason) {
+            configurationGeneration++;
             try { await orchestration.abort(reason); } finally { await runtime.abort(reason); }
         },
         async close(reason) {

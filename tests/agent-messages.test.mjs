@@ -41,6 +41,7 @@ test('actual MCP send handler derives identity from invocation context, never me
             'async ({ agentId, prompt, sessionMode, background = Boolean(callerAgentId),',
             '\n    });\n    registerTool("get_agent_status"', {
                 callerAgentId, agentManager: { getAgent: () => ({ lifecycle: 'running' }) },
+                messagePolicy: { authorize: async () => {} },
                 agentStorage: {}, childLogger: {}, ensureValidJson: (value) => value,
                 sendPromptToAgent: async (input) => { delivered = input; return { disposition: 'steered' }; },
             });

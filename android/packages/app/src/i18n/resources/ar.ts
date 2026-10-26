@@ -147,6 +147,8 @@ export const ar: TranslationResources = {
       cancelingAgent: "وكيل الإلغاء",
       stopAgent: "توقف الوكيل",
       interrupt: "مقاطعة",
+      confirmTitle: "إيقاف الوكيل؟",
+      confirmMessage: "سيتوقف تشغيل الوكيل الحالي. سيتم الاحتفاظ بمسودتك.",
     },
     voice: {
       enableVoiceMode: "تمكين الوضع الصوتي",
@@ -1172,6 +1174,7 @@ export const ar: TranslationResources = {
       heading: "العرض",
       grouping: {
         label: "التجميع",
+        single: "مساحة عمل واحدة",
         project: "المشروع",
         status: "الحالة",
         labels: "التسميات",
@@ -2194,6 +2197,11 @@ export const ar: TranslationResources = {
       assistantNickname: {
         label: "اسم المساعد",
         description: "الاسم المعروض في المحادثات. اتركه فارغًا لاستخدام Dog.",
+      },
+      assistantIcon: {
+        label: "أيقونة المساعد",
+        description: "الأيقونة بجانب الاسم في المحادثات. تُحفظ على هذا الجهاز.",
+        initial: "الحرف الأول من الاسم (افتراضي)",
       },
       hideReasoning: {
         label: "إخفاء التفكير",

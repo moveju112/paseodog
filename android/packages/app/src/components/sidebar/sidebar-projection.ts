@@ -83,11 +83,13 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
       collapsed: folder.collapsed,
     });
   }
-  if (input.groupMode === "project") {
+  if (input.groupMode !== "status") {
     sections.push(
       ...visiblePinnedGroups.unpinnedProjects.map((project) => ({
         workspaces: project.workspaces,
-        collapsed: input.collapsedProjectKeys.has(project.viewKey),
+        collapsed:
+          !(input.groupMode === "single" && project.workspaces.length === 1) &&
+          input.collapsedProjectKeys.has(project.viewKey),
       })),
     );
   } else {
@@ -107,13 +109,14 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
   };
 }
 
-/** Project mode keeps its project headers and groups nothing; status mode groups the rows. */
+/** Project modes keep project rows; status mode groups individual workspace rows. */
 function buildWorkspaceGroups(
   input: SidebarProjectionInput,
   unpinnedWorkspaces: SidebarWorkspaceEntry[],
 ): SidebarWorkspaceGroup[] {
   switch (input.groupMode) {
     case "project":
+    case "single":
       return [];
     case "status":
       return statusWorkspaceGroups(

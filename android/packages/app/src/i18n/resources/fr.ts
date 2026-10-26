@@ -149,6 +149,9 @@ export const fr: TranslationResources = {
       cancelingAgent: "Annulation de l’agent…",
       stopAgent: "Arrêter l’agent",
       interrupt: "Interrompre",
+      confirmTitle: "Arrêter l’agent ?",
+      confirmMessage:
+        "L’exécution en cours de l’agent sera arrêtée. Votre brouillon sera conservé.",
     },
     voice: {
       enableVoiceMode: "Activer le mode vocal",
@@ -1199,6 +1202,7 @@ export const fr: TranslationResources = {
       heading: "Affichage",
       grouping: {
         label: "Regroupement",
+        single: "Espace de travail unique",
         project: "Projet",
         status: "Statut",
         labels: "Libellés",
@@ -2243,6 +2247,11 @@ export const fr: TranslationResources = {
       assistantNickname: {
         label: "Surnom de l’assistant",
         description: "Nom affiché dans les conversations. Laissez vide pour utiliser Dog.",
+      },
+      assistantIcon: {
+        label: "Icône de l’assistant",
+        description: "Icône à côté du surnom dans les conversations. Enregistrée sur cet appareil.",
+        initial: "Initiale du surnom (par défaut)",
       },
       hideReasoning: {
         label: "Masquer le raisonnement",

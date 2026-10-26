@@ -206,9 +206,12 @@ import { withTimeout } from "../utils/promise-timeout.js";
 import { isHostnameAllowed, type HostnamesConfig } from "./hostnames.js";
 import {
   createRequireBearerMiddleware,
+  extractHttpBearerToken,
   isAgentMcpRequestAuthorized,
   type DaemonAuthConfig,
 } from "./auth.js";
+import * as agentMcpCrypto from "node:crypto";
+import { createAgentMcpIdentity } from "./agent/agent-mcp-identity.js";
 import { deleteLocalCredential, writeLocalCredential } from "./local-credential.js";
 import { createWebUiMiddleware } from "./web-ui.js";
 import { WorkspaceAutoName } from "./workspace-auto-name.js";
@@ -651,14 +654,9 @@ export async function createPaseoDaemon(
     ttlMs: downloadTokenTtlMs,
   });
 
-  // Capability token authenticating the daemon's own agents to the loopback
-  // Agent MCP endpoint (/mcp/agents). Random per daemon run, injected only into
-  // local agent configs and the daemon's own MCP client — never sent to remote
-  // clients — so it cannot be replayed off-box. This lets the injected MCP
-  // authenticate even when the daemon password is set via the app (hash only,
-  // no plaintext available). Mirrors the /api/files/download capability-token
-  // pattern.
+  // Per-run signing key stays in the daemon; providers receive agent-bound tokens.
   const agentMcpAuthToken = randomUUID();
+  const agentMcpIdentity = createAgentMcpIdentity({ crypto: agentMcpCrypto, secret: agentMcpAuthToken });
 
   const listenTarget = parseListenString(config.listen);
 
@@ -1507,17 +1505,18 @@ export async function createPaseoDaemon(
         res.status(404).json({ error: "Agent MCP endpoint disabled" });
         return;
       }
-      // This route is exempt from the global daemon-password middleware, so it
-      // authenticates here using the injected capability token (or a valid
-      // daemon password). Without this, a password-protected daemon would be
-      // wide open on its agent control plane.
-      if (
-        !(await isAgentMcpRequestAuthorized({
+      // Every HTTP request needs credentials, even without a configured password.
+      // Agent identity comes from the signature, never an unauthenticated URL.
+      const identity = await agentMcpIdentity.resolve({
+        token: extractHttpBearerToken(req.header("authorization")),
+        requestedCaller: req.query.callerAgentId,
+        verifyPassword: async (token) => Boolean(config.auth?.password) && isAgentMcpRequestAuthorized({
           password: config.auth?.password,
-          capabilityToken: agentMcpAuthToken,
-          authorizationHeader: req.header("authorization"),
-        }))
-      ) {
+          capabilityToken: null,
+          authorizationHeader: `Bearer ${token}`,
+        }),
+      });
+      if (!identity.authorized) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
@@ -1548,14 +1547,7 @@ export async function createPaseoDaemon(
           });
           return;
         }
-        const callerAgentIdRaw = req.query.callerAgentId;
-        let callerAgentId: string | undefined;
-        if (typeof callerAgentIdRaw === "string") {
-          callerAgentId = callerAgentIdRaw;
-        } else if (Array.isArray(callerAgentIdRaw) && typeof callerAgentIdRaw[0] === "string") {
-          callerAgentId = callerAgentIdRaw[0];
-        }
-        const { server, transport } = await createAgentMcpSession(callerAgentId);
+        const { server, transport } = await createAgentMcpSession(identity.callerAgentId);
         res.on("close", () => {
           void transport.close();
           void server.close();

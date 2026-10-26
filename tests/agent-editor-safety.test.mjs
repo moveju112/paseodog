@@ -7,6 +7,7 @@ import { AGENT_PATCHES, gitBlob, patch, patchedAgentSource } from '../scripts/pa
 import { AGENT_EDITOR_SAFETY_PATCHES } from '../patches/agent-editor-safety.mjs';
 import { createAgentRouteApi } from '../engine/node_modules/mixdog/src/session-runtime/workflow-agents-api/agent-route.mjs';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { withoutAgentEditorSafety, withAgentEditorSafety } from '../patches/paseo-agent-editor-safety.mjs';
 
 test('duplicate native patch targets fail before reading or writing runtime files', () => {
@@ -62,8 +63,8 @@ test('unsupported worktree updates fail before any other preferences are changed
 function nativeEditor(prepareRoute) {
     const spec = AGENT_EDITOR_SAFETY_PATCHES[0];
     const source = patchedAgentSource(readFileSync(new URL('../engine/node_modules/mixdog/' + spec.file, import.meta.url), 'utf8'), spec);
-    const start = source.indexOf('async function saveAgentDefinition(payload = {}) {');
-    const end = source.indexOf('\n\n  // A removed custom agent', start);
+    const start = source.indexOf('async function saveAgentDefinition(payload = {}, options) {');
+    const end = source.indexOf('\n\n  const { dropAgentRoute, deleteAgentDefinition', start);
     assert.ok(start >= 0 && end > start);
     const state = { revision: 'a'.repeat(24), current: { body: 'original' }, writes: [], routeWrites: 0 };
     const save = vm.runInNewContext(`(${source.slice(start, end)})`, {
@@ -71,12 +72,12 @@ function nativeEditor(prepareRoute) {
         hasOwn: Object.hasOwn, resolveDataDir: () => '/memory', resolveSaveTarget: (p) => p,
         definitionRevision: () => state.revision, loadAgentDefinition: () => state.current,
         isArchivedAgent: () => false, creationKind: () => 'agent',
-        hiddenManifest: (v) => v, manifestOf: () => ({}), botStoreActive: () => false,
+        hiddenManifest: (v) => v, manifestForUpdate: () => ({}), botStoreActive: () => false,
         userDir: () => '/memory/agents/worker', botDir: () => '/memory/bots/worker',
         stableJson: JSON.stringify, readManifest: () => ({}), shippedDir: () => '/memory/shipped/worker',
         absorbSaveEqualToShipped: () => false, hiddenFrontmatter: () => ({}),
-        writeAgentFiles: (_dir, value) => { state.writes.push(value); state.current = value; },
-        syncAvatarFiles: () => {}, normalizeAgentAvatar: () => undefined,
+        applyManifestEdits: () => ({}),
+        writeSavedDefinition: (_dir, value) => { state.writes.push(value); state.current = value; },
         clearAgentDefinitionCache: () => {}, getConfig: () => ({}), isAgentDisabled: () => false,
         setAgentRoute: async (...args) => {
             assert.equal(args[2].prepareOnly, true);
@@ -128,13 +129,13 @@ test('native route preparation performs no config write until explicitly committ
     const commit = await api.setAgentRoute('worker', { provider: 'openai', model: 'test' }, { prepareOnly: true });
     assert.equal(typeof commit, 'function');
     assert.equal(writes, 0);
-    commit();
+    await commit();
     assert.equal(writes, 1);
     assert.equal(config.agents.worker.model, 'test');
 });
 
 test('web editor preserves the draft on failure, requires revision and prevents duplicate saves', async () => {
-    const source = patchedComposerSource(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
+    const source = composerFixture(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
     assert.equal(withAgentEditorSafety(withoutAgentEditorSafety(source)), source);
     const start = source.indexOf('Bt=async()=>{if(paseodogEditor.saving)');
     const end = source.indexOf(',t[63]=Me', start);

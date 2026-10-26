@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'nod
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { brotliCompressSync, gzipSync, constants as zlibConstants } from 'node:zlib';
+import { brotliCompressSync, brotliDecompressSync, gzipSync, gunzipSync, constants as zlibConstants } from 'node:zlib';
 import { gitBlob } from '../scripts/patch-mixdog.mjs';
 import { COMPOSER_FILE, patchedComposerSource, patchPaseoComposer, withoutWorktreeSetupTip } from '../scripts/patch-paseo-composer.mjs';
 import { WHITE2_LABELS, WHITE2_OPTION, withoutWhite2Theme, withWhite2Theme } from '../scripts/patch-paseo-theme.mjs';
@@ -25,12 +25,24 @@ import { withoutRelayPassword } from '../patches/paseo-relay-password.mjs';
 import { withoutCompactionBuffer } from '../patches/paseo-compaction-buffer.mjs';
 import { withoutOfferLink } from '../patches/paseo-offer-link.mjs';
 import { withoutSettingsCorrections } from '../patches/paseo-settings-corrections.mjs';
+import { withoutVersionDetails } from '../patches/paseo-version-details.mjs';
 import { withoutAgentEditorSafety } from '../patches/paseo-agent-editor-safety.mjs';
 import { withoutChatUsability } from '../patches/paseo-chat-usability.mjs';
 import { withoutMarkdownTable } from '../patches/paseo-markdown-table.mjs';
 import { withoutDaemonUpdate } from '../patches/paseo-daemon-update.mjs';
+import { withoutSettingsOrganization } from '../patches/paseo-settings-organization.mjs';
+import { withoutSingleWorkspace } from '../patches/paseo-single-workspace.mjs';
+import { withoutHostSwitch } from '../patches/paseo-host-switch.mjs';
+import { withoutComposerControls } from '../patches/paseo-composer-controls.mjs';
+import { withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
 // 사이드바 쿼터 패치 해제 (도넛 -> 고정 순서, 실제 composer 체인 순서)
 const withoutUsageOrder = (source) => {
+    source = withoutComposerControls(source);
+    source = withoutHostSwitch(source);
+    source = withoutSingleWorkspace(source);
+    source = withoutSettingsBehavior(source);
+    source = withoutVersionDetails(source);
+    source = withoutSettingsOrganization(source);
     source = withoutDaemonUpdate(source);
     source = withoutMarkdownTable(source);
     source = withoutCompactionBuffer(withoutOfferLink(withoutSettingsCorrections(withoutAgentEditorSafety(withoutChatUsability(source)))));
@@ -44,7 +56,8 @@ const { z } = createRequire(new URL('../tools/package.json', import.meta.url))('
 const root = new URL('../tools/node_modules/@getpaseo/server/', import.meta.url).pathname;
 const installed = readFileSync(root + COMPOSER_FILE, 'utf8');
 const original = withoutAgentsSettings(withoutHideReasoning(withoutUsageOrder(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutWorktreeSetupTip(withoutImportCwd(installed))))))))))));
-const patched = patchedComposerSource(installed);
+const patched = composerFixture(installed);
+import { composerFixture } from './composer-fixture.mjs';
 const lightPalette = 'const E=O({surface0:"#ffffff",surface1:"#fafafa",surface2:"#f4f4f5",surface3:"#e4e4e7",surface4:"#d4d4d8",'
     + 'surfaceDiffEmpty:"#f6f6f6",surfaceSidebar:"#f4f4f5",foreground:"#1a1a1e",foregroundMuted:"#71717a",foregroundExtraMuted:"#a1a1aa",'
     + 'border:"#e4e4e7",borderAccent:"#ececf1",accent:"#20744A",';
@@ -152,7 +165,7 @@ test('White2 persists through the native settings schema and has localized label
     assert.deepEqual(await persistTheme(original, 'white2'), ['white2', 'auto']);
     assert.deepEqual(await persistTheme(patched, 'white2'), ['white2', 'white2']);
     assert.deepEqual(await persistTheme(patched, 'light'), ['light', 'light']);
-    assert.deepEqual(await persistTheme(patched, 'white3'), ['white3', 'auto']);
+    assert.deepEqual(await persistTheme(patched, 'white3'), ['auto', 'auto']);
     assert.equal(patched.split(WHITE2_OPTION).length, 2);
     const labels = [...patched.matchAll(/pureBlack:"[^"]*",white2:("[^"]*"),neutralPearl:"[^"]*",softLinen:"[^"]*",auto:"/g)].map((match) => JSON.parse(match[1]));
     assert.equal(labels.length, WHITE2_LABELS.length);
@@ -193,7 +206,7 @@ test('soft light themes persist, reproduce approved palettes and preserve existi
 
 test('White2 keeps the strict upstream gate and is idempotent', () => {
     assert.equal(['bdc4b8ed97dbccc7e6215d7f2f7be2e420fce895', '35606b3c900c220239427937d2aa55f0860f1bb4'].includes(gitBlob(original)), true);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.equal(patchedComposerSource(original), patched);
     assert.equal(withoutAgentsSettings(withoutHideReasoning(withoutUsageOrder(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutWorktreeSetupTip(withoutImportCwd(patched)))))))))))), original);
     assert.throws(() => withWhite2Theme(patched), /anchor mismatch/);
@@ -224,5 +237,11 @@ test('composer check rejects stale precompressed web bundles', (t) => {
     writeFileSync(path + '.gz', gzipSync(original, { level: 1 }));
     assert.throws(() => patchPaseoComposer(directory, { check: true }), /precompressed bundle is stale/);
     writeFileSync(path + '.gz', gzipSync(patched, { level: 1 }));
+    patchPaseoComposer(directory, { check: true });
+    writeFileSync(path + '.br', brotliCompressSync(original, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 1 } }));
+    writeFileSync(path + '.gz', gzipSync(original, { level: 1 }));
+    patchPaseoComposer(directory);
+    assert.equal(brotliDecompressSync(readFileSync(path + '.br')).toString(), patched);
+    assert.equal(gunzipSync(readFileSync(path + '.gz')).toString(), patched);
     patchPaseoComposer(directory, { check: true });
 });

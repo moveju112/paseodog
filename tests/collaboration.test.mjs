@@ -8,12 +8,17 @@ import { createNativeEngine } from '../engine/src/native-engine.mjs';
 import { normalizeOrchestrationMode } from '../engine/src/orchestration-mode.mjs';
 import { createEngineControls } from '../plugin/server/controls.mjs';
 import { patchedComposerSource, COMPOSER_FILE, withoutWorktreeSetupTip } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { withoutWhite2Theme } from '../scripts/patch-paseo-theme.mjs';
+import { withoutSingleWorkspace } from '../patches/paseo-single-workspace.mjs';
+import { withoutHostSwitch } from '../patches/paseo-host-switch.mjs';
+import { withoutComposerControls } from '../patches/paseo-composer-controls.mjs';
 import { gitBlob } from '../scripts/patch-mixdog.mjs';
 import {
     createCollaborationState, COLLABORATION_SOURCE, COLLABORATION_SOURCE_ANCHOR,
     COLLABORATION_RENDER, COLLABORATION_ANCHOR, COLLABORATION_DRAFT_ANCHOR, COLLABORATION_DRAFT_RENDER,
-    LEGACY_COLLABORATION_SOURCES, withoutCollaboration,
+    LEGACY_COLLABORATION_SOURCES, PREVIOUS_FAST_SOURCES, withoutCollaboration,
+    FAST_RENDER, FAST_DRAFT_RENDER,
 } from '../patches/paseo-collaboration.mjs';
 import { withoutAutoEffort } from '../patches/paseo-auto-effort.mjs';
 import { withoutAgentProgress } from '../patches/paseo-agent-progress.mjs';
@@ -30,12 +35,21 @@ import { withoutRelayPassword } from '../patches/paseo-relay-password.mjs';
 import { withoutCompactionBuffer } from '../patches/paseo-compaction-buffer.mjs';
 import { withoutOfferLink } from '../patches/paseo-offer-link.mjs';
 import { withoutSettingsCorrections } from '../patches/paseo-settings-corrections.mjs';
+import { withoutVersionDetails } from '../patches/paseo-version-details.mjs';
 import { withoutAgentEditorSafety } from '../patches/paseo-agent-editor-safety.mjs';
 import { withoutChatUsability } from '../patches/paseo-chat-usability.mjs';
 import { withoutMarkdownTable } from '../patches/paseo-markdown-table.mjs';
 import { withoutDaemonUpdate } from '../patches/paseo-daemon-update.mjs';
+import { withoutSettingsOrganization } from '../patches/paseo-settings-organization.mjs';
+import { withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
 // 사이드바 쿼터 패치 해제 (도넛 -> 고정 순서, 실제 composer 체인 순서)
 const withoutUsageOrder = (source) => {
+    source = withoutComposerControls(source);
+    source = withoutHostSwitch(source);
+    source = withoutSingleWorkspace(source);
+    source = withoutSettingsBehavior(source);
+    source = withoutVersionDetails(source);
+    source = withoutSettingsOrganization(source);
     source = withoutDaemonUpdate(source);
     source = withoutMarkdownTable(source);
     source = withoutCompactionBuffer(withoutOfferLink(withoutSettingsCorrections(withoutAgentEditorSafety(withoutChatUsability(source)))));
@@ -72,31 +86,41 @@ test('composer hook preserves the reviewed original, existing controls, and refu
     assert.equal(gitBlob(original), 'bdc4b8ed97dbccc7e6215d7f2f7be2e420fce895');
     const result = patchedComposerSource(original);
     assert.equal(withoutAgentsSettings(withoutHideReasoning(withoutUsageOrder(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutWorktreeSetupTip(withoutImportCwd(result)))))))))))), original);
-    assert.equal(patchedComposerSource(result), result);
-    assert.ok(result.includes(COLLABORATION_RENDER));
+    assert.equal(composerFixture(result), result);
+    assert.ok(result.includes(FAST_RENDER));
     assert.ok(result.includes('children:[Fe,Le,Ee,ze,Be]'));
     assert.ok(result.includes('j.AgentModeControl,Object.assign({},ve,{onClose:E})'));
     assert.ok(result.includes('k.PluginComposerPills,{serverId:j,workspaceId:D,agentId:x,compact:L}'));
-    assert.throws(() => patchedComposerSource(result.replace(COLLABORATION_RENDER, '')), /Partial Paseo collaboration/);
-    assert.throws(() => patchedComposerSource(result.replace(COLLABORATION_DRAFT_RENDER, COLLABORATION_DRAFT_ANCHOR)),
+    assert.throws(() => patchedComposerSource(result.replace(FAST_RENDER, '')), /Partial Paseo collaboration/);
+    assert.throws(() => patchedComposerSource(result.replace(FAST_DRAFT_RENDER, COLLABORATION_DRAFT_ANCHOR)),
         /Partial Paseo collaboration/);
     assert.throws(() => patchedComposerSource(original + '// drift'), /hash mismatch/);
     new Function(result);
 });
 
-test('new-agent draft composer gets OCHE, and each exact previous install upgrades through the hash gate', () => {
+test('new-agent draft composer gets Fast, and each exact previous install upgrades through the hash gate', () => {
     const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const result = patchedComposerSource(installed);
+    const result = composerFixture(installed);
     const draftStart = result.indexOf('_e.DraftAgentControls=function');
     const draftEnd = result.indexOf('var o=r(d[0])', draftStart);
-    assert.ok(draftStart > 0 && result.slice(draftStart, draftEnd).endsWith(COLLABORATION_DRAFT_RENDER));
+    assert.ok(draftStart > 0 && result.slice(draftStart, draftEnd).endsWith(FAST_DRAFT_RENDER));
     assert.ok(result.slice(draftStart, draftEnd).includes('modelSelectorServerId:w'));
-    assert.ok(result.includes('Trigger:K.AgentControlTrigger,Combobox:A.Combobox,ComboboxItem:A.ComboboxItem,Icon:b.Users'));
-    // v1(기존 세션 직접 스위치)·v2(새 에이전트 입력창 추가)를 정확히 재현한 번들은 원본 해시를 통과한 뒤 OCHE로 바뀐다.
+    assert.ok(result.includes('Trigger:K.AgentControlTrigger,Icon:b.Zap'));
+    for (const source of PREVIOUS_FAST_SOURCES) {
+        const previous = result.replace(COLLABORATION_SOURCE, source);
+        assert.equal(patchedComposerSource(previous), result);
+        assert.throws(() => patchedComposerSource(previous.replace('enabled: null, error:', 'enabled: false, error:')),
+            /Partial Paseo collaboration patch/);
+    }
+    // 모든 이전 협업 UI는 원본 해시를 통과한 뒤 Fast 토글로 바뀐다.
     const [v1, v2] = LEGACY_COLLABORATION_SOURCES;
-    const legacyV1 = result.replace(COLLABORATION_SOURCE, v1.source).replace(COLLABORATION_DRAFT_RENDER, COLLABORATION_DRAFT_ANCHOR);
-    const legacyV2 = result.replace(COLLABORATION_SOURCE, v2.source);
-    for (const legacy of [legacyV1, legacyV2]) {
+    const legacyBase = result.replace(FAST_RENDER, COLLABORATION_RENDER).replace(FAST_DRAFT_RENDER, COLLABORATION_DRAFT_RENDER)
+        .replace('jsx:J.jsx,Controls:PaseodogFastControls})}', 'jsx:J.jsx,Controls:ve})}');
+    const legacyV1 = legacyBase.replace(COLLABORATION_SOURCE, v1.source).replace(COLLABORATION_DRAFT_RENDER, COLLABORATION_DRAFT_ANCHOR);
+    const legacyV2 = legacyBase.replace(COLLABORATION_SOURCE, v2.source);
+    for (const entry of LEGACY_COLLABORATION_SOURCES) {
+        const legacy = legacyBase.replace(COLLABORATION_SOURCE, entry.source)
+            .replace(COLLABORATION_DRAFT_RENDER, entry.draft ? COLLABORATION_DRAFT_RENDER : COLLABORATION_DRAFT_ANCHOR);
         assert.notEqual(legacy, result);
         assert.equal(patchedComposerSource(legacy), result);
         assert.throws(() => patchedComposerSource(legacy + '// drift'), /hash mismatch/);
@@ -117,7 +141,7 @@ function ocheModule(store = { sessions: {} }) {
     }
     const theme = { colors: { foreground: '#000', border: '#ccc', surface0: '#fff', foregroundMuted: '#666' } };
     return new Function('s', 'J', 'n', 't', 'K', 'A', 'b', 'f', 'O',
-        COLLABORATION_SOURCE.replace(COLLABORATION_SOURCE_ANCHOR, '') + ';return { PaseodogCollaboration, PaseodogDraftCollaboration };')(
+        LEGACY_COLLABORATION_SOURCES.at(-1).source.replace(COLLABORATION_SOURCE_ANCHOR, '') + ';return { PaseodogCollaboration, PaseodogDraftCollaboration };')(
         React, { jsx: React.createElement, jsxs: React.createElement }, { View: 'view' }, { Text: 'text' },
         { AgentControlTrigger: Trigger }, { Combobox, ComboboxItem: 'item' }, { Users: 'users-icon' },
         { useUnistyles: () => ({ theme }) }, { useSessionStore: (selector) => selector(store) });

@@ -10,6 +10,7 @@ import {
 } from "@/components/settings";
 import { isNative } from "@/constants/platform";
 import { useAppSettings, type AppSettings } from "@/hooks/use-settings";
+import { AssistantProfileSettings } from "./assistant-profile";
 
 const TOOL_CALL_DETAIL_LEVELS: readonly AppSettings["toolCallDetailLevel"][] = [
   "detailed",
@@ -71,6 +72,7 @@ export function ChatSection() {
             onChangeText={changeAssistantNickname}
             testID="assistant-nickname-input"
           />
+          <AssistantProfileSettings testID="assistant-profile-settings" />
           <SettingsSwitch
             label={t("settings.general.autoExpandReasoning.label")}
             hint={t("settings.general.autoExpandReasoning.description")}

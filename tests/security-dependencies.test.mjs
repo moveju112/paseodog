@@ -13,8 +13,13 @@ test('security overrides keep the reviewed Paseo base and lock patched dependenc
     const lock = JSON.parse(readFileSync(new URL('../tools/package-lock.json', import.meta.url)));
     assert.equal(manifest.dependencies['@getpaseo/cli'], '0.11.4');
     assert.equal(lock.packages['node_modules/@getpaseo/server'].version, '0.11.4');
-    for (const [name, version] of Object.entries(manifest.overrides['@getpaseo/server'])) {
-        assert.equal(lock.packages[`node_modules/${name}`].version, version, name);
+    const overrides = { ...manifest.overrides['@getpaseo/server'],
+        'body-parser': manifest.overrides['body-parser'], 'fast-uri': manifest.overrides['fast-uri'] };
+    for (const [name, version] of Object.entries(overrides)) {
+        const versions = Object.entries(lock.packages)
+            .filter(([path]) => path.endsWith(`node_modules/${name}`))
+            .map(([, pkg]) => pkg.version);
+        assert.deepEqual([...new Set(versions)], [version], name);
     }
 });
 

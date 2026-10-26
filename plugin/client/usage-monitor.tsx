@@ -12,7 +12,7 @@ type Metric = { turns?: number; tokens?: number; input?: number; output?: number
     cacheWrite?: number; cacheHitRate?: number | null; costUsd?: number; costBilled?: number;
     costEstimated?: number; costUnpricedTurns?: number; outputTokensPerSecond?: number | null; share?: number | null };
 type Metrics = {
-    efforts?: (Metric & { provider: string; model: string; agent: string | null; effort: string | null })[];
+    efforts?: (Metric & { provider: string; model: string; agent: string | null; effort: string | null; fast?: boolean | null })[];
     range: { fromMs: number; toMs: number }; totals: Metric; quotaError?: string;
     providers: (Metric & { provider: string; providerKind: string; models: (Metric & { model: string })[] })[];
     series: (Metric & { label: string | number })[];
@@ -23,6 +23,8 @@ type Metrics = {
 const periods = [['1h', '지난 1시간'], ['8h', '지난 8시간'], ['hour', '지난 24시간'], ['day', '지난 30일'],
     ['all', '전체'], ['custom', '사용자 지정']] as const;
 const number = (value?: number | null) => value == null ? '—' : value.toLocaleString();
+const speed = (value?: number | null) => value == null ? '—' : value.toFixed(1);
+const fastLabel = (value?: boolean | null) => value === true ? '켜짐' : value === false ? '꺼짐' : '미기록';
 const percent = (value?: number | null) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
 // 달러 금액 표시 (값 -> $0.00, 없으면 대시)
 const money = (value?: number | null) => value == null ? '—' : `$${value.toFixed(2)}`;
@@ -51,7 +53,8 @@ const providerColumns: Column[] = [{ label: '모델', width: 180, align: 'left',
     { label: 'TOK/S', width: 64 }, { label: '토큰', width: 100 }, { label: '입력', width: 96 }, { label: '출력', width: 92 },
     { label: '캐시', width: 100 }, { label: '적중', width: 64 }, { label: '환산액', width: 80 }];
 const effortColumns: Column[] = [{ label: '모델', width: 200, align: 'left', grow: true },
-    { label: 'Effort', width: 96, align: 'left' }, { label: '호출', width: 64 }, { label: '토큰', width: 110 },
+    { label: 'Effort', width: 96, align: 'left' }, { label: 'Fast', width: 72, align: 'left' },
+    { label: 'TOK/S', width: 72 }, { label: '호출', width: 64 }, { label: '토큰', width: 110 },
     { label: '환산액', width: 80 }];
 
 // 공통 카드 컨테이너 (테마 표면·테두리 적용)
@@ -113,6 +116,7 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
     const latest = useRef(invoke);
     latest.current = invoke;
     const [view, setView] = useState<typeof periods[number][0]>('hour');
+    const [details, setDetails] = useState(false);
     const [startDay, setStartDay] = useState('');
     const [endDay, setEndDay] = useState('');
     const [revision, setRevision] = useState(0);
@@ -165,6 +169,17 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
     const inputStyle = { ...text, minWidth: 150, flexGrow: 1, flexBasis: 150, paddingHorizontal: 12, paddingVertical: 8,
         borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surface0 };
     return <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <View accessibilityRole="tablist" accessibilityLabel="사용량 보기"
+            style={{ flexDirection: 'row', padding: 3, borderRadius: 9, backgroundColor: colors.surface2 }}>
+            {([false, true] as const).map((value) => <Pressable key={String(value)} accessibilityRole="tab"
+                accessibilityLabel={value ? '사용량 자세히' : '사용량 요약'}
+                accessibilityState={{ selected: details === value }} onPress={() => setDetails(value)}
+                style={{ flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 7,
+                    backgroundColor: details === value ? colors.surface0 : 'transparent' }}>
+                <Text style={{ ...text, fontWeight: details === value ? '600' : '400',
+                    color: details === value ? colors.foreground : colors.foregroundMuted }}>{value ? '자세히' : '요약'}</Text>
+            </Pressable>)}
+        </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <View accessibilityRole="tablist" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 2, padding: 3, borderRadius: 9,
                 backgroundColor: colors.surface2, flexShrink: 1 }}>
@@ -198,11 +213,15 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
         {data && totals && <>
             <Text style={muted}>{new Date(data.range.fromMs).toLocaleString()} ~ {new Date(data.range.toMs).toLocaleString()} · 2분마다 자동 갱신</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                <StatTile colors={colors} label="환산액" value={money(totals.costUsd)} hint="구독 환산 · 청구액 아님" />
-                <StatTile colors={colors} label="API 비용" value={money(totals.costBilled)} />
+                <StatTile colors={colors} label="평균 응답 속도" value={`${speed(totals.outputTokensPerSecond)} tok/s`}
+                    hint="측정된 출력 토큰 / 응답 시간 · 대기·추론 포함" />
                 <StatTile colors={colors} label="토큰" value={number(totals.tokens)} />
                 <StatTile colors={colors} label="호출" value={number(totals.turns)} />
-                <StatTile colors={colors} label="캐시 적중" value={percent(totals.cacheHitRate)} />
+                {details && <>
+                    <StatTile colors={colors} label="환산액" value={money(totals.costUsd)} hint="구독 환산 · 청구액 아님" />
+                    <StatTile colors={colors} label="API 비용" value={money(totals.costBilled)} />
+                    <StatTile colors={colors} label="캐시 적중" value={percent(totals.cacheHitRate)} />
+                </>}
             </View>
             {!!totals.costUnpricedTurns && <View style={{ padding: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.statusWarning }}>
                 <Text style={{ ...text, fontSize: 13, color: colors.statusWarning }}>
@@ -234,7 +253,7 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
                         </View>;
                     })}
                     {!row.windows.length && <Text style={muted}>현재 사용량 결과 없음</Text>}
-                    {!!(row.resetCredits || row.updatedAt) && <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between',
+                    {details && !!(row.resetCredits || row.updatedAt) && <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between',
                         gap: 6, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
                         {row.resetCredits && <Text style={{ ...text, fontSize: 12 }}>리셋 티켓 {row.resetCredits.availableCount}개 남음</Text>}
                         {!!row.updatedAt && <Text style={{ ...muted, fontSize: 11 }}>마지막 갱신 {new Date(row.updatedAt).toLocaleString()}</Text>}
@@ -244,6 +263,7 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
                     {data.quotaError}</Text>}
                 {!data.quotas.length && !data.quotaError && <Text style={muted}>연결된 OAuth 계정 없음</Text>}
             </View>
+            {details && <>
             <SectionTitle colors={colors} title="토큰" />
             <Card colors={colors}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
@@ -308,21 +328,23 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
                         number(model.outputTokensPerSecond), number(model.tokens), number(model.input), number(model.output),
                         number((model.cacheRead || 0) + (model.cacheWrite || 0)), percent(model.cacheHitRate), money(model.costUsd)] }))} />
             </Card>)}
-            <SectionTitle colors={colors} title="에이전트·Effort" hint="요청에 적용된 effort 기준" />
+            <SectionTitle colors={colors} title="에이전트·Effort·Fast" hint="모델·요청 effort·Fast 설정별 속도 비교" />
             {groupEfforts(data.efforts || []).map((group) => {
                 const agentLabel = group.agent || '에이전트 미기록';
                 return <Card key={JSON.stringify(group.agent)} colors={colors}>
                     <Text selectable style={{ ...text, fontSize: 15, fontWeight: '600' }}>{agentLabel}</Text>
                     <Table colors={colors} columns={effortColumns} label={`${agentLabel} 에이전트 사용량`}
                         rows={group.models.flatMap((model) => model.rows.map((item, index) => ({
-                            key: JSON.stringify([model.provider, model.model, item.effort]),
-                            label: `${agentLabel} ${model.provider} ${model.model} ${item.effort || 'effort 미기록'} 사용량`,
-                            cells: [index ? '' : `${model.provider} · ${model.model}`, item.effort || '미기록', number(item.turns),
+                            key: JSON.stringify([model.provider, model.model, item.effort, item.fast ?? null]),
+                            label: `${agentLabel} ${model.provider} ${model.model} ${item.effort || 'effort 미기록'} Fast ${fastLabel(item.fast)} 사용량`,
+                            cells: [index ? '' : `${model.provider} · ${model.model}`, item.effort || '미기록',
+                                fastLabel(item.fast), speed(item.outputTokensPerSecond), number(item.turns),
                                 number(item.tokens), item.costUnpricedTurns === item.turns ? '미확인' : money(item.costUsd)] })))} />
                 </Card>;
             })}
-            {!data.efforts?.length && <Text style={muted}>선택한 기간에 Effort별 상세 기록이 없습니다.</Text>}
+            {!data.efforts?.length && <Text style={muted}>선택한 기간에 Effort·Fast별 상세 기록이 없습니다.</Text>}
             <Text style={{ ...muted, fontSize: 11 }}>과거 기록은 추정하지 않고 미기록으로 표시하며, 상세 기록이 없는 합계는 이 분류에 포함되지 않을 수 있어요.</Text>
+            </>}
         </>}
     </ScrollView>;
 }

@@ -29,21 +29,23 @@ test('PaseoDog keeps standard uninstaller generation without changing other cust
     const end = patched.indexOf('    computeVersionKey(', start);
     for (const script of ['custom installer', WINDOWS_UNINSTALLER_MARKER + 'standard template']) {
         const compiled = [], signed = [], extracted = [];
-        const method = new Function('path', 'fs_extra_1', 'nsisUtil_1', 'builder_util_1', 'macosVersion_1', 'wine_1',
+        const method = new Function('path', 'fs_extra_1', 'nsisUtil_1', 'builder_util_1', 'macosVersion_1', 'WineVm_1',
             `return ({${patched.slice(start, end)}}).computeScriptAndSignUninstaller;`)(
             path, { readFile: async () => script },
             { UninstallerReader: { exec: async (...args) => extracted.push(args) } },
-            { log: { info() {} } }, {}, {},
+            { log: { info() {} } }, { isMacOsCatalina: () => false },
+            { WineVmManager: class { async exec(...args) { extracted.push(args); } } },
         );
         const target = {
-            packager: { getResource: async () => '/custom.nsi', signIf: async file => signed.push(file) },
+            packager: { config: {}, getResource: async () => '/custom.nsi', signIf: async file => signed.push(file) },
             options: {}, outDir: '/build-output',
             executeMakensis: async defines => compiled.push({ ...defines }),
             computeFinalScript: async value => value,
         };
         const defines = {};
-        assert.equal(await method.call(target, defines, {}, '/build-output/Setup.exe', '', []), script);
         const standard = script.startsWith(WINDOWS_UNINSTALLER_MARKER);
+        assert.deepEqual(await method.call(target, defines, {}, '/build-output/Setup.exe', '', []),
+            { script, isCustomScript: !standard });
         assert.equal(compiled.length, standard ? 1 : 0);
         assert.equal(signed.length, standard ? 1 : 0);
         assert.equal(extracted.length, standard ? 1 : 0);
@@ -194,7 +196,8 @@ test('Windows installer generation gates every upstream input and check mode nev
     assert.throws(() => prepareWindowsInstaller(output, { check: true }), /patch is missing/);
     assert.equal(readFileSync(output, 'utf8'), 'stale');
     writeFileSync(join(directory, 'package.json'), JSON.stringify({ version: '0.0.0' }));
-    assert.throws(() => windowsInstallerScript(directory), /26\.8\.1 required/);
+    assert.throws(() => windowsInstallerScript(directory),
+        new RegExp(`${WINDOWS_INSTALLER_VERSION.replaceAll('.', '\\.')} required`));
     writeFileSync(join(directory, 'package.json'), JSON.stringify({ version: WINDOWS_INSTALLER_VERSION }));
     for (const file of Object.keys(WINDOWS_INSTALLER_BLOBS)) {
         const target = join(directory, 'templates/nsis', file);

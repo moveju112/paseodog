@@ -147,6 +147,8 @@ export const zhCN: TranslationResources = {
       cancelingAgent: "正在取消 Agent",
       stopAgent: "停止 Agent",
       interrupt: "中断",
+      confirmTitle: "停止 Agent？",
+      confirmMessage: "将停止 Agent 当前的运行。你正在输入的草稿会保留。",
     },
     voice: {
       enableVoiceMode: "启用语音模式",
@@ -1164,6 +1166,7 @@ export const zhCN: TranslationResources = {
       heading: "显示",
       grouping: {
         label: "分组",
+        single: "单一工作区",
         project: "项目",
         status: "状态",
         labels: "标签",
@@ -2167,6 +2170,11 @@ export const zhCN: TranslationResources = {
       assistantNickname: {
         label: "助手昵称",
         description: "对话中显示的名称。留空则使用 Dog。",
+      },
+      assistantIcon: {
+        label: "助手图标",
+        description: "对话中昵称旁显示的图标。保存在此设备上。",
+        initial: "昵称首字（默认）",
       },
       hideReasoning: {
         label: "隐藏推理过程",

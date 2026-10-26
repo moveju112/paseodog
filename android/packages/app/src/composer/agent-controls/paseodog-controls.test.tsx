@@ -13,7 +13,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentFeature } from "@getpaseo/protocol/agent-types";
 
 const runtime = vi.hoisted(() => ({
-  client: { invokePluginRpc: vi.fn(), setAgentFeature: vi.fn() },
+  client: {
+    invokePluginRpc: vi.fn(),
+    setAgentFeature: vi.fn(),
+    fetchAgent: vi.fn(),
+    isConnected: true,
+  },
   connected: true,
   visible: true,
 }));
@@ -41,7 +46,11 @@ vi.mock("react-native-unistyles", () => {
       ),
   };
 });
-vi.mock("lucide-react-native", () => ({ Users: () => null }));
+vi.mock("lucide-react-native", () => ({
+  Zap: ({ color, fill }: { color?: string; fill?: string }) => (
+    <svg data-testid="fast-icon" color={color} fill={fill} />
+  ),
+}));
 vi.mock("@/components/ui/combobox-trigger", () => ({
   // 모드·추론과 같은 실제 AgentControlTrigger가 넘기는 접근성·중복 제출 계약을 DOM으로 노출한다.
   ComboboxTrigger: ({
@@ -56,13 +65,14 @@ vi.mock("@/components/ui/combobox-trigger", () => ({
     disabled: boolean;
     accessibilityRole: string;
     accessibilityLabel: string;
-    accessibilityState: { expanded: boolean };
+    accessibilityState: { expanded?: boolean; checked?: boolean | "mixed" };
   }>) => (
     <button
       type="button"
       role={accessibilityRole}
       aria-label={accessibilityLabel}
       aria-expanded={accessibilityState.expanded}
+      aria-checked={accessibilityState.checked}
       disabled={disabled}
       onClick={onPress}
     >
@@ -142,7 +152,7 @@ vi.mock("@/components/ui/combobox", () => ({
   ),
 }));
 import { AUTO_EFFORT_ID, usePaseodogAutoEffort } from "@/components/paseodog-auto-effort";
-import { PaseodogCollaboration } from "@/components/paseodog-collaboration";
+import { PaseodogCollaboration, PaseodogFastScope } from "@/components/paseodog-collaboration";
 import {
   autoEffortSnapshotSchema,
   collaborationSnapshotSchema,
@@ -159,11 +169,13 @@ const autoFeature: AgentFeature = {
   label: "Auto effort",
   value: false,
 };
+const firstFastScope = { paseodogScope: "live" as const, agentId: "one" };
+const secondFastScope = { paseodogScope: "live" as const, agentId: "two" };
 
 // PC 패치가 허용하는 최소 RPC 응답을 만든다.
 function snapshot(autoEffort = false, orchestration = "none", supported = true, enabled = true) {
   return {
-    route: { autoEffort },
+    route: { autoEffort, model: "small" },
     orchestration,
     toolModules: { autoEffort: { supported, enabled } },
   };
@@ -185,6 +197,8 @@ beforeEach(() => {
   runtime.client = {
     invokePluginRpc: vi.fn().mockResolvedValue(snapshot()),
     setAgentFeature: vi.fn().mockResolvedValue(undefined),
+    fetchAgent: vi.fn(),
+    isConnected: true,
   };
   runtime.connected = true;
   runtime.visible = true;
@@ -195,6 +209,30 @@ afterEach(() => {
 });
 
 describe("native Effort list contract", () => {
+  it("keeps manual effort local until a Main model is configured", async () => {
+    runtime.client.invokePluginRpc.mockResolvedValue({
+      ...snapshot(true),
+      route: { autoEffort: true, model: "" },
+    });
+    const select = vi.fn();
+    const { result } = renderHook(() =>
+      usePaseodogAutoEffort({
+        provider: "paseodog",
+        scope: "draft",
+        serverId: "host",
+        thinkingOptions: options,
+        onSelectThinkingOption: select,
+      }),
+    );
+    await waitFor(() => expect(runtime.client.invokePluginRpc).toHaveBeenCalledTimes(1));
+    expect(result.current.thinkingOptions).toEqual(options);
+    act(() => result.current.onSelectThinkingOption("high"));
+    expect(select).toHaveBeenCalledExactlyOnceWith("high");
+    expect(runtime.client.invokePluginRpc.mock.calls.map((call) => call[2])).toEqual([
+      { action: "read" },
+    ]);
+  });
+
   it("uses only the live session feature and leaves manual selection on its existing path", async () => {
     const select = vi.fn();
     const props = {
@@ -400,6 +438,8 @@ describe("native Effort list contract", () => {
     runtime.client = {
       invokePluginRpc: vi.fn().mockResolvedValue(snapshot()),
       setAgentFeature: vi.fn(),
+      fetchAgent: vi.fn(),
+      isConnected: true,
     };
     rerender({ serverId: "host-two" });
     await waitFor(() => expect(result.current.thinkingOptions).toHaveLength(3));
@@ -408,89 +448,90 @@ describe("native Effort list contract", () => {
   });
 });
 
-describe("native host-wide collaboration", () => {
-  it("shares none/swarm across live and draft controls and writes no permission settings", async () => {
+describe("native Fast lightning toggle", () => {
+  const fastSnapshot = (fast = false, fastCapable = true) => ({
+    route: { provider: "test", model: "model", fast },
+    models: [{ provider: "test", id: "model", fastCapable }],
+  });
+  it("keeps the toolbar icon-only and shows shared confirmed draft states in the sheet", async () => {
+    runtime.client.invokePluginRpc.mockResolvedValue(fastSnapshot());
     render(
       <>
         <PaseodogCollaboration provider="paseodog" serverId="host" />
-        <PaseodogCollaboration provider="paseodog" serverId="host" />
+        <PaseodogCollaboration provider="paseodog" serverId="host" surface="sheet" />
       </>,
     );
-    const triggers = screen.getAllByRole("button", { name: /^OCHE 오케스트레이션/ });
-    await waitFor(() =>
-      expect(triggers[0].getAttribute("aria-label")).toBe("OCHE 오케스트레이션: 꺼짐 · 단독 실행"),
-    );
+    const triggers = screen.getAllByRole("switch", { name: /^Fast mode/ });
+    await waitFor(() => expect(triggers[0].getAttribute("aria-label")).toBe("Fast mode: 꺼짐"));
+    expect(triggers[0].textContent).toBe("");
+    expect(triggers[1].textContent).toBe("Fast꺼짐");
+    expect(screen.getAllByTestId("fast-icon")).toHaveLength(2);
+    expect(screen.getAllByTestId("fast-icon").map((icon) => icon.getAttribute("fill"))).toEqual([
+      null,
+      null,
+    ]);
+    expect(screen.queryByText("OCHE")).toBeNull();
     expect(runtime.client.invokePluginRpc).toHaveBeenCalledTimes(1);
-    // 트리거는 메뉴만 열고 호스트 설정을 바꾸지 않는다.
-    fireEvent.click(triggers[0]);
-    fireEvent.click(triggers[1]);
-    expect(screen.getAllByRole("dialog", { name: "OCHE" })).toHaveLength(2);
-    expect(triggers[0].getAttribute("aria-expanded")).toBe("true");
-    expect(runtime.client.invokePluginRpc).toHaveBeenCalledTimes(1);
-    const pending = deferred<ReturnType<typeof snapshot>>();
+    const pending = deferred<ReturnType<typeof fastSnapshot>>();
     runtime.client.invokePluginRpc.mockReturnValueOnce(pending.promise);
-    const switchName = /^에이전트 협업 스위치 \(호스트 전체\)/;
-    fireEvent.click(screen.getAllByRole("button", { name: switchName })[0]);
-    // 저장 중에는 같은 호스트의 다른 스위치도 막혀 중복 쓰기가 없다.
-    const pendingSwitches = screen.getAllByRole("button", { name: switchName });
-    expect(pendingSwitches.map((toggle) => toggle.hasAttribute("disabled"))).toEqual([true, true]);
-    fireEvent.click(pendingSwitches[1]);
-    expect(runtime.client.invokePluginRpc).toHaveBeenCalledTimes(2);
-    await act(async () => pending.resolve(snapshot(false, "swarm")));
-    expect(screen.getAllByRole("dialog", { name: "OCHE" })).toHaveLength(2);
-    expect(
-      screen
-        .getAllByRole("button", { name: switchName })
-        .map((toggle) => toggle.getAttribute("aria-pressed")),
-    ).toEqual(["true", "true"]);
-    runtime.client.invokePluginRpc.mockResolvedValue(snapshot(false, "none"));
-    fireEvent.click(screen.getAllByRole("button", { name: switchName })[1]);
-    await waitFor(() =>
-      expect(triggers[0].getAttribute("aria-label")).toBe("OCHE 오케스트레이션: 꺼짐 · 단독 실행"),
-    );
-    expect(screen.getAllByRole("dialog", { name: "OCHE" })).toHaveLength(2);
-    // 트리거를 다시 누르면 메뉴만 닫힌다.
+    runtime.client.invokePluginRpc.mockResolvedValue(fastSnapshot(true));
     fireEvent.click(triggers[0]);
-    expect(screen.getAllByRole("dialog", { name: "OCHE" })).toHaveLength(1);
+    // 저장 중에는 같은 호스트의 다른 스위치도 막혀 중복 쓰기가 없다.
+    expect(triggers.map((toggle) => toggle.hasAttribute("disabled"))).toEqual([true, true]);
+    expect(triggers[1].textContent).toBe("Fast확인 중");
+    fireEvent.click(triggers[1]);
+    expect(runtime.client.invokePluginRpc).toHaveBeenCalledTimes(2);
+    await act(async () => pending.resolve(fastSnapshot(true)));
+    expect(triggers.map((toggle) => toggle.getAttribute("aria-checked"))).toEqual(["true", "true"]);
+    expect(triggers[1].textContent).toBe("Fast켜짐");
+    expect(screen.getAllByTestId("fast-icon").map((icon) => icon.getAttribute("fill"))).toEqual([
+      "#0a0",
+      "#0a0",
+    ]);
+    expect(triggers[0].textContent).toBe("");
+    runtime.client.invokePluginRpc.mockResolvedValue(fastSnapshot());
+    fireEvent.click(triggers[1]);
+    await waitFor(() => expect(triggers[0].getAttribute("aria-checked")).toBe("false"));
+    expect(triggers[1].textContent).toBe("Fast꺼짐");
+    expect(screen.getAllByTestId("fast-icon").map((icon) => icon.getAttribute("fill"))).toEqual([
+      null,
+      null,
+    ]);
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(runtime.client.invokePluginRpc.mock.calls.map((call) => call[2])).toEqual([
       { action: "read" },
-      { action: "orchestration", mode: "swarm" },
-      { action: "orchestration", mode: "none" },
+      { action: "main", route: { fast: true } },
+      { action: "read" },
+      { action: "main", route: { fast: false } },
+      { action: "read" },
     ]);
     expect(runtime.client.setAgentFeature).not.toHaveBeenCalled();
   });
 
-  it("keeps uncertain-write feedback visible in the open menu and the next switch press only refreshes", async () => {
+  it("keeps uncertain-write feedback visible and the next press only refreshes", async () => {
+    runtime.client.invokePluginRpc.mockResolvedValue(fastSnapshot());
     render(<PaseodogCollaboration provider="paseodog" serverId="host" />);
-    const trigger = screen.getByRole("button", { name: /^OCHE 오케스트레이션/ });
-    await waitFor(() =>
-      expect(trigger.getAttribute("aria-label")).toBe("OCHE 오케스트레이션: 꺼짐 · 단독 실행"),
-    );
-    fireEvent.click(trigger);
+    const trigger = screen.getByRole("switch", { name: /^Fast mode/ });
+    await waitFor(() => expect(trigger.getAttribute("aria-label")).toBe("Fast mode: 꺼짐"));
     runtime.client.invokePluginRpc.mockRejectedValueOnce(new Error("timeout"));
-    const switchName = /^에이전트 협업 스위치/;
-    fireEvent.click(screen.getByRole("button", { name: switchName }));
-    await waitFor(() =>
-      expect(trigger.getAttribute("aria-label")).toBe("OCHE 오케스트레이션: 확인 필요"),
-    );
-    expect(screen.getByRole("dialog", { name: "OCHE" })).toBeTruthy();
+    fireEvent.click(trigger);
+    await waitFor(() => expect(trigger.getAttribute("aria-label")).toBe("Fast mode: 확인 필요"));
     expect(screen.getAllByText(/저장 요청은 자동 재전송하지 않아요/).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: switchName }));
-    await waitFor(() =>
-      expect(trigger.getAttribute("aria-label")).toBe("OCHE 오케스트레이션: 꺼짐 · 단독 실행"),
-    );
+    fireEvent.click(trigger);
+    await waitFor(() => expect(trigger.getAttribute("aria-label")).toBe("Fast mode: 꺼짐"));
     expect(runtime.client.invokePluginRpc.mock.calls.map((call) => call[2])).toEqual([
       { action: "read" },
-      { action: "orchestration", mode: "swarm" },
+      { action: "main", route: { fast: true } },
       { action: "read" },
     ]);
   });
 
   it("gates the trigger while the composer is disabled or the host is disconnected", async () => {
+    runtime.client.invokePluginRpc.mockResolvedValue(fastSnapshot());
     const { rerender } = render(
       <PaseodogCollaboration provider="paseodog" serverId="host" disabled />,
     );
-    const trigger = screen.getByRole("button", { name: /^OCHE 오케스트레이션/ });
+    const trigger = screen.getByRole("switch", { name: /^Fast mode/ });
     expect(trigger.hasAttribute("disabled")).toBe(true);
     fireEvent.click(trigger);
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -502,15 +543,75 @@ describe("native host-wide collaboration", () => {
     ]);
   });
 
-  it("renders as the shared control trigger with label and status on the sheet", async () => {
+  it("keeps the filled last-confirmed icon and marks a rejected change as unknown rather than off", async () => {
+    runtime.client.fetchAgent.mockResolvedValue({
+      agent: { features: [{ id: "fast", type: "toggle", value: true }] },
+    });
+    render(
+      <PaseodogFastScope.Provider value={firstFastScope}>
+        <PaseodogCollaboration provider="paseodog" serverId="host" />
+      </PaseodogFastScope.Provider>,
+    );
+    const trigger = screen.getByRole("switch", { name: /^Fast mode/ });
+    await waitFor(() => expect(trigger.getAttribute("aria-checked")).toBe("true"));
+    const message =
+      "응답 중에는 모델·추론 수준·설정을 바꿀 수 없어요. 응답이 끝날 때까지 기다리거나 응답을 중지한 뒤 다시 선택해 주세요.";
+    runtime.client.setAgentFeature.mockRejectedValueOnce(new Error(message));
+    fireEvent.click(trigger);
+    await waitFor(() => expect(trigger.getAttribute("aria-checked")).toBe("mixed"));
+    expect(screen.getByTestId("fast-icon").getAttribute("fill")).toBe("#a00");
+    expect(screen.getByText(`${message} 다시 누르면 현재 상태만 확인해요.`)).toBeTruthy();
+    fireEvent.click(trigger);
+    await waitFor(() => expect(trigger.getAttribute("aria-checked")).toBe("true"));
+    expect(screen.getByTestId("fast-icon").getAttribute("fill")).toBe("#0a0");
+    expect(runtime.client.setAgentFeature).toHaveBeenCalledExactlyOnceWith("one", "fast", false);
+  });
+
+  it("shows the unsupported-model status in the sheet and disables the toggle", async () => {
+    runtime.client.invokePluginRpc.mockResolvedValue(fastSnapshot(false, false));
     render(<PaseodogCollaboration provider="paseodog" serverId="host" surface="sheet" />);
-    const trigger = screen.getByRole("button", { name: /^OCHE 오케스트레이션/ });
-    await waitFor(() => expect(trigger.textContent).toBe("OCHE꺼짐 · 단독 실행"));
+    const trigger = screen.getByRole("switch", { name: /^Fast mode/ });
+    await waitFor(() =>
+      expect(trigger.getAttribute("aria-label")).toBe("Fast mode: 지원하지 않는 모델"),
+    );
+    expect(trigger.textContent).toBe("Fast지원하지 않는 모델");
+    expect(trigger.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("changes only the current live session, not Main or another session", async () => {
+    runtime.client.fetchAgent.mockResolvedValue({
+      agent: { features: [{ id: "fast", type: "toggle", value: false }] },
+    });
+    const { rerender } = render(
+      <PaseodogFastScope.Provider value={firstFastScope}>
+        <PaseodogCollaboration provider="paseodog" serverId="host" />
+      </PaseodogFastScope.Provider>,
+    );
+    const trigger = screen.getByRole("switch", { name: /^Fast mode/ });
+    await waitFor(() => expect(trigger.getAttribute("aria-checked")).toBe("false"));
+    await waitFor(() => expect(trigger.hasAttribute("disabled")).toBe(false));
+    runtime.client.fetchAgent.mockResolvedValue({
+      agent: { features: [{ id: "fast", type: "toggle", value: true }] },
+    });
+    fireEvent.click(trigger);
+    await waitFor(() => expect(trigger.getAttribute("aria-checked")).toBe("true"));
+    expect(runtime.client.setAgentFeature).toHaveBeenCalledExactlyOnceWith("one", "fast", true);
+    expect(runtime.client.invokePluginRpc).not.toHaveBeenCalled();
+    runtime.client.fetchAgent.mockResolvedValue({
+      agent: { features: [{ id: "fast", type: "toggle", value: false }] },
+    });
+    rerender(
+      <PaseodogFastScope.Provider value={secondFastScope}>
+        <PaseodogCollaboration provider="paseodog" serverId="host" />
+      </PaseodogFastScope.Provider>,
+    );
+    await waitFor(() => expect(trigger.getAttribute("aria-checked")).toBe("false"));
+    expect(runtime.client.fetchAgent).toHaveBeenLastCalledWith("two");
   });
 
   it("does not render or query collaboration for a direct provider", () => {
     render(<PaseodogCollaboration provider="codex" serverId="host" />);
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
     expect(runtime.client.invokePluginRpc).not.toHaveBeenCalled();
   });
 });

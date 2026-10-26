@@ -11,14 +11,27 @@ import { ensureWindowsJobHelper, windowsCompilerPath } from '../plugin/server/wi
 const PATCHES = ['mixdog', 'paseo-usage', 'paseo-steer', 'paseo-agent-messages', 'paseo-assistant-phase',
     'paseo-workspace-name', 'paseo-session-titles', 'paseo-local-stt', 'paseo-relay-password', 'paseo-composer'];
 
+// Mixdog의 정리 훅이 하위 설치 파일을 지우므로 고정된 하위 훅부터 순서대로 완료한다.
+export function engineInstallSteps() {
+    const packages = [
+        'engine/node_modules/mixdog/node_modules/@huggingface/transformers/node_modules/onnxruntime-web/node_modules/protobufjs',
+        'engine/node_modules/mixdog/node_modules/onnxruntime-node',
+        'engine/node_modules/mixdog/node_modules/tesseract.js',
+        'engine/node_modules/mixdog',
+    ];
+    return [
+        { command: 'npm', args: ['--prefix', 'engine', 'ci', '--install-strategy=nested', '--ignore-scripts'] },
+        ...packages.map(path => ({ command: 'npm', args: ['--prefix', path, 'run', 'postinstall'] })),
+    ];
+}
+
 // 설치 단계 목록 (잠금 파일 의존성 -> 패치 적용·검증 -> 검사 -> 프로필 설정)
 export function installSteps(platform = process.platform) {
     const node = (...args) => ({ command: process.execPath, args });
     const npm = (...args) => ({ command: 'npm', args });
     return [
         npm('--prefix', 'tools', 'ci'),
-        // Mixdog postinstall expects its own nested node_modules tree.
-        npm('--prefix', 'engine', 'ci', '--install-strategy=nested'),
+        ...engineInstallSteps(),
         npm('--prefix', 'plugin', 'ci'),
         ...PATCHES.flatMap((name) => [node(`scripts/patch-${name}.mjs`), node(`scripts/patch-${name}.mjs`, '--check')]),
         npm('run', 'check'),

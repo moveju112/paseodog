@@ -148,6 +148,8 @@ export const ru: TranslationResources = {
       cancelingAgent: "Отменить агента",
       stopAgent: "Остановить агента",
       interrupt: "Прервать",
+      confirmTitle: "Остановить агента?",
+      confirmMessage: "Текущее выполнение агента будет остановлено. Ваш черновик сохранится.",
     },
     voice: {
       enableVoiceMode: "Включить голосовой режим",
@@ -1189,6 +1191,7 @@ export const ru: TranslationResources = {
       heading: "Отображение",
       grouping: {
         label: "Группировка",
+        single: "Одно рабочее пространство",
         project: "Проект",
         status: "Статус",
         labels: "Метки",
@@ -2232,6 +2235,11 @@ export const ru: TranslationResources = {
       assistantNickname: {
         label: "Имя помощника",
         description: "Имя в диалогах. Оставьте пустым, чтобы использовать Dog.",
+      },
+      assistantIcon: {
+        label: "Значок помощника",
+        description: "Значок рядом с именем в диалогах. Сохраняется на этом устройстве.",
+        initial: "Первая буква имени (по умолчанию)",
       },
       hideReasoning: {
         label: "Скрывать размышления",

@@ -3890,13 +3890,16 @@ function WorkspaceScreenContent({
       showPullRequest: hasPullRequest,
       showBrowser: showCreateBrowserTab,
       terminalDisabled: createTerminalDisabled,
+      importSession: { disabled: !canOpenImportSheet, open: openImportSheet },
       launch: launchWorkspaceTab,
     }),
     [
+      canOpenImportSheet,
       createTerminalDisabled,
       hasPullRequest,
       isGitCheckout,
       launchWorkspaceTab,
+      openImportSheet,
       showCreateBrowserTab,
     ],
   );

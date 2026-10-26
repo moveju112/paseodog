@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { gitBlob } from './patch-mixdog.mjs';
 import { PROVIDER_PHASE_EDITS, MESSAGES_PHASE_EDITS, ADAPTER_PHASE_EDITS, PROJECTION_PHASE_EDITS,
     withAssistantPhase, withoutAssistantPhase, normalizeAssistantPhase } from '../patches/paseo-assistant-phase.mjs';
+import { RELAY_PASSWORD_PATCHES, withoutRelayPasswordEdits, patchedRelayPasswordSource } from './patch-paseo-relay-password.mjs';
+
+const relayProtocol = RELAY_PASSWORD_PATCHES.find(spec => spec.package === 'protocol');
 
 export const ASSISTANT_PHASE_PATCHES = [
     { root: 'tools/node_modules/@getpaseo/plugin', file: 'dist/server/provider.js', blob: '011490f3eebf9c15c985474c07b52beda5ca697c', edits: PROVIDER_PHASE_EDITS },
@@ -19,9 +22,14 @@ export const ASSISTANT_PHASE_PATCHES = [
 export function patchedAssistantPhaseSource(source, spec) {
     source = normalizeAssistantPhase(source);
     const original = withoutAssistantPhase(source, spec.edits);
-    if (gitBlob(original) !== spec.blob) throw new Error(`Paseo assistant phase source hash mismatch: ${spec.file}`);
+    // 뒤에 적용되는 릴레이 필드는 검토 blob 비교에서만 해제하고 결과에는 그대로 보존한다.
+    const protocol = spec.file === relayProtocol.file;
+    const reviewed = protocol ? withoutRelayPasswordEdits(original, relayProtocol.edits) : original;
+    if (gitBlob(reviewed) !== spec.blob) throw new Error(`Paseo assistant phase source hash mismatch: ${spec.file}`);
     const result = withAssistantPhase(original, spec.edits);
     if (source !== original && source !== result) throw new Error(`Partial Paseo assistant phase patch: ${spec.file}`);
+    // 릴레이 원본·완성본·기존 지원본만 허용한다. 부분 적용을 정규화로 숨기지 않는다.
+    if (protocol) patchedRelayPasswordSource(result, relayProtocol);
     return result;
 }
 

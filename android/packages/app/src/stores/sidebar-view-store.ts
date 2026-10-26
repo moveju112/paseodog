@@ -5,7 +5,7 @@ import { z } from "zod";
 import { workspaceLabelKey } from "@getpaseo/protocol/workspace-labels";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
 
-export type SidebarGroupMode = "project" | "status";
+export type SidebarGroupMode = "project" | "status" | "single";
 
 const SIDEBAR_VIEW_STORAGE_KEY = "sidebar-view";
 const LEGACY_SIDEBAR_GROUP_MODE_STORAGE_KEY = "sidebar-group-mode";
@@ -63,6 +63,7 @@ interface SidebarViewStoreState {
   labelFilter: SidebarLabelFilter;
   setGroupMode: (mode: SidebarGroupMode) => void;
   toggleHostFilter: (serverId: string) => void;
+  selectHost: (serverId: string) => void;
   clearHostFilters: () => void;
   toggleProjectFilter: (viewKey: string) => void;
   clearProjectFilters: () => void;
@@ -79,7 +80,7 @@ interface SidebarViewPersistedState {
   labelFilter: SidebarLabelFilter;
 }
 
-const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "label"]);
+const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "single", "label"]);
 const SidebarLabelFilterSchema = z.object({
   labels: z.array(z.string()),
 });
@@ -141,7 +142,7 @@ export function migrateSidebarViewState(persistedState: unknown): SidebarViewPer
   }
 
   return {
-    groupMode: state.groupMode === "status" ? "status" : "project",
+    groupMode: state.groupMode === "label" ? "project" : (state.groupMode ?? "project"),
     hostFilters: readHostFilters(state),
     projectFilters: state.projectFilters ?? [],
     labelFilter: state.labelFilter
@@ -183,6 +184,8 @@ export const useSidebarViewStore = create<SidebarViewStoreState>()(
       projectFilters: [],
       labelFilter: emptyLabelFilter(),
       setGroupMode: (mode) => set({ groupMode: mode }),
+      // 명시적 호스트 전환은 이전 호스트의 프로젝트 필터로 새 목록을 가리지 않는다.
+      selectHost: (serverId) => set({ hostFilters: [serverId], projectFilters: [] }),
       toggleHostFilter: (serverId) =>
         set((state) => ({ hostFilters: toggleFilterEntry(state.hostFilters, serverId) })),
       clearHostFilters: () => set({ hostFilters: [] }),

@@ -148,6 +148,8 @@ export const es: TranslationResources = {
       cancelingAgent: "Agente de cancelación",
       stopAgent: "detener agente",
       interrupt: "Interrumpir",
+      confirmTitle: "¿Detener al agente?",
+      confirmMessage: "Se detendrá la ejecución actual del agente. Se conservará tu borrador.",
     },
     voice: {
       enableVoiceMode: "Habilitar el modo de voz",
@@ -1208,6 +1210,7 @@ export const es: TranslationResources = {
       heading: "Visualización",
       grouping: {
         label: "Agrupación",
+        single: "Espacio de trabajo único",
         project: "Proyecto",
         status: "Estado",
         labels: "Etiquetas",
@@ -2248,6 +2251,11 @@ export const es: TranslationResources = {
       assistantNickname: {
         label: "Apodo del asistente",
         description: "Nombre mostrado en las conversaciones. Déjalo vacío para usar Dog.",
+      },
+      assistantIcon: {
+        label: "Icono del asistente",
+        description: "Icono junto al apodo en las conversaciones. Se guarda en este dispositivo.",
+        initial: "Inicial del apodo (predeterminado)",
       },
       hideReasoning: {
         label: "Ocultar razonamiento",

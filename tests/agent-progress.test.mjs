@@ -4,8 +4,11 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { patchedComposerSource, COMPOSER_FILE, withoutWorktreeSetupTip } from '../scripts/patch-paseo-composer.mjs';
 import { withoutWhite2Theme } from '../scripts/patch-paseo-theme.mjs';
+import { withoutSingleWorkspace } from '../patches/paseo-single-workspace.mjs';
+import { withoutHostSwitch } from '../patches/paseo-host-switch.mjs';
+import { withoutComposerControls } from '../patches/paseo-composer-controls.mjs';
 import { gitBlob } from '../scripts/patch-mixdog.mjs';
-import { withoutCollaboration, COLLABORATION_RENDER } from '../patches/paseo-collaboration.mjs';
+import { withoutCollaboration, FAST_RENDER as COLLABORATION_RENDER } from '../patches/paseo-collaboration.mjs';
 import { withoutAutoEffort } from '../patches/paseo-auto-effort.mjs';
 import { withoutSidebarToolbar } from '../patches/paseo-sidebar-toolbar.mjs';
 import { withoutHelpMenu } from '../patches/paseo-help-menu.mjs';
@@ -20,12 +23,21 @@ import { withoutRelayPassword } from '../patches/paseo-relay-password.mjs';
 import { withoutCompactionBuffer } from '../patches/paseo-compaction-buffer.mjs';
 import { withoutOfferLink } from '../patches/paseo-offer-link.mjs';
 import { withoutSettingsCorrections } from '../patches/paseo-settings-corrections.mjs';
+import { withoutVersionDetails } from '../patches/paseo-version-details.mjs';
 import { withoutAgentEditorSafety } from '../patches/paseo-agent-editor-safety.mjs';
 import { withoutChatUsability } from '../patches/paseo-chat-usability.mjs';
 import { withoutMarkdownTable } from '../patches/paseo-markdown-table.mjs';
 import { withoutDaemonUpdate } from '../patches/paseo-daemon-update.mjs';
+import { withoutSettingsOrganization } from '../patches/paseo-settings-organization.mjs';
+import { withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
 // 사이드바 쿼터 패치 해제 (도넛 -> 고정 순서, 실제 composer 체인 순서)
 const withoutUsageOrder = (source) => {
+    source = withoutComposerControls(source);
+    source = withoutHostSwitch(source);
+    source = withoutSingleWorkspace(source);
+    source = withoutSettingsBehavior(source);
+    source = withoutVersionDetails(source);
+    source = withoutSettingsOrganization(source);
     source = withoutDaemonUpdate(source);
     source = withoutMarkdownTable(source);
     source = withoutCompactionBuffer(withoutOfferLink(withoutSettingsCorrections(withoutAgentEditorSafety(withoutChatUsability(source)))));
@@ -44,7 +56,8 @@ const React = require('react');
 const { create, act } = require('react-test-renderer');
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
 const original = withoutAgentsSettings(withoutHideReasoning(withoutUsageOrder(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutWorktreeSetupTip(withoutImportCwd(installed))))))))))));
-const patched = patchedComposerSource(original);
+const patched = composerFixture(installed);
+import { composerFixture } from './composer-fixture.mjs';
 const handle = (bridgeId) => ({ provider: 'paseodog', sessionId: `plugin:${JSON.stringify({ version: 2, data: { bridgeId } })}` });
 
 // 패치된 실제 AgentTracks 번들 모듈만 잘라 Metro 의존성 대역으로 실행한다.
@@ -102,7 +115,7 @@ test('progress hook rides the reviewed composer bundle and refuses partial or dr
     assert.ok(patched.includes('(0,T.jsx)(PaseodogAgentProgress,{serverId:j,agentId:x}),ie]'));
     assert.equal(withoutAgentsSettings(withoutHideReasoning(withoutUsageOrder(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutWorktreeSetupTip(withoutImportCwd(patched)))))))))))), original);
     assert.ok(patched.includes('n.WorkspaceDiffStatPill,{serverId:j,workspaceId:D,onPress:ne}'));
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.throws(() => patchedComposerSource(patched.replace(PROGRESS_RENDER, 'children:[re,oe,ce,ie]')), /Partial Paseo agent progress/);
 });
 

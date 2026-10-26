@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
+import { MAX_TURN_MINUTES } from '../plugin/shared/turn-duration.mjs';
 import { readFileSync } from 'node:fs';
 import { runInNewContext, Script } from 'node:vm';
 import { controlRuntime } from '../engine/src/controls.mjs';
-import { resolveCompactionRoute } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/session/loop/fresh-context.mjs';
+import { compactionSummaryPlan } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/session/loop/fresh-context.mjs';
 import { createCompactionSettings } from '../engine/node_modules/mixdog/src/session-runtime/settings-compaction-api.mjs';
 import { normalizeCompactionConfig } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/runtime-core/config-helpers.mjs';
 import { patchedComposerSource, COMPOSER_FILE } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { withSettingsCorrections, withoutSettingsCorrections } from '../patches/paseo-settings-corrections.mjs';
 
 // 실제 RPC 스키마와 네이티브 설정 저장기를 메모리 구성으로 연결한다.
@@ -15,8 +17,12 @@ test('zero token override resets the native budget through the actual RPC contra
     const require = createRequire(new URL('../plugin/package.json', import.meta.url));
     const source = stripTypeScriptTypes(readFileSync(new URL('../plugin/shared/controls.ts', import.meta.url), 'utf8'))
         .replace(/^import .*;\s*$/gm, '').replace(/export const /g, 'const ');
-    const { input } = new Function('defineRpc', 'z', source + '; return engineControls;')(
-        (value) => value, require('zod').z);
+    const { input } = new Function('defineRpc', 'z', 'MAX_TURN_MINUTES', source + '; return engineControls;')(
+        (value) => value, require('zod').z, MAX_TURN_MINUTES);
+    assert.equal(input.parse({ action: 'turnDuration', maxTurnMinutes: 120 }).maxTurnMinutes, 120);
+    for (const value of [0, -1, 1.5, '120', 35792]) {
+        assert.equal(input.safeParse({ action: 'turnDuration', maxTurnMinutes: value }).success, false);
+    }
     let config = { compaction: { mainBufferTokens: 32000, summaryModel: 'other/small' } };
     const session = { compaction: { ...config.compaction } };
     const native = createCompactionSettings({
@@ -44,37 +50,45 @@ test('zero token override resets the native budget through the actual RPC contra
 
 // 공급자 선택·모델 이름·원래 세션 유지와 명시적 비활성·초기화 실패 전파를 검증한다.
 test('summary route uses its configured provider and preserves model IDs containing slashes', async () => {
+    const resolveRoute = async request => {
+        const plan = compactionSummaryPlan(request);
+        assert.equal(plan.steps.length, 1);
+        return plan.steps[0]();
+    };
     const main = { name: 'main', send() {} }, summary = { name: 'summary', send() {} };
     const session = { provider: 'main', model: 'large', compaction: { summaryModel: 'summary/org/small' } };
     const calls = [];
     const request = {
         sessionRef: session, provider: main, model: 'large',
-        config: { providers: { main: {}, summary: {} } }, allowMaintenance: false,
+        config: { providers: { main: {}, summary: {} } },
         getProviderFn: (name) => { calls.push(name); return name === 'summary' ? summary : main; },
         initProvidersFn: async () => { calls.push('init'); },
     };
-    const result = await resolveCompactionRoute(request);
+    const result = await resolveRoute(request);
     assert.equal(result.provider, summary);
     assert.equal(result.model, 'org/small');
     assert.equal(result.source, 'summary');
     assert.deepEqual(calls, ['init', 'summary']);
     assert.equal(session.provider, 'main');
     assert.equal(session.model, 'large');
-    await assert.rejects(resolveCompactionRoute({
+    await assert.rejects(resolveRoute({
         ...request, config: { providers: { summary: { enabled: false } } },
     }), /disabled/);
-    await assert.rejects(resolveCompactionRoute({
+    await assert.rejects(resolveRoute({
         ...request, initProvidersFn: async () => { throw new Error('initialization failed'); },
     }), /initialization failed/);
-    const fallback = await resolveCompactionRoute({ ...request, sessionRef: { provider: 'main', model: 'large' } });
+    const fallback = await resolveRoute({
+        ...request, sessionRef: { provider: 'main', model: 'large' },
+        config: { ...request.config, compaction: { summaryMode: 'self' } },
+    });
     assert.equal(fallback.provider, main);
     assert.equal(fallback.model, 'large');
 });
 
 // 설치된 웹 번들의 전체 원본 해시·재적용과 실제 렌더 목록을 함께 확인한다.
 test('web settings hide unsupported timeout and describe background memory', () => {
-    const source = patchedComposerSource(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
-    assert.equal(patchedComposerSource(source), source);
+    const source = composerFixture(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
+    assert.equal(composerFixture(source), source);
     assert.ok(source.includes('children:[le,ie,ne,ae,ce,ue,me,ge]'));
     assert.ok(!source.includes('children:[le,ie,ne,ae,ce,ue,me,xe,ge]'));
     assert.ok(source.includes(String.raw`\ubc31\uadf8\ub77c\uc6b4\ub4dc \uba54\ubaa8\ub9ac (Recap)`));
@@ -86,6 +100,7 @@ test('shared and web about settings omit release channels and changelog without 
         type, ...props, children: children.length ? children : props?.children,
     });
     const translation = { t: (key) => key };
+    const useAppVersionText = base => `PaseoDog: 1.0.0\n빌드: 42\nPaseo: ${base}`;
     const updater = {
         isDesktopApp: true, statusText: 'up to date', availableUpdate: null,
         errorMessage: null, isChecking: false, isInstalling: false,
@@ -105,10 +120,11 @@ test('shared and web about settings omit release channels and changelog without 
     }).outputText;
     const native = runInNewContext(compiled + '; [AboutSection, DesktopAppUpdateRow]', {
         ...components, jsx, Fragment: 'Fragment', settingsStyles: {}, styles: {},
+        useAppVersionText,
         useTranslation: () => translation, useDesktopAppUpdater: () => updater,
         useCallback: (callback) => callback, useFocusEffect() {},
     });
-    const patched = patchedComposerSource(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
+    const patched = composerFixture(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
     new Script(patched);
     const webFunction = (name, anchor) => {
         const start = patched.lastIndexOf(`function ${name}(`, patched.indexOf(anchor));
@@ -119,6 +135,7 @@ test('shared and web about settings omit release channels and changelog without 
         S: { useTranslation: () => translation }, Pe: { jsx, jsxs: jsx, Fragment: 'Fragment' },
         t: components, s: components, ae: { settingsStyles: {} }, ot: {},
         Ue: 'whats-new', He: components, Qe: 'desktop-update', T: components, Ge: 'hosts',
+        paseodogVersionLabels: { useAppVersionText },
     });
     const webDesktop = runInNewContext(`(${webFunction('Qe', 'settings.about.releaseChannel.label')});`, {
         l: { c: (size) => Array(size).fill(Symbol.for('react.memo_cache_sentinel')) },
@@ -138,6 +155,7 @@ test('shared and web about settings omit release channels and changelog without 
         for (const isDesktopApp of [false, true]) {
             const values = renderedValues(about({ appVersion: '1.0.0', appVersionText: 'v1.0.0', isDesktopApp }));
             assert.ok(values.includes('settings.about.appVersion'));
+            assert.ok(values.includes('PaseoDog: 1.0.0\n빌드: 42\nPaseo: v1.0.0'));
             assert.ok(values.includes('product-update'));
             assert.ok(!values.includes('whats-new'));
             assert.ok(!values.includes('changelog.title'));
@@ -156,7 +174,7 @@ test('shared and web about settings omit release channels and changelog without 
         assert.equal(desktop(), null);
         updater.isDesktopApp = true;
     }
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.equal(withSettingsCorrections(withoutSettingsCorrections(patched)), patched);
     assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
 });

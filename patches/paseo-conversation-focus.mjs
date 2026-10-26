@@ -1,5 +1,6 @@
 import { HIDE_REASONING_EDITS } from './paseo-hide-reasoning.mjs';
 import { SOFT_LIGHT_SURFACE_EDITS, withSoftLightThemes, withoutSoftLightThemes } from './paseo-soft-light-themes.mjs';
+import { withAssistantIcon, withoutAssistantIcon } from './paseo-assistant-icon.mjs';
 
 const nicknameInput = '(0,u.jsx)(s.SettingsInput,{label:v("settings.general.assistantNickname.label"),hint:v("settings.general.assistantNickname.description"),initialValue:x.assistantNickname,placeholder:"Dog",onChangeText:t=>C({assistantNickname:t}),testID:"assistant-nickname-input"})';
 const nicknameResources = HIDE_REASONING_EDITS.filter(([before]) => before.startsWith('autoExpandReasoning:{'));
@@ -39,11 +40,12 @@ export function withConversationFocus(source) {
             throw new Error('Paseo conversation focus anchor mismatch');
         source = source.replace(before, () => after);
     }
-    return withSoftLightThemes(source, SOFT_LIGHT_SURFACE_EDITS);
+    return withAssistantIcon(withSoftLightThemes(source, SOFT_LIGHT_SURFACE_EDITS));
 }
 
 // 전체 적용본만 되돌려 기존 버전·blob 검증을 유지하고 일부 적용은 거부한다.
 export function withoutConversationFocus(source) {
+    source = withoutAssistantIcon(source);
     source = withoutSoftLightThemes(source, SOFT_LIGHT_SURFACE_EDITS);
     const counts = CONVERSATION_FOCUS_EDITS.map(([, after]) => source.split(after).length - 1);
     if (counts.some((count) => count > 1) || (counts.some(Boolean) && counts.includes(0)))

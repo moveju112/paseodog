@@ -6,7 +6,9 @@ export function readEffortUsage(db, { fromMs, toMs }) {
         WITH grouped AS (
             SELECT day,route,COUNT(*) AS turns,SUM(input) AS input,SUM(output) AS output,
                 SUM(cache_read) AS cache_read,SUM(cache_write) AS cache_write,
-                SUM(cost_usd) AS cost_usd,SUM(duration_ms) AS duration_ms
+                SUM(cost_usd) AS cost_usd,SUM(duration_ms) AS duration_ms,
+                SUM(CASE WHEN duration_ms>0 AND output>0 THEN output ELSE 0 END) AS speed_output,
+                SUM(CASE WHEN duration_ms>0 AND output>0 THEN duration_ms ELSE 0 END) AS speed_ms
             FROM usage_events WHERE ts>=? AND ts<=? GROUP BY day,route
         ), attributed AS (
             SELECT printf('%04d-%02d-%02d',g.day/10000,(g.day/100)%100,g.day%100) AS day,
@@ -16,8 +18,9 @@ export function readEffortUsage(db, { fromMs, toMs }) {
                 json_extract(r.signature,'$[7]') AS rank,
                 json_extract(r.signature,'$[9]') AS effort,
                 json_extract(r.signature,'$[10]') AS agent,
+                json_extract(r.signature,'$[11]') AS fast,
                 COALESCE(json_extract(json_extract(r.signature,'$[5]'),'$.inputTokensKnown'),1)=0 AS unmeasured,
-                g.turns,g.input,g.output,g.cache_read,g.cache_write,g.cost_usd,g.duration_ms
+                g.turns,g.input,g.output,g.cache_read,g.cache_write,g.cost_usd,g.duration_ms,g.speed_output,g.speed_ms
             FROM grouped g JOIN usage_routes r ON r.id=g.route
         ), best AS (
             SELECT day,provider,model,MIN(rank) AS rank FROM daily
@@ -27,18 +30,29 @@ export function readEffortUsage(db, { fromMs, toMs }) {
     `).all(fromMs, toMs, usageRollupDayKey(fromMs), usageRollupDayKey(toMs));
     const groups = new Map();
     for (const row of rows) {
-        const key = JSON.stringify([row.provider, row.model, row.agent, row.effort]);
+        const key = JSON.stringify([row.provider, row.model, row.agent, row.effort, row.fast]);
         let bucket = groups.get(key);
         if (!bucket) {
-            bucket = { ...empty(), provider: row.provider, model: row.model, agent: row.agent, effort: row.effort };
+            bucket = { ...empty(), provider: row.provider, model: row.model, agent: row.agent, effort: row.effort,
+                fast: row.fast == null ? null : row.fast === 1, speedOutput: 0, speedMs: 0 };
             groups.set(key, bucket);
         }
         add(bucket, row);
+        bucket.speedOutput += row.speed_output;
+        bucket.speedMs += row.speed_ms;
     }
     return [...groups.values()];
 }
 
-const spec = (file, blob, edits) => ({ file: 'src/' + file, blob, edits });
+// 이전 패치의 정확한 본문만 복원해 기존 설치본도 같은 원본 blob 검사를 거친다.
+const previousRollupSource = readEffortUsage.toString()
+    .replace('SUM(duration_ms) AS duration_ms,\n                SUM(CASE WHEN duration_ms>0 AND output>0 THEN output ELSE 0 END) AS speed_output,\n                SUM(CASE WHEN duration_ms>0 AND output>0 THEN duration_ms ELSE 0 END) AS speed_ms', 'SUM(duration_ms) AS duration_ms')
+    .replace("                json_extract(r.signature,'$[11]') AS fast,\n", '')
+    .replace('g.duration_ms,g.speed_output,g.speed_ms', 'g.duration_ms')
+    .replace('row.agent, row.effort, row.fast]', 'row.agent, row.effort]')
+    .replace('effort: row.effort,\n                fast: row.fast == null ? null : row.fast === 1, speedOutput: 0, speedMs: 0 };', 'effort: row.effort };')
+    .replace('        bucket.speedOutput += row.speed_output;\n        bucket.speedMs += row.speed_ms;\n', '');
+const spec = (file, blob, edits, previousEditCount = 0) => ({ file: 'src/' + file, blob, edits, previousEditCount });
 export const EFFORT_USAGE_PATCHES = [
     spec('runtime/shared/llm/usage-context.mjs', 'bdadfb0afa7548fd590256c51f6991afb7004ef9', [[
         'export const currentUsageContext = () => context.getStore();',
@@ -55,7 +69,7 @@ export function noteRequestEffort(value) {
         'identity.abandonedUsage.push({ usage: stored, model });',
         'identity.abandonedUsage.push({ usage: stored, model, requestEffort: identity.requestEffort });',
     ]]),
-    spec('runtime/agent/orchestrator/providers/effort-configuration.mjs', '0090d911213d935ac9817aab87643997abc9d3bf', [[
+    spec('runtime/agent/orchestrator/providers/effort-configuration.mjs', '823aaaee381275d62bf56a95903eeb55e79ad3b9', [[
         "export const EFFORT_CONFIGURATION_BETA =",
         "import { noteRequestEffort } from '../../../shared/llm/usage-context.mjs';\n\nexport const EFFORT_CONFIGURATION_BETA =",
     ], [
@@ -77,7 +91,10 @@ export function noteRequestEffort(value) {
     ], [
         '    result = await withUsageContext(identity, send);',
         '    result = await withUsageContext(identity, () => { noteRequestEffort(opts.effort); return send(); });',
-    ]]),
+    ], [
+        '      agent: opts.session?.agent,',
+        '      agent: opts.session?.agent,\n      fast: opts.fast === true,',
+    ]], 4),
     spec('runtime/shared/llm/usage-ledger.mjs', 'e7ce7a96316d3b06c02e34ae9d74fb69c3b2a860', [[
         '  readSessionUsage,\n',
         '  readSessionUsage,\n  readEffortUsage,\n',
@@ -90,11 +107,20 @@ export function noteRequestEffort(value) {
     ], [
         '  preserveLegacyDays(days) {',
         "  effortUsageAsync(options) {\n    if (this.path === ':memory:') return Promise.resolve().then(() => readEffortUsage(this.db, options));\n    return this.workerRequest('effortUsage', { options });\n  }\n\n  preserveLegacyDays(days) {",
-    ]]),
+    ], [
+        "      ...(row.effort || row.agent ? [String(row.account || ''), row.effort || null, row.agent || null]\n        : row.account ? [String(row.account)] : []),",
+        "      ...(row.effort || row.agent || typeof row.fast === 'boolean'\n        ? [String(row.account || ''), row.effort || null, row.agent || null, row.fast ?? null]\n        : row.account ? [String(row.account)] : []),",
+    ], [
+        '    agent: text(args.agent) || null,',
+        "    agent: text(args.agent) || null,\n    fast: typeof args.fast === 'boolean' ? args.fast : null,",
+    ]], 4),
     spec('runtime/shared/llm/usage-ledger-rollup.mjs', '924a03e8400e4efb23c4893efa921a3fd3de2f84', [[
         'export function readSessionUsage(db, sessionIds, ownerIds = []) {',
-        `export ${readEffortUsage.toString()}\n\nexport function readSessionUsage(db, sessionIds, ownerIds = []) {`,
-    ]]),
+        `export ${previousRollupSource}\n\nexport function readSessionUsage(db, sessionIds, ownerIds = []) {`,
+    ], [
+        `export ${previousRollupSource}`,
+        `export ${readEffortUsage.toString()}`,
+    ]], 1),
     spec('runtime/shared/llm/usage-ledger-worker.mjs', 'b9c6f15802aa8dad06a811f2db59eeaae395b8fc', [[
         "import { readSessionUsage, rollupDelta, rollupUsage } from './usage-ledger-rollup.mjs';",
         "import { readSessionUsage, readEffortUsage, rollupDelta, rollupUsage } from './usage-ledger-rollup.mjs';",
@@ -102,8 +128,11 @@ export function noteRequestEffort(value) {
         '  sessionUsage: ({ path, sessionIds, ownerIds }) => read(path, (db) => readSessionUsage(db, sessionIds, ownerIds)),',
         '  sessionUsage: ({ path, sessionIds, ownerIds }) => read(path, (db) => readSessionUsage(db, sessionIds, ownerIds)),\n  effortUsage: ({ path, options }) => read(path, (db) => readEffortUsage(db, options)),',
     ]]),
-    spec('session-runtime/usage-stats-api.mjs', 'd1ffc18558c5db7497718b3752b2f417a74c0dd9', [[
+    spec('session-runtime/usage-stats-api.mjs', 'bc89b1f22ac721b764c2497770dc6efa77b469cd', [[
         '    async getUsageStats(options = {}) {',
         "    async getEffortUsageStats(options) {\n      const store = ledger();\n      if (!store) throw new Error('Usage ledger is unavailable');\n      await store.settleWrites();\n      return (await store.effortUsageAsync(options)).map((row) => ({\n        provider: row.provider, model: row.model, agent: row.agent, effort: row.effort,\n        ...sessionUsageSnapshot(row), costBilled: row.costBilled, costEstimated: row.costEstimated,\n      }));\n    },\n    async getUsageStats(options = {}) {",
-    ]]),
+    ], [
+        '        provider: row.provider, model: row.model, agent: row.agent, effort: row.effort,',
+        '        provider: row.provider, model: row.model, agent: row.agent, effort: row.effort,\n        fast: row.fast, speedOutput: row.speedOutput, speedMs: row.speedMs,',
+    ]], 1),
 ];

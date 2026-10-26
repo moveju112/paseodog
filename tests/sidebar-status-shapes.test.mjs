@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { Script } from 'node:vm';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { SIDEBAR_STATUS_SHAPE_EDITS, withSidebarStatusShapes, withoutSidebarStatusShapes } from '../patches/paseo-sidebar-status-shapes.mjs';
 
 const androidRequire = createRequire(new URL('../android/package.json', import.meta.url));
@@ -13,10 +14,10 @@ const React = pluginRequire('react');
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
 
 test('status shapes preserve the reviewed composer hash gate and reject partial patches', () => {
-    const patched = patchedComposerSource(installed);
+    const patched = composerFixture(installed);
     const base = withoutSidebarStatusShapes(patched);
     assert.equal(withSidebarStatusShapes(base), patched);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     new Script(patched);
     const [before, after] = SIDEBAR_STATUS_SHAPE_EDITS[0];
     assert.throws(() => patchedComposerSource(patched.replace(after, before)), /Partial/);

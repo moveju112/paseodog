@@ -5,6 +5,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import vm from 'node:vm';
 import { CHAT_USABILITY_EDITS, withChatUsability, withoutChatUsability } from '../patches/paseo-chat-usability.mjs';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 
 const pinSource = stripTypeScriptTypes(readFileSync(new URL('../android/packages/app/src/usage/pin-compatibility.ts', import.meta.url), 'utf8')).replace(/^export /gm, '');
 const restorePins = new Function(`${pinSource}\nreturn restoreClaudeUsagePins;`)();
@@ -74,9 +75,9 @@ test('sent image and loading placeholder double both dimensions while drafts ret
 
 test('web UI upgrades the installed renderer and remains hash-gated and idempotent', () => {
     const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const source = patchedComposerSource(installed);
+    const source = composerFixture(installed);
     new vm.Script(source);
-    assert.equal(patchedComposerSource(source), source);
+    assert.equal(composerFixture(source), source);
     assert.equal(withChatUsability(withoutChatUsability(source)), source);
     const [before, after] = CHAT_USABILITY_EDITS[1];
     assert.throws(() => patchedComposerSource(source.replace(after, () => before)), /Partial/);

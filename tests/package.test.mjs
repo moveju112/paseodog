@@ -14,9 +14,13 @@ test('source allowlist includes required runtime modules and release commands', 
     const entries = new Set(readFileSync(join(root, 'MANIFEST.sha256'), 'utf8').trim().split('\n')
         .map((line) => line.split('  ')[1]));
     for (const path of ['engine/src/session-actions.mjs', 'engine/src/resource-controls.mjs',
-        'plugin/client/session-tools.tsx', 'plugin/client/resource-settings.tsx', 'tests/native-session-features.test.mjs',
+        'plugin/client/session-tools.tsx', 'android/packages/app/src/screens/settings/turn-duration-settings.ts', 'tests/native-session-features.test.mjs',
         'engine/src/orchestration.mjs', 'plugin/server/compaction.mjs',
-        'patches/effort-usage.mjs', 'tests/worktree-setup-tip.test.mjs', 'scripts/android-update-manifest.py',
+        'patches/effort-usage.mjs', 'patches/session-title-route.mjs', 'patches/builtin-agents.mjs',
+        'tests/title-maintenance-route.test.mjs',
+        'patches/paseo-agents-settings.mjs', 'android/packages/app/src/screens/settings/basic-agent-roles.ts',
+        'android/packages/app/src/screens/settings/basic-agent-roles.test.ts',
+        'tests/worktree-setup-tip.test.mjs', 'scripts/android-update-manifest.py',
         'scripts/check-upstream.mjs', 'scripts/live-acceptance.mjs',
         'android/scripts/build-package.mjs', 'android/scripts/clean-package-dist.mjs',
         'android/scripts/is-main-module.mjs', 'tests/incremental-build.test.mjs',
@@ -25,7 +29,10 @@ test('source allowlist includes required runtime modules and release commands', 
         'tests/agent-editor-safety.test.mjs', 'patches/paseo-chat-usability.mjs',
         'android/packages/app/src/usage/pin-compatibility.ts', 'tests/chat-usability.test.mjs',
         'patches/paseo-soft-light-themes.mjs', 'android/packages/app/src/styles/soft-light-palettes.ts',
-        'patches/paseo-daemon-update.mjs', 'android/packages/app/src/desktop/updates/daemon-update-callouts.ts'])
+        'patches/paseo-daemon-update.mjs', 'android/packages/app/src/desktop/updates/daemon-update-callouts.ts',
+        'plugin/server/daemon-update.mjs',
+        'patches/paseo-settings-organization.mjs', 'android/packages/app/src/screens/settings/diagnostic-details.ts',
+        'patches/paseo-assistant-icon.mjs', 'android/packages/app/src/hooks/use-settings/assistant-icons.ts'])
         assert.ok(entries.has(path), `Required release source missing: ${path}`);
 });
 test('source archive has valid hashes, safe paths and no runtime state or dependencies',t=>{

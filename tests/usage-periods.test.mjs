@@ -64,7 +64,7 @@ for (const scenario of [
             assert.ok(exactStart - result.range.fromMs >= 0 && exactStart - result.range.fromMs < 1000);
             assert.deepEqual(runtime.calls.efforts, [result.range]);
             assert.deepEqual(runtime.calls.dashboard, [{ refresh: true, refreshSetup: false }]);
-            assert.deepEqual(result.totals, { tokens: 42 });
+            assert.deepEqual(result.totals, { tokens: 42, outputTokensPerSecond: null });
             assert.equal(result.series[0].tokens, 42);
         });
     }

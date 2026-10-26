@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { Script } from 'node:vm';
 import { fileURLToPath } from 'node:url';
-import { createClaudeUsageSource } from '../plugin/server/usage.ts';
+import { createClaudeUsageSource, createCodexUsageSource } from '../plugin/server/usage.ts';
 import { readPluginProviderIcon } from '../android/packages/server/src/server/plugins/provider-icon.ts';
 import { COMPOSER_FILE, DESKTOP_COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import { usageDonutEdits, createUsageSummaryTrigger, donutArcRotations, usageCountdownText, usageTooltipText, usageIconSvg, withUsageDonut,
@@ -16,7 +16,8 @@ const React = pluginRequire('react');
 const { jsx, jsxs } = pluginRequire('react/jsx-runtime');
 const { create, act } = pluginRequire('react-test-renderer');
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = patchedComposerSource(installed);
+const patched = composerFixture(installed);
+import { composerFixture } from './composer-fixture.mjs';
 const current = withoutUsageDonut(patched);
 
 // 번들 Metro 모듈 하나를 시작 위치에서 잘라 팩토리로 실행한다(의존 모듈은 zod 대역).
@@ -41,7 +42,7 @@ test('sidebar usage donut patch is hash gated, idempotent and reversible', () =>
     new Script(patched);
     assert.equal(withUsageDonut(current), patched);
     assert.equal(patchedComposerSource(current), patched);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     const edits = usageDonutEdits(current);
     for (const [before, after] of edits) {
         assert.equal(patched.split(after).length, 2);
@@ -160,6 +161,15 @@ test('Claude catalog icon is a readable plugin-relative SVG accepted by the real
     const svg = await readPluginProviderIcon(fileURLToPath(new URL('../plugin/', import.meta.url)), source.icon);
     assert.equal(svg, readFileSync(new URL('../plugin/shared/claude-usage-icon.svg', import.meta.url), 'utf8'));
     assert.ok(usageIconSvg(svg, 'claude').includes('fill="#D97757"'));
+});
+
+test('dedicated Codex catalog icon loads with the same blue color on Android and web', async () => {
+    const source = createCodexUsageSource({ usage: async () => { throw new Error('Unexpected quota query'); } });
+    const svg = await readPluginProviderIcon(fileURLToPath(new URL('../plugin/', import.meta.url)), source.icon);
+    const original = readFileSync(new URL('../android/plugins/codex-usage-source/icon.svg', import.meta.url), 'utf8');
+    assert.equal(svg.trim(), original.trim().replace('fill="currentColor"', 'fill="#3B82F6"'));
+    assert.equal(usageIconSvg(svg, source.id), svg);
+    assert.equal(loadAndroidDonutModel().usageIconSvg(svg, source.id), svg);
 });
 
 test('reviewed desktop bundle accepts the same donut patch', { skip: !existsSync(DESKTOP_COMPOSER_FILE) }, () => {

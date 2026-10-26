@@ -1,4 +1,7 @@
-import type { SidebarProjectEntry } from "@/hooks/use-sidebar-workspaces-list";
+import type {
+  SidebarProjectEntry,
+  SidebarWorkspacePlacement,
+} from "@/hooks/use-sidebar-workspaces-list";
 import { createProjectIconTarget, type ProjectIconTarget } from "@/projects/icon-target";
 
 export interface SidebarProjectHostTarget {
@@ -19,7 +22,14 @@ export interface SidebarProjectSectionRowModel {
   trailingAction: SidebarProjectTrailingAction;
 }
 
-export type SidebarProjectRowModel = SidebarProjectSectionRowModel;
+export interface SidebarSingleWorkspaceRowModel {
+  kind: "workspace";
+  workspace: SidebarWorkspacePlacement;
+  chevron: null;
+  trailingAction: { kind: "none" };
+}
+
+export type SidebarProjectRowModel = SidebarProjectSectionRowModel | SidebarSingleWorkspaceRowModel;
 
 const EMPTY_MULTIPLICITY_MAP: ReadonlyMap<string, boolean> = new Map();
 function hostTarget(input: {
@@ -110,8 +120,18 @@ function projectTrailingAction(
 export function buildSidebarProjectRowModel(input: {
   project: SidebarProjectEntry;
   collapsed: boolean;
+  singleWorkspaceMode?: boolean;
   supportsMultiplicityByServerId?: ReadonlyMap<string, boolean>;
 }): SidebarProjectRowModel {
+  const [workspace] = input.project.workspaces;
+  if (input.singleWorkspaceMode && input.project.workspaces.length === 1 && workspace) {
+    return {
+      kind: "workspace",
+      workspace,
+      chevron: null,
+      trailingAction: { kind: "none" },
+    };
+  }
   return {
     kind: "project_section",
     chevron: input.collapsed ? "expand" : "collapse",

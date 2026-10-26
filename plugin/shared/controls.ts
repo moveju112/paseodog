@@ -7,6 +7,35 @@ export const daemonRelease = defineRpc({
     output: z.object({
         version: z.string().min(1),
         versionCode: z.number().int().positive(),
+        paseodogUpstream: z.object({
+            paseo: z.string().min(1),
+            mixdog: z.string().min(1),
+        }).strict().optional(),
+    }).strict(),
+});
+
+export const daemonUpdate = defineRpc({
+    name: 'daemon-update',
+    input: z.discriminatedUnion('action', [
+        z.object({ action: z.literal('status') }).strict(),
+        z.object({
+            action: z.literal('request'),
+            versionCode: z.number().int().positive().safe(),
+            confirmed: z.literal(true),
+        }).strict(),
+    ]),
+    output: z.object({
+        available: z.boolean(),
+        versionCode: z.number().int().positive().optional(),
+        reason: z.string().nullable().optional(),
+        request: z.object({
+            id: z.string().uuid(),
+            versionCode: z.number().int().positive(),
+            phase: z.enum(['queued', 'start-unknown', 'preparing', 'waiting', 'applying', 'complete',
+                'failed', 'rolling-back', 'rolled-back', 'rollback-failed']),
+            updatedAt: z.number(),
+            message: z.string(),
+        }).strict().nullable(),
     }).strict(),
 });
 
@@ -115,15 +144,18 @@ export const nativeConfigView = defineRpc({
     output: z.unknown(),
 });
 
+import { MAX_TURN_MINUTES } from './turn-duration.mjs';
+
 export const engineControls = defineRpc({
     name: 'engine-controls',
     input: z.object({
         action: z.enum([
             'read', 'main', 'agent', 'agentDefinition', 'agentSave', 'agentCreate', 'agentDelete',
             'compaction', 'autoClear', 'workflow', 'workflowPack', 'workflowSave', 'workflowCreate', 'workflowDelete',
-            'orchestration', 'instructionFiles', 'features', 'preferences',
+            'orchestration', 'instructionFiles', 'features', 'preferences', 'turnDuration',
         ]).default('read'),
         refresh: z.boolean().optional(),
+        maxTurnMinutes: z.number().int().min(1).max(MAX_TURN_MINUTES).optional(),
         agent: z.string().max(100).optional(),
         route: z.object({
             provider: z.string().max(256).optional(), model: z.string().max(256).optional(),
@@ -177,6 +209,7 @@ export const engineControls = defineRpc({
         disabledSkills: z.array(z.string().max(120)).max(200).optional(),
         hookAction: z.enum(['add', 'toggle', 'delete']).optional(),
         hookIndex: z.number().int().min(0).optional(),
+        hookRevision: z.string().regex(/^[a-f0-9]{24}$/).optional(),
         hookRule: z.object({
             event: z.string().max(64),
             matcher: z.string().max(256).optional(),

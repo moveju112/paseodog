@@ -6,7 +6,7 @@ Paseo is a mobile app for monitoring and controlling your local AI coding agents
 
 ## PaseoDog integration scope
 
-This directory is PaseoDog's integrated Paseo source checkout, not an independent upstream delivery target. Follow the parent `AI_RULES.md` and `docs/ai-rules/tasks/RELEASE.md` for authorization, local rollout, concurrent-session handoff and publication. Their daemon/profile and delivery rules take precedence over upstream defaults below. Local source commands and conventions remain scoped to `android/`.
+This directory is integrated Paseo source, not an independent delivery target. The parent `AI_RULES.md` owns authorization and workflow; `docs/ai-rules/CODING_RULES.md` owns check selection. The material below is technical reference, not a task checklist. Do not start dev servers, build, release or apply merely because a command appears here.
 
 ## Repository map
 
@@ -23,7 +23,7 @@ This is an npm workspace monorepo:
 
 `docs/` is the source of truth for system-level and process-level knowledge. **"The docs", "check the docs", or "check the X docs" always mean this directory — not the web.** Look here before fetching anything online; the docs capture gotchas and conventions you cannot derive from the code or external sources.
 
-At the start of non-trivial work, list `docs/` and skim anything relevant to the task.
+Open only the subject document needed for a concrete implementation decision. Do not list or skim the documentation tree at task start.
 
 | Doc                                                                  | What's in it                                                                                                                   |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -123,19 +123,14 @@ and updating `next`, integrating it after a release, and releasing a hotfix from
 - **NEVER assume a timeout means the service needs restarting** — timeouts can be transient.
 - **NEVER make default tests depend on real provider login, credentials or billable calls.** Use deterministic fixtures for authentication and authorization boundaries; keep regression tests for permission allow/deny, ownership and access control.
 - **Before changing app routes, startup routing, remembered workspace restore, or active workspace selection, read [docs/expo-router.md](docs/expo-router.md).**
-- **NEVER run the full test suite locally.** The test suites are heavy and will freeze the machine, especially if multiple agents run them in parallel. Rules:
-  - Run the test files affected by the behavior change: `npx vitest run <file> --bail=1`.
-  - Never run `npm run test` for the entire monorepo/workspace unless explicitly asked. This does not prohibit the parent PaseoDog root's `tests/*.test.mjs` suite.
-  - If logs must be saved on this work server, allocate a unique directory under `/data/tmp/ubuntu` with the parent rules' 3-day TTL; do not overwrite shared `/tmp/test-output.txt`.
-  - Reuse another session's observed success only when the tested inputs and scope still match; rerun affected checks after relevant changes.
-  - Full-suite CI runs follow an authorized push, not a push made merely to run checks.
+- Choose checks using the parent `docs/ai-rules/CODING_RULES.md` table. Do not run the whole monorepo or add a stricter test flag simply because code changed.
 - Add tests to existing suites and reuse their npm scripts and CI jobs instead of creating feature-specific ones.
-- **After code changes, run affected-package typecheck and targeted lint.** Documentation-only changes do not require Android typecheck, lint or builds; the parent PaseoDog root checks still apply.
+- Documentation-only changes need document integrity checks, not Android checks or the root code suite.
 - **Build workspace packages before diagnosing cross-package type errors.** This repo consumes generated declarations across workspaces. If typecheck fails in a package that depends on another workspace, rebuild the owning stack first so `dist` declarations are current:
   - `npm run build:client` — rebuild protocol and client declarations.
   - `npm run build:server` — rebuild highlight, relay, protocol, client, server, and CLI when server/CLI types may be stale.
   - Do not patch inferred callback parameters or add local duplicate types just to silence stale declaration errors.
-- **Before committing, format only this session's changed files with `npm run format:files -- <paths>`.** Use the configured formatter, not whole-tree `npm run format` over other sessions' work.
+- Format changed code with `npm run format:files -- <paths>` before its final checks; do not format the whole tree or run it again just to commit.
 - **Always use npm scripts for linting and formatting.** Do not run tools directly with `npx eslint`, `npx oxfmt`, `npx oxlint`, or package-local binaries. For targeted checks, pass file paths through the npm script:
   - `npm run lint -- packages/app/src/components/message.tsx`
   - `npm run format:files -- CLAUDE.md packages/app/src/components/message.tsx`

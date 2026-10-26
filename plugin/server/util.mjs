@@ -4,7 +4,10 @@ import release from '../shared/release.json' with { type: 'json' };
 export const VERSION = release.version;
 export const UPSTREAM_VERSIONS = release.paseodogUpstream;
 // 플러그인이 실제로 로드한 릴리즈를 보고하며 디스크만 갱신된 상태와 구분한다.
-export const DAEMON_RELEASE = Object.freeze({ version: release.version, versionCode: release.versionCode });
+export const DAEMON_RELEASE = Object.freeze({
+    version: release.version, versionCode: release.versionCode,
+    paseodogUpstream: Object.freeze({ ...release.paseodogUpstream }),
+});
 
 // 호스트의 환경 정리 뒤에도 자기 Electron 바이너리로 실행하는 엔진만 Node 모드를 복원한다.
 export function engineEnvironment(launch, { isElectron = Boolean(process.versions.electron), execPath = process.execPath } = {}) {
@@ -89,9 +92,12 @@ export function validateConfig(config) {
     }
     if (config.mode && !['ask', 'review', 'bypass'].includes(config.mode)) throw new Error(`Unsupported mode: ${config.mode}`);
     if (typeof config.persist !== 'boolean') throw new Error('persist must be boolean');
-    if (Object.keys(config.settings).some((key) => key !== 'autoEffort')
-        || (Object.hasOwn(config.settings, 'autoEffort') && typeof config.settings.autoEffort !== 'boolean'))
-        throw new Error('Unsupported session settings; autoEffort must be boolean');
+    if (Object.keys(config.settings).some((key) => !['autoEffort', 'fast'].includes(key)))
+        throw new Error('Unsupported session settings');
+    for (const key of ['autoEffort', 'fast']) {
+        if (Object.hasOwn(config.settings, key) && typeof config.settings[key] !== 'boolean')
+            throw new Error(`Unsupported session settings; ${key} must be boolean`);
+    }
     for (const [key, value] of Object.entries(config.env)) {
         if (typeof value !== 'string' || key.includes('\0') || key.includes('=') || value.includes('\0')) {
             throw new Error('Invalid environment variable');

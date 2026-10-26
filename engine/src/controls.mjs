@@ -4,11 +4,13 @@ import { loadNativeModules } from './native-engine.mjs';
 import { nativeDefaultWorkflowBody } from './native-templates.mjs';
 import { createJsonLineDecoder, encodeFrame } from '../../plugin/server/json-lines.mjs';
 import { errorText } from '../../plugin/server/util.mjs';
-import { readClaudeUsage, readUsageMetrics } from './usage.mjs';
+import { readOAuthUsage, readUsageMetrics } from './usage.mjs';
 import { normalizeOrchestrationMode } from './orchestration-mode.mjs';
 import { flushPendingSessionConfigWrites } from 'mixdog/src/session-runtime/config-lifecycle/config-writers.mjs';
 import { resourceControls } from './resource-controls.mjs';
 import { compactionBufferRatio } from './compaction-buffer.mjs';
+import { changeHookSettings, readHookSettings } from './hook-settings.mjs';
+import { createMessagePolicyHandler } from './message-policy.mjs';
 
 // 인증정보·프롬프트·파일 경로 없이 모델 선택에 필요한 필드만 전달한다.
 export function modelProjection(row) {
@@ -36,12 +38,17 @@ function workflowPackProjection(pack) {
 // 설정 요청은 허용된 항목만 받으며 전용 프로필의 네이티브 API로 저장한다.
 export async function controlRuntime(runtime, request = {}, options = {}) {
     const action = request.action || 'read';
+    if (action === 'messagePolicy') {
+        return createMessagePolicyHandler()({
+            action: request.operation, allowUnrelatedSessions: request.allowUnrelatedSessions,
+        });
+    }
     if (action === 'title') {
         const generate = options.generateTitle || (await import('./session-title.mjs')).generateConversationTitle;
         return generate(request);
     }
     if (action === 'resources') return resourceControls(runtime, request);
-    if (action === 'usage') return await readClaudeUsage(runtime);
+    if (action === 'usage') return await readOAuthUsage(runtime, request.provider);
     if (action === 'metrics') return await readUsageMetrics(runtime, request);
     const cachedModels = Array.isArray(options.cachedModels) && options.cachedModels.length > 0 && request.refresh !== true
         ? options.cachedModels
@@ -281,15 +288,9 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
             if (!Array.isArray(request.disabledSkills)) throw new Error('Invalid disabledSkills');
             await runtime.setDisabledSkills?.(request.disabledSkills.map(String));
         }
-        if (request.hookAction === 'add' && request.hookRule) {
-            await runtime.addHookRule?.(request.hookRule);
+        if (request.hookAction !== undefined) {
             await runtime.flushHookRules?.();
-        } else if (request.hookAction === 'toggle' && typeof request.hookIndex === 'number') {
-            await runtime.setHookRuleEnabled?.(request.hookIndex, Boolean(request.enabled));
-            await runtime.flushHookRules?.();
-        } else if (request.hookAction === 'delete' && typeof request.hookIndex === 'number') {
-            await runtime.deleteHookRule?.(request.hookIndex);
-            await runtime.flushHookRules?.();
+            changeHookSettings(await runtime.hooksStatus?.(), request);
         }
     } else if (action === 'workflow') {
         if (!(await runtime.listWorkflows()).some((row) => row.id === request.workflow)) throw new Error('Unknown workflow');
@@ -433,15 +434,7 @@ export async function controlRuntime(runtime, request = {}, options = {}) {
                 items,
             };
         })(),
-        hooks: {
-            rules: (rawHooks?.rules || []).map((r, index) => ({
-                index,
-                event: String(r.event || ''),
-                matcher: String(r.matcher || ''),
-                command: String(r.command || ''),
-                enabled: r.enabled === true,
-            })),
-        },
+        hooks: readHookSettings(rawHooks),
         workflows: await Promise.all((await runtime.listWorkflows()).map(async ({ id, name, active, description, source, userOverride }) => {
             const pack = typeof runtime.getWorkflowPack === 'function'
                 ? await Promise.resolve(runtime.getWorkflowPack(id)).catch(() => null)
@@ -504,9 +497,9 @@ async function openControlRuntime() {
 
 // 전용 프로필을 열어 설정을 처리하고, 제목 요청만 명시된 네이티브 추론 경로에 전달한다.
 export async function runControls(request) {
-    const { runtime } = await openControlRuntime();
+    const { runtime } = request?.action === 'messagePolicy' ? { runtime: null } : await openControlRuntime();
     try { return await controlRuntime(runtime, request); }
-    finally { await runtime.close('paseodog-controls'); }
+    finally { await runtime?.close('paseodog-controls'); }
 }
 
 // 상주형 제어 파이프를 통해 매 설정 변경 시 콜드 부팅과 모델 재조회를 생략한다.
@@ -535,8 +528,8 @@ export function serveControlsStdio({ input, output, onExit = () => {}, openRunti
         if (closing || !frame || typeof frame.id !== 'string') return;
         queue = queue.then(async () => {
             try {
-                const { runtime } = await ensureRuntime();
                 const req = frame.request || {};
+                const { runtime } = req.action === 'messagePolicy' ? { runtime: null } : await ensureRuntime();
                 const value = await controlRuntime(runtime, req, { cachedModels: req.refresh ? null : cachedModels });
                 if (Array.isArray(value.models) && value.models.length > 0) cachedModels = value.models;
                 write({ v: 1, id: frame.id, ok: true, value });

@@ -124,7 +124,18 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
             }
             if (op === 'configure') {
                 if (active) throw new Error('Worker busy');
-                reply(id, await engine.configure(args)); return;
+                // 모델 변경의 자동 압축 동안에도 ask·compact·다른 설정이 같은 세션을 건드리지 못하게 한다.
+                const turn = { token: id, finished: false, canceled: false };
+                active = turn;
+                try {
+                    const value = await engine.configure(args);
+                    if (turn.canceled) throw new Error('Session configuration canceled');
+                    reply(id, value);
+                } finally {
+                    turn.finished = true;
+                    if (active === turn) active = null;
+                }
+                return;
             }
             if (op === 'action') {
                 if (active) throw new Error('Worker busy');

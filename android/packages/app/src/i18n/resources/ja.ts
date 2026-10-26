@@ -148,6 +148,8 @@ export const ja: TranslationResources = {
       cancelingAgent: "エージェントをキャンセル中",
       stopAgent: "エージェントを停止",
       interrupt: "中断",
+      confirmTitle: "エージェントを停止しますか？",
+      confirmMessage: "実行中のエージェントを停止します。入力中の下書きは保持されます。",
     },
     voice: {
       enableVoiceMode: "音声モードを有効にする",
@@ -1185,6 +1187,7 @@ export const ja: TranslationResources = {
       heading: "表示",
       grouping: {
         label: "グループ化",
+        single: "単一ワークスペース",
         project: "プロジェクト",
         status: "ステータス",
         labels: "ラベル",
@@ -2214,6 +2217,11 @@ export const ja: TranslationResources = {
       assistantNickname: {
         label: "アシスタントのニックネーム",
         description: "会話に表示する名前です。空欄の場合は Dog を使います。",
+      },
+      assistantIcon: {
+        label: "アシスタントのアイコン",
+        description: "会話でニックネームの横に表示するアイコンです。この端末に保存されます。",
+        initial: "ニックネームの頭文字（デフォルト）",
       },
       hideReasoning: {
         label: "思考プロセスを非表示",

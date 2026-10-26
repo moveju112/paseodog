@@ -1594,6 +1594,7 @@ function ProjectBlock({
   supportsPinningByServerId: ReadonlyMap<string, boolean>;
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
 }) {
+  const singleWorkspaceMode = useSidebarViewStore((state) => state.groupMode === "single");
   const {
     visibleItems: visibleWorkspaces,
     expanded: workspacesExpanded,
@@ -1605,16 +1606,16 @@ function ProjectBlock({
       buildSidebarProjectRowModel({
         project,
         collapsed,
+        singleWorkspaceMode,
         supportsMultiplicityByServerId,
       }),
-    [collapsed, project, supportsMultiplicityByServerId],
+    [collapsed, project, singleWorkspaceMode, supportsMultiplicityByServerId],
   );
 
-  // Collapsed rows hide their workspace rows, so the project row carries the most urgent
-  // status among them; expanded rows leave the signal to the child rows themselves.
+  // Collapsed and single-workspace rows carry the status hidden with their child rows.
   const aggregateStatusBucket = useSidebarProjectStatusBucket({
     workspaces: project.workspaces,
-    enabled: collapsed,
+    enabled: collapsed || rowModel.kind === "workspace",
   });
 
   const active = isProjectSelectedByRoute({
@@ -1747,11 +1748,19 @@ function ProjectBlock({
   }, [isRemovingProject, displayName, t, toast, project.hosts]);
 
   const handleToggleCollapsed = useCallback(() => {
+    if (rowModel.kind === "workspace") {
+      onWorkspacePress?.();
+      navigateToWorkspace({
+        serverId: rowModel.workspace.serverId,
+        workspaceId: rowModel.workspace.workspaceId,
+      });
+      return;
+    }
     onToggleCollapsed(project.viewKey);
-  }, [onToggleCollapsed, project.viewKey]);
+  }, [onToggleCollapsed, onWorkspacePress, project.viewKey, rowModel]);
 
   let projectChildren = null;
-  if (!collapsed) {
+  if (!collapsed && rowModel.kind !== "workspace") {
     if (project.workspaces.length > 0) {
       projectChildren = (
         <>
@@ -1801,7 +1810,7 @@ function ProjectBlock({
         displayName={displayName}
         iconDataUri={iconDataUri}
         statusBucket={aggregateStatusBucket}
-        selected={false}
+        selected={rowModel.kind === "workspace" && active}
         chevron={rowModel.chevron}
         onPress={handleToggleCollapsed}
         worktreeTarget={
@@ -2014,11 +2023,9 @@ export function SidebarWorkspaceList({
   const sidebarFilterEmpty =
     hasActiveLabelFilter && hasProjectsBeforeFilter && projects.length === 0;
 
-  // Project mode is the one that keeps its project headers; every other grouping mode is a flat
-  // list of grouped rows, so a new mode lands in the grouped branch rather than silently in this
-  // one's `else`.
+  // Both project modes keep project rows; status mode groups individual workspace rows.
   const content =
-    groupMode !== "project" ? (
+    groupMode === "status" ? (
       <SidebarGroupedModeList
         workspaceGroups={folderProjection.workspaceGroups}
         pinnedGroups={folderProjection.pinnedGroups}

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { Script } from 'node:vm';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 import { WORK_RECORD_EDITS, withWorkRecords, withoutWorkRecords } from '../patches/paseo-work-records.mjs';
 import { ASSISTANT_PHASE_PATCHES, patchedAssistantPhaseSource } from '../scripts/patch-paseo-assistant-phase.mjs';
 import { RELAY_PASSWORD_PATCHES } from '../scripts/patch-paseo-relay-password.mjs';
@@ -129,9 +130,13 @@ test('work record renderer is collapsed by default, expands on press and collaps
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     const theme = { colors: { surface1: '#f5f5f5', border: '#ddd', foregroundMuted: '#777', foreground: '#111' },
         borderRadius: { md: 6 }, spacing: { 1: 4, 2: 8 }, fontSize: { sm: 12 } };
-    const render = createRenderer({ React, View: 'view', Text: 'text', Pressable: 'pressable',
+    let icon = '';
+    let photo = '';
+    const render = createRenderer({ React, View: 'view', Text: 'text', Image: 'image', Pressable: 'pressable',
         StyleSheet: { create: (make) => make(theme) },
         useAssistantNickname: () => 'Dog',
+        useAssistantIcon: () => icon,
+        useAssistantPhoto: () => photo,
         useTranslation: () => ({ i18n: { language: 'ko' } }) });
     const record = project({ tail: [user, thought, assistant('p', '진행', 'commentary')], head: [] }, true).tail[1];
     const row = { item: record, phase: 'complete' };
@@ -160,6 +165,26 @@ test('work record renderer is collapsed by default, expands on press and collaps
     let answer;
     await act(async () => { answer = create(render({ item: { kind: 'assistant_message', id: 'a', text: '본문', answerStart: true } }, body)); });
     assert.equal(answer.root.findAll((node) => node.type === 'text' && node.props.accessibilityRole === 'header')[0].props.children, 'Dog');
+    const avatar = () => answer.root.find((node) => node.type === 'text' && node.props.testID === 'assistant-avatar-icon').props.children;
+    assert.equal(avatar(), 'D');
+    icon = '🤖';
+    await act(async () => answer.update(render({ item: { kind: 'assistant_message', id: 'a', text: '본문', answerStart: true } }, body)));
+    assert.equal(avatar(), '🤖');
+    assert.equal(answer.root.findAllByType('body')[0].props.children, '본문');
+    photo = 'data:image/jpeg;base64,/9j/2Q==';
+    await act(async () => answer.update(render({ item: { kind: 'assistant_message', id: 'a', text: '본문', answerStart: true } }, body)));
+    const image = answer.root.findByType('image');
+    assert.equal(image.props.source.uri, photo);
+    assert.equal(answer.root.findAll((node) => node.props.testID === 'assistant-avatar-icon').length, 0);
+    await act(async () => image.props.onError());
+    assert.equal(avatar(), '🤖');
+    photo = 'data:image/jpeg;base64,/9j/AAAA/9k=';
+    await act(async () => answer.update(render({ item: { kind: 'assistant_message', id: 'a', text: '본문', answerStart: true } }, body)));
+    assert.equal(answer.root.findByType('image').props.source.uri, photo);
+    photo = '';
+    icon = '';
+    await act(async () => answer.update(render({ item: { kind: 'assistant_message', id: 'a', text: '본문', answerStart: true } }, body)));
+    assert.equal(avatar(), 'D');
     const answerContainer = answer.root.find((node) => node.type === 'view' && node.props.testID === 'assistant-answer');
     assert.deepEqual(answerContainer.props.style.paddingLeft, { xs: 0, md: 40 });
     await act(async () => answer.unmount());
@@ -177,9 +202,9 @@ test('a turn that ended on a closed provider connection offers one explicit cont
     const sent = [];
     let fail = false;
     const client = { sendAgentMessage: async (agentId, text, options) => { sent.push([agentId, text, options]); if (fail) throw new Error('offline'); } };
-    const render = createRenderer({ React, View: 'view', Text: 'text', Pressable: 'pressable',
+    const render = createRenderer({ React, View: 'view', Text: 'text', Image: 'image', Pressable: 'pressable',
         StyleSheet: { create: (make) => make(theme) }, useTranslation: () => ({ i18n: { language: 'ko' } }),
-        useAssistantNickname: () => 'Dog', getClient: (serverId) => (serverId === 'srv' ? client : null) });
+        useAssistantNickname: () => 'Dog', useAssistantIcon: () => '', useAssistantPhoto: () => '', getClient: (serverId) => (serverId === 'srv' ? client : null) });
     const body = (layout) => React.createElement('body', { id: layout.item.id }, layout.item.text);
     const error = { kind: 'assistant_message', id: 'e', text: '[System Error] Provider connection closed', answerStart: true };
     const session = { serverId: 'srv', agentId: 'agent-1' };
@@ -217,9 +242,9 @@ test('a turn that ended on a closed provider connection offers one explicit cont
 
 test('reviewed web bundle supports the same A renderer and rejects partial patches or drift', () => {
     const source = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const patched = patchedComposerSource(source);
+    const patched = composerFixture(source);
     new Script(patched);
-    assert.equal(patchedComposerSource(patched), patched);
+    assert.equal(composerFixture(patched), patched);
     assert.equal(withWorkRecords(withoutWorkRecords(patched)), patched);
     const [before, after] = WORK_RECORD_EDITS[0];
     assert.throws(() => patchedComposerSource(patched.replace(after, before)), /Partial/);
@@ -240,13 +265,24 @@ test('reviewed web bundle supports the same A renderer and rejects partial patch
 test('all phase transport patches are exact-blob gated and idempotent', () => {
     for (const spec of ASSISTANT_PHASE_PATCHES) {
         const installed = readFileSync(new URL('../' + spec.root + '/' + spec.file, import.meta.url), 'utf8');
-        // 뒤에 적용되는 릴레이 필드만 되돌린 뒤 기존 단계 패치의 원본 blob을 검증한다.
-        const relay = RELAY_PASSWORD_PATCHES.find((entry) => entry.package === 'protocol');
-        const source = spec.file === relay.file
-            ? [...relay.edits].reverse().reduce((text, [before, after]) => text.replace(after, () => before), installed)
-            : installed;
-        const patched = patchedAssistantPhaseSource(source, spec);
+        const patched = patchedAssistantPhaseSource(installed, spec);
         assert.equal(patchedAssistantPhaseSource(patched, spec), patched);
         assert.throws(() => patchedAssistantPhaseSource(patched + '// drift', spec), /hash mismatch/);
     }
+});
+
+test('phase reapplication preserves relay fields and rejects partial relay patches', async () => {
+    const { withoutAssistantPhase } = await import('../patches/paseo-assistant-phase.mjs');
+    const { withoutRelayPasswordEdits, patchedRelayPasswordSource } = await import('../scripts/patch-paseo-relay-password.mjs');
+    const spec = ASSISTANT_PHASE_PATCHES.find(entry => entry.root === 'tools/node_modules/@getpaseo/protocol');
+    const relay = RELAY_PASSWORD_PATCHES.find(entry => entry.package === 'protocol');
+    const installed = readFileSync(new URL('../' + spec.root + '/' + spec.file, import.meta.url), 'utf8');
+    const original = withoutRelayPasswordEdits(withoutAssistantPhase(installed, spec.edits), relay.edits);
+    const phase = patchedAssistantPhaseSource(original, spec);
+    const combined = patchedRelayPasswordSource(phase, relay);
+    assert.equal(patchedAssistantPhaseSource(combined, spec), combined);
+    assert.equal(patchedAssistantPhaseSource(withoutAssistantPhase(combined, spec.edits), spec), combined);
+    const partial = phase.replace(relay.edits[0][0], () => relay.edits[0][1]);
+    assert.throws(() => patchedAssistantPhaseSource(partial, spec), /Partial Paseo relay password patch/);
+    assert.throws(() => patchedAssistantPhaseSource(combined + '\n// drift', spec), /hash mismatch/);
 });

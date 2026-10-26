@@ -6,14 +6,18 @@ async function delayRpc(value) {
 }
 const server=serveWorker({input:process.stdin,output:process.stdout,onExit:()=>process.exit(0),engineFactory:async(args,{emit})=>{
     await delayRpc(args.config.env.TEST_OPEN_DELAY_MS);
-    let aborted=false,release;
+    let aborted=false,release,releaseConfigure;
     const steering = [];
     const configuration = { autoEffort: args.config.settings?.autoEffort ?? true, effort: 'low' };
     return { id:'sess_child',
         // 실제 워커 왕복에서 세션별 설정 읽기와 변경 결과를 전달한다.
         configuration() { return { ...configuration }; },
         // 테스트 세션의 다음 턴 선호값만 변경한다.
-        async configure(changes) { Object.assign(configuration, changes); return { ...configuration }; },
+        async configure(changes) {
+            if (args.config.env.TEST_HOLD_CONFIGURE === 'true') await new Promise(resolve => { releaseConfigure = resolve; });
+            Object.assign(configuration, changes); return { ...configuration };
+        },
+        auth() { releaseConfigure?.(); releaseConfigure = null; return { released: true }; },
         // 실제 JSONL 상태 조회를 통해 컨텍스트 표시 필드를 전달한다.
         async status() { await delayRpc(args.config.env.TEST_STATUS_DELAY_MS); return { context: { usedTokens: 40, effectiveContextWindow: 1000 } }; },
         // 계승 응답의 ID와 현재 워커 ID가 분리되는지 실제 IPC에서 확인한다.

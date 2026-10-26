@@ -116,7 +116,7 @@ const TERMINAL_WEBVIEW_ORIGIN_WHITELIST = ["*"];
 const BRIDGE_READY_TIMEOUT_MS = 2_500;
 const RENDERER_READY_TIMEOUT_MS = 2_500;
 const TERMINAL_TAP_MOVE_TOLERANCE_PX = 8;
-type WebViewProps = ComponentProps<typeof WebView>;
+type WebViewProps = ComponentProps<typeof WebView<unknown>>;
 interface PendingTerminalTap {
   startX: number;
   startY: number;
@@ -185,7 +185,7 @@ export default function WebViewTerminalEmulator({
   focusRequestToken = 0,
   resizeRequestToken = 0,
 }: TerminalEmulatorProps) {
-  const webViewRef = useRef<WebView>(null);
+  const webViewRef = useRef<WebView<unknown>>(null);
   const [webViewEpoch, setWebViewEpoch] = useState(0);
   const [bridgeReadyVersion, setBridgeReadyVersion] = useState(0);
   const bridgeReadyRef = useRef(false);
@@ -666,7 +666,7 @@ export default function WebViewTerminalEmulator({
 
   return (
     <View style={rootStyle} testID={testId}>
-      <WebView
+      <WebView<unknown>
         key={webViewEpoch}
         ref={webViewRef}
         source={TERMINAL_WEBVIEW_SOURCE}

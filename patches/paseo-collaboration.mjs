@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { createFastControl, getFastControl } from '../android/packages/app/src/utils/paseodog-fast-control.mjs';
+import { createFastControl as previousFastControl, fastToggle as previousFastToggle } from './paseo-fast-v5.mjs';
 // 호스트별 실제 RPC 상태를 공유하고 실패한 저장 요청은 재전송하지 않는다.
 export function createCollaborationState(client) {
     let snapshot = { mode: null, busy: false, error: '' };
@@ -175,7 +177,7 @@ const PREVIOUS_COLLABORATION_SOURCE = COLLABORATION_STATE + `${collaborationMenu
 // OCHE: 검토된 입력창 모듈의 React·기존 트리거·Combobox·lucide 아이콘·테마 훅을 그대로 쓴다.
 function PaseodogCollaboration(props){return (0,J.jsx)(collaborationMenu,{...props,React:s,jsx:J.jsx,jsxs:J.jsxs,View:n.View,Text:t.Text,Trigger:K.AgentControlTrigger,Combobox:A.Combobox,ComboboxItem:A.ComboboxItem,Icon:b.Users,useTheme:f.useUnistyles})}
 ` + DRAFT_WRAPPER + COLLABORATION_SOURCE_ANCHOR;
-export const COLLABORATION_SOURCE = PREVIOUS_COLLABORATION_SOURCE.replace(
+const OCHE_COLLABORATION_SOURCE = PREVIOUS_COLLABORATION_SOURCE.replace(
     "icon: Icon, surface: 'toolbar'",
     `icon: (props) => jsx(View, { style: { position: 'relative' }, children: [
         jsx(Icon, { ...props, color: snapshot.error ? '#d97706' : !snapshot.mode || snapshot.busy ? theme.colors.foregroundMuted : enabled ? '#16a34a' : theme.colors.foregroundMuted }),
@@ -183,25 +185,104 @@ export const COLLABORATION_SOURCE = PREVIOUS_COLLABORATION_SOURCE.replace(
     ] }), surface: 'toolbar'`,
 );
 
+// 이전 OCHE 바이트는 업그레이드 해제 전용으로 보존한다.
+LEGACY_COLLABORATION_SOURCES.push(
+    { version: 3, source: PREVIOUS_COLLABORATION_SOURCE, draft: true },
+    { version: 4, source: OCHE_COLLABORATION_SOURCE, draft: true },
+);
+
+export function fastToggle({ client, provider, agentId = null, modelId = null, disabled: inputDisabled = false, React, jsx, jsxs, Text, Trigger, Icon, useTheme }) {
+    const control = client && provider === 'paseodog' ? getFastControl(client, agentId, modelId) : null;
+    const snapshot = React.useSyncExternalStore(control?.subscribe || emptySubscribe, control?.getSnapshot || emptySnapshot);
+    const [connected, setConnected] = React.useState(client?.isConnected === true);
+    const { theme } = useTheme();
+    const EnabledIcon = React.useMemo(() => function FilledFastIcon(props) {
+        return jsx(Icon, { ...props, fill: props.color });
+    }, [Icon, jsx]);
+    React.useEffect(() => {
+        if (!control) return;
+        const unsubscribe = client.subscribeConnectionStatus((state) => {
+            setConnected(state.status === 'connected');
+            if (state.status === 'connected') void control.refresh();
+        });
+        const refresh = () => { if (client.isConnected) void control.refresh(); };
+        globalThis.addEventListener?.('focus', refresh);
+        return () => { unsubscribe(); globalThis.removeEventListener?.('focus', refresh); };
+    }, [control, client, modelId]);
+    if (!control) return null;
+    const enabled = snapshot.enabled === true;
+    const disabled = inputDisabled || !connected || snapshot.busy || !snapshot.error && !snapshot.available;
+    const status = snapshot.error ? '확인 필요' : snapshot.busy ? '확인 중'
+        : !snapshot.available ? '지원하지 않는 모델' : enabled ? '켜짐' : '꺼짐';
+    return jsxs(React.Fragment, { children: [
+        jsx(Trigger, {
+            icon: enabled ? EnabledIcon : Icon, iconColor: snapshot.error ? theme.colors.destructive : enabled ? theme.colors.accent : theme.colors.foregroundMuted,
+            surface: 'toolbar', label: 'Fast', showToolbarLabel: false, showCaret: false, open: enabled,
+            accessibilityRole: 'switch', accessibilityLabel: `Fast mode: ${status}`,
+            accessibilityHint: snapshot.error || (agentId ? '이 세션의 다음 요청부터 적용 · 추가 요금이 발생할 수 있어요'
+                : '새 세션의 기본값 · 추가 요금이 발생할 수 있어요'),
+            accessibilityState: { checked: snapshot.error ? 'mixed' : enabled, disabled, busy: snapshot.busy },
+            disabled, testID: 'paseodog-fast-toggle',
+            onPress: () => { if (!disabled) void control.toggle(); },
+        }),
+        snapshot.error ? jsx(Text, { accessibilityLiveRegion: 'polite', style: { color: theme.colors.destructive }, children: snapshot.error }) : null,
+    ] });
+}
+
+export const COLLABORATION_SOURCE = `const fastControls=new WeakMap();
+const emptyState={enabled:null,available:false,busy:false,error:""};
+${emptySubscribe.toString()}
+${emptySnapshot.toString()}
+${createFastControl.toString()}
+${getFastControl.toString()}
+${fastToggle.toString()}
+function PaseodogFastControls(props){return (0,J.jsx)(ve,{...props,features:"paseodog"===props.provider?props.features?.filter(e=>e.id!=="fast"):props.features})}
+function PaseodogCollaboration(props){return (0,J.jsx)(fastToggle,{...props,React:s,jsx:J.jsx,jsxs:J.jsxs,Text:t.Text,Trigger:K.AgentControlTrigger,Icon:b.Zap,useTheme:f.useUnistyles})}
+function PaseodogDraftCollaboration({serverId,provider,modelId,disabled}){const client=(0,O.useSessionStore)(e=>serverId?e.sessions[serverId]?.client??null:null);return (0,J.jsx)(PaseodogCollaboration,{client,provider,modelId,disabled})}
+${COLLABORATION_SOURCE_ANCHOR}`;
+const previousFastSource = COLLABORATION_SOURCE
+    .replace(createFastControl.toString(), previousFastControl.toString())
+    .replace(fastToggle.toString(), previousFastToggle.toString());
+export const PREVIOUS_FAST_SOURCES = [
+    previousFastSource,
+    previousFastSource.replace('Boolean(value.route.model?.trim()) && ', ''),
+];
+export const FAST_RENDER = COLLABORATION_RENDER.replace('client:b,provider:h.provider', 'client:b,provider:h.provider,agentId:t,modelId:ho,disabled:mo');
+export const FAST_DRAFT_RENDER = COLLABORATION_DRAFT_RENDER.replace('serverId:L,provider:n', 'serverId:L,provider:n,modelId:h,disabled:F');
+const FAST_FEATURE_ANCHOR = 'jsx:J.jsx,Controls:ve})}';
+const FAST_FEATURE_RENDER = 'jsx:J.jsx,Controls:PaseodogFastControls})}';
+
 // 현재·이전 협업 훅 전체가 정확히 하나만 있을 때만 제거해 원본 해시 검증을 유지한다.
 export function withoutCollaboration(source) {
-    const hasRender = source.includes(COLLABORATION_RENDER);
-    const hasDraft = source.includes(COLLABORATION_DRAFT_RENDER);
-    const found = [{ version: 4, source: COLLABORATION_SOURCE, draft: true }, { version: 3, source: PREVIOUS_COLLABORATION_SOURCE, draft: true }, ...LEGACY_COLLABORATION_SOURCES]
+    const render = source.includes(FAST_RENDER) ? FAST_RENDER : COLLABORATION_RENDER;
+    const hasRender = source.includes(render);
+    const draftRender = source.includes(FAST_DRAFT_RENDER) ? FAST_DRAFT_RENDER : COLLABORATION_DRAFT_RENDER;
+    const hasDraft = source.includes(draftRender);
+    const found = [
+        { version: 6, source: COLLABORATION_SOURCE, draft: true },
+        ...PREVIOUS_FAST_SOURCES.map((source) => ({ version: 5, source, draft: true })),
+        ...LEGACY_COLLABORATION_SOURCES,
+    ]
         .filter((entry) => source.includes(entry.source));
     if (!found.length && !hasRender && !hasDraft) return source;
     if (found.length !== 1 || !hasRender || found[0].draft !== hasDraft) throw new Error('Partial Paseo collaboration patch');
+    if (found[0].version >= 5 && (render !== FAST_RENDER || draftRender !== FAST_DRAFT_RENDER))
+        throw new Error('Partial Paseo collaboration patch');
+    if (found[0].version >= 5 && !source.includes(FAST_FEATURE_RENDER))
+        throw new Error('Partial Paseo collaboration patch');
     return source.replace(found[0].source, COLLABORATION_SOURCE_ANCHOR)
-        .replace(COLLABORATION_RENDER, COLLABORATION_ANCHOR)
-        .replace(COLLABORATION_DRAFT_RENDER, COLLABORATION_DRAFT_ANCHOR);
+        .replace(FAST_FEATURE_RENDER, FAST_FEATURE_ANCHOR)
+        .replace(render, COLLABORATION_ANCHOR)
+        .replace(draftRender, COLLABORATION_DRAFT_ANCHOR);
 }
 
 // 전체 원본 해시를 통과한 번들의 정확한 세 앵커에만 훅을 붙인다.
 export function withCollaboration(source) {
-    for (const anchor of [COLLABORATION_SOURCE_ANCHOR, COLLABORATION_ANCHOR, COLLABORATION_DRAFT_ANCHOR]) {
+    for (const anchor of [COLLABORATION_SOURCE_ANCHOR, COLLABORATION_ANCHOR, COLLABORATION_DRAFT_ANCHOR, FAST_FEATURE_ANCHOR]) {
         if (source.split(anchor).length !== 2) throw new Error('Paseo collaboration anchor mismatch');
     }
     return source.replace(COLLABORATION_SOURCE_ANCHOR, COLLABORATION_SOURCE)
-        .replace(COLLABORATION_ANCHOR, COLLABORATION_RENDER)
-        .replace(COLLABORATION_DRAFT_ANCHOR, COLLABORATION_DRAFT_RENDER);
+        .replace(FAST_FEATURE_ANCHOR, FAST_FEATURE_RENDER)
+        .replace(COLLABORATION_ANCHOR, FAST_RENDER)
+        .replace(COLLABORATION_DRAFT_ANCHOR, FAST_DRAFT_RENDER);
 }

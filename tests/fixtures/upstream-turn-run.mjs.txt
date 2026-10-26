@@ -21,17 +21,19 @@ export function createTurnRunner(deps) {
     getCurrentCwd,
     mgr,
     mcpTurnGraceMs = 0,
+    mcpAgentGraceMs = 3_000,
     endComputerExecution = async () => false,
     deferComputerSessionRelease = () => false,
     beginTurnSnapshotForTurn = beginTurnSnapshot,
     completeTurnSnapshotForTurn = completeTurnSnapshot,
     turnCleanupSettleMs = 2_000,
     getConfig = () => null,
+    currentAgents,
   } = deps;
   const transcript = createTurnTranscript(deps);
   const openTurn = createTurnOpener({
     ...deps,
-    createTiming: createTurnTimingFactory({ ...deps, mcpTurnGraceMs }),
+    createTiming: createTurnTimingFactory({ ...deps, mcpTurnGraceMs, mcpAgentGraceMs }),
     createSnapshot: createSnapshotTrackerFactory({
       getCurrentCwd,
       beginTurnSnapshotForTurn,
@@ -80,7 +82,10 @@ export function createTurnRunner(deps) {
           plannedToolCalls(session0, options),
           getCurrentCwd(),
           options.prefetch || null,
-          callbacks
+          // The agents enabled now (coding Leads), asked for each user turn
+          // the ask prepares, for its agent list reminder
+          // (manager/agent-listing-notice.mjs).
+          { ...callbacks, agentsNow: currentAgents }
         );
       } finally {
         releaseWebSearchUsage?.();

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { patchedExpoActivityResult, patchExpoActivityResult } from '../scripts/patch-expo-activity-result.mjs';
 import {
-    EXPO_ACTIVITY_RESULT_FILE, EXPO_ACTIVITY_RESULT_EDITS, withoutExpoActivityResult,
+    EXPO_ACTIVITY_RESULT_VERSION, EXPO_ACTIVITY_RESULT_FILE, EXPO_ACTIVITY_RESULT_EDITS, withoutExpoActivityResult,
 } from '../patches/expo-activity-result.mjs';
 
 const original = withoutExpoActivityResult(readFileSync(new URL(
@@ -25,10 +25,10 @@ test('Expo lifecycle installer refuses wrong versions and missing patches withou
     const path = join(root, EXPO_ACTIVITY_RESULT_FILE);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, original);
-    writeFileSync(join(root, 'package.json'), JSON.stringify({ version: '3.0.30' }));
-    assert.throws(() => patchExpoActivityResult(root), /3.0.29 required/);
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ version: '3.0.31' }));
+    assert.throws(() => patchExpoActivityResult(root), new RegExp(`${EXPO_ACTIVITY_RESULT_VERSION.replaceAll('.', '\\.')} required`));
     assert.equal(readFileSync(path, 'utf8'), original);
-    writeFileSync(join(root, 'package.json'), JSON.stringify({ version: '3.0.29' }));
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ version: EXPO_ACTIVITY_RESULT_VERSION }));
     assert.throws(() => patchExpoActivityResult(root, { check: true }), /patch is missing/);
     assert.equal(readFileSync(path, 'utf8'), original);
     patchExpoActivityResult(root);
