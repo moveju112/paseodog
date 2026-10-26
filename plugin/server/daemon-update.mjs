@@ -3,15 +3,21 @@ import { createHash, randomUUID } from 'node:crypto';
 import { copyFile, lstat, open, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
-const self = fileURLToPath(import.meta.url);
 const steps = ['prepare', 'verify', 'idle', 'apply', 'check', 'rollback', 'rollbackCheck'];
 const terminal = new Set(['complete', 'failed', 'rolled-back', 'rollback-failed']);
 const sleep = ms => new Promise(done => setTimeout(done, ms));
-const defaultDirectory = () => join(process.env.PASEODOG_HOME || join(homedir(), '.local/share/paseodog'), 'daemon-update');
+const stateRoot = () => process.env.PASEODOG_HOME || join(homedir(), '.local/share/paseodog');
+const defaultDirectory = () => join(stateRoot(), 'daemon-update');
+
+async function configuredPluginRoot() {
+    const profile = JSON.parse(await readFile(join(process.env.PASEO_HOME || join(stateRoot(), 'paseo'), 'config.json'), 'utf8'));
+    const root = profile.plugins?.['paseodog-provider']?.path;
+    if (!isAbsolute(root || '')) throw new Error('Installed PaseoDog plugin path is unavailable');
+    return root;
+}
 
 // 이 파일은 호스트 소유자가 준비한 고정 실행 계획만 읽는다. RPC에는 경로·명령 입력이 없다.
 export function validateUpdatePlan(plan) {
@@ -81,6 +87,7 @@ export function updateServiceCommand(directory) {
 }
 
 export function createDaemonUpdater({ directory = defaultDirectory(), versionCode, platform = process.platform,
+    resolvePluginRoot = configuredPluginRoot,
     start = (command, args) => execute(command, args, { timeout: 30000, maxBuffer: 65536 }) }) {
     directory = resolve(directory);
     let queue = Promise.resolve();
@@ -122,7 +129,9 @@ export function createDaemonUpdater({ directory = defaultDirectory(), versionCod
                         updatedAt: Date.now(), message: '업데이트 요청을 접수했습니다.' };
                     await writeFile(join(directory, 'accepted-plan.json'), JSON.stringify(plan), { mode: 0o600 });
                     // 데몬 교체에도 살아남도록 독립 실행기를 상태 디렉터리에 복사한다.
-                    await copyFile(self, join(directory, 'worker.mjs'));
+                    const pluginRoot = await resolvePluginRoot();
+                    await copyFile(join(pluginRoot, 'server/daemon-update.mjs'), join(directory, 'daemon-update.mjs'));
+                    await copyFile(join(pluginRoot, 'server/daemon-update-worker.mjs'), join(directory, 'worker.mjs'));
                     await saveReceipt(directory, request);
                     try {
                         const [command, args] = updateServiceCommand(directory);
@@ -205,16 +214,5 @@ export async function executeDaemonUpdate(directory, { run = runStep, wait = sle
     } finally {
         await lock.close();
         // worker.lock은 의도적으로 보존한다. 다음 버전 준비 시 호스트가 결과를 확인하고 제거한다.
-    }
-}
-
-if (process.argv[1] && resolve(process.argv[1]) === self) {
-    try {
-        if (process.argv.length !== 4 || process.argv[2] !== '--execute' || !isAbsolute(process.argv[3]))
-            throw new Error('Expected --execute <absolute dedicated update directory>');
-        await executeDaemonUpdate(process.argv[3]);
-    } catch {
-        console.error('Daemon update failed; inspect the local service and persisted receipt');
-        process.exitCode = 1;
     }
 }

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createDaemonUpdater, executeDaemonUpdate, updateServiceCommand, validateUpdatePlan } from '../plugin/server/daemon-update.mjs';
@@ -16,6 +17,7 @@ async function fixture(t, options = {}) {
     await writeFile(join(directory, 'plan.json'), JSON.stringify(plan(11069)), { mode: 0o600 });
     const starts = [];
     const updater = createDaemonUpdater({ directory, versionCode: 11068,
+        resolvePluginRoot: async () => fileURLToPath(new URL('../plugin/', import.meta.url)),
         start: async (...command) => { starts.push(command); if (options.startError) throw options.startError; },
         ...options });
     return { directory, starts, updater, receipt: async () => JSON.parse(await readFile(join(directory, 'request.json'), 'utf8')),
@@ -61,6 +63,8 @@ test('a request persists before detached start and duplicates never start again'
     assert.equal(state.starts.length, 1);
     assert.deepEqual(state.starts[0], updateServiceCommand(state.directory));
     assert.equal(await readFile(join(state.directory, 'worker.mjs'), 'utf8'),
+        await readFile(new URL('../plugin/server/daemon-update-worker.mjs', import.meta.url), 'utf8'));
+    assert.equal(await readFile(join(state.directory, 'daemon-update.mjs'), 'utf8'),
         await readFile(new URL('../plugin/server/daemon-update.mjs', import.meta.url), 'utf8'));
     const fresh = createDaemonUpdater({ directory: state.directory, versionCode: 11068, start: () => assert.fail('replayed') });
     assert.equal((await fresh.request({ confirmed: true, versionCode: 11069 })).request.id, first.request.id);
