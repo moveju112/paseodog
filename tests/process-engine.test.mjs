@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { processEngineFactory } from '../plugin/server/process-engine.mjs';
@@ -76,4 +78,54 @@ test('session effort preferences cross worker IPC and reject configuration durin
         await engine.abort();
         await rejection;
     } finally { await engine.close(); }
+});
+
+// 데몬이 재시작돼 부모가 바뀌면 소켓이 열려 있어도 엔진이 스스로 종료한다.
+test('engine stops once its parent process changes and ignores an unchanged parent', async () => {
+    const { watchParent } = await import('../engine/src/parent-watch.mjs');
+    let parent = 4242;
+    const reasons = [];
+    const cancel = watchParent((reason) => reasons.push(reason), { ppid: () => parent, intervalMs: 5 });
+    await delay(30);
+    assert.deepEqual(reasons, []);
+    parent = 1413;
+    await delay(30);
+    assert.deepEqual(reasons, ['Parent process exited']);
+    parent = 4242;
+    await delay(30);
+    assert.equal(reasons.length, 1);
+    cancel();
+    const orphaned = [];
+    watchParent((reason) => orphaned.push(reason), { ppid: () => 1, intervalMs: 5 })();
+    await delay(20);
+    assert.deepEqual(orphaned, []);
+});
+
+// 실제 엔진 프로세스: 표준입력 연결이 끝나지 않아도(다른 프로세스가 쥔 경우) 부모가 종료되면 스스로 종료한다.
+test('real engine worker exits after its parent dies even while its stdin never reaches EOF', { skip: process.platform === 'win32', timeout: 30000 }, async (t) => {
+    const engine = fileURLToPath(new URL('../engine/bin/paseodog-engine.mjs', import.meta.url));
+    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-parent-watch-test-');
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const fifo = join(directory, 'stdin');
+    execFileSync('mkfifo', [fifo]);
+    // 읽기·쓰기 겸용으로 열어 EOF가 오지 않는 표준입력을 만든다. 중간 부모는 엔진을 띄운 뒤 종료한다.
+    const launcher = `const { spawn } = require('node:child_process'); const fs = require('node:fs');
+        const input = fs.openSync(${JSON.stringify(fifo)}, 'r+');
+        const child = spawn(process.execPath, [${JSON.stringify(engine)}, '--stdio'], { stdio: [input, 'ignore', 'ignore'], detached: true });
+        fs.closeSync(input); process.stdout.write(String(child.pid) + '\\n'); setTimeout(() => process.exit(0), 200);`;
+    const { NODE_TEST_CONTEXT: _context, ...env } = process.env;
+    const parent = spawn(process.execPath, ['-e', launcher], { stdio: ['ignore', 'pipe', 'ignore'], env });
+    processes.push(parent);
+    const pid = Number(await new Promise((resolve) => parent.stdout.once('data', (data) => resolve(String(data).trim()))));
+    const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    try {
+        await new Promise((resolve) => parent.once('exit', resolve));
+        await delay(1000);
+        assert.ok(alive(), 'engine must still be running before the parent watch interval');
+        const deadline = Date.now() + 25000;
+        while (alive() && Date.now() < deadline) await delay(250);
+        assert.equal(alive(), false, 'orphaned engine must exit');
+    } finally {
+        if (alive()) process.kill(pid, 'SIGKILL');
+    }
 });
