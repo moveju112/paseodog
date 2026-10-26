@@ -205,6 +205,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             ...session.record.nativeRoute,
             model: info.state.model, provider: info.state.provider,
             effort: session.config.thinkingOption ?? info.state.effort ?? session.record.nativeRoute?.effort,
+            fast: info.state.fast ?? session.record.nativeRoute?.fast ?? session.route?.fast,
         };
         flush(session);
         if (info.state?.model) {

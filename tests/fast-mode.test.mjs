@@ -1,13 +1,52 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { createFastControl } from '../android/packages/app/src/utils/paseodog-fast-control.mjs';
-import { COLLABORATION_SOURCE, COLLABORATION_SOURCE_ANCHOR } from '../patches/paseo-collaboration.mjs';
+import { COLLABORATION_SOURCE, COLLABORATION_SOURCE_ANCHOR, PREVIOUS_FAST_SOURCES } from '../patches/paseo-collaboration.mjs';
 import { fixture, until, deferred } from './helpers.mjs';
 
 const require = createRequire(new URL('../plugin/package.json', import.meta.url));
 const React = require('react');
 const { create, act } = require('react-test-renderer');
+
+test('previous Fast bundles retain their exact reviewed bytes', () => {
+    assert.deepEqual(PREVIOUS_FAST_SOURCES.map((source) => createHash('sha256').update(source).digest('hex')), [
+        '03fc4867e115fcabe8898b3ad76ca7a79418dcde0d7deb57ea2c60f6f2e7d222',
+        'e8e1028cae59384075c02a78e85ab19786f900c357d96440354af734b751e826',
+    ]);
+});
+
+test('first native identity preserves Fast across a turn and reconnect, honoring explicit native values', async (t) => {
+    for (const nativeFast of [undefined, true, false]) {
+        const catalog = { route: { provider: 'test', model: 'model', fast: true },
+            models: [{ provider: 'test', id: 'model', fastCapable: true }] };
+        const f = fixture({
+            async ask(text, callbacks) {
+                callbacks.onIdentity({ id: 'native-fast', state: { provider: 'test', model: 'model',
+                    ...(nativeFast === undefined ? {} : { fast: nativeFast }) } });
+                return { content: text };
+            },
+        }, { loadCatalog: () => catalog });
+        t.after(() => f.connection.close());
+        await f.ready();
+        assert.equal(f.events.findLast((event) => event.type === 'session.config')
+            .config.settings.find((setting) => setting.id === 'fast').value, true);
+        await f.run();
+        const expected = nativeFast ?? true;
+        assert.equal(f.events.findLast((event) => event.type === 'session.config')
+            .config.settings.find((setting) => setting.id === 'fast').value, expected);
+        assert.equal(f.store.list()[0].nativeRoute.fast, expected);
+        const persistence = f.events.find((event) => event.type === 'session.opened').persistence;
+        await f.connection.close();
+        const resumed = fixture({}, { loadCatalog: () => catalog, store: f.store });
+        t.after(() => resumed.connection.close());
+        resumed.open.persistence = persistence;
+        await resumed.ready();
+        assert.equal(resumed.creates[0].route.fast, expected);
+        assert.equal(catalog.route.fast, true);
+    }
+});
 
 test('forked sessions accept copied Fast and auto effort values without changing host defaults', async (t) => {
     for (const fast of [false, true]) {
@@ -153,7 +192,8 @@ test('shared Fast state serializes writes, reads after uncertain acknowledgment,
     assert.equal(state.getSnapshot().busy, true);
     gate.resolve();
     await saving;
-    assert.equal(state.getSnapshot().enabled, null);
+    assert.equal(state.getSnapshot().enabled, false);
+    assert.ok(state.getSnapshot().error);
     await state.toggle();
     assert.equal(state.getSnapshot().enabled, true);
     assert.deepEqual(writes, [['one', 'fast', true]]);
@@ -161,6 +201,39 @@ test('shared Fast state serializes writes, reads after uncertain acknowledgment,
     await state.toggle();
     assert.equal(writes.length, 1);
     assert.ok(state.getSnapshot().error);
+});
+
+test('Fast retains its last confirmed state after a failed read or rejected write without replay', async () => {
+    const writes = [];
+    let readError = null;
+    const activeTurnError = '응답 중에는 모델·추론 수준·설정을 바꿀 수 없어요. 응답이 끝날 때까지 기다리거나 응답을 중지한 뒤 다시 선택해 주세요.';
+    const client = {
+        isConnected: true,
+        async fetchAgent() {
+            if (readError) throw readError;
+            return { agent: { features: [{ id: 'fast', type: 'toggle', value: true }] } };
+        },
+        async setAgentFeature(...args) { writes.push(args); throw new Error(activeTurnError); },
+    };
+    const control = createFastControl(client, 'one');
+    await control.refresh();
+    readError = new Error('private transport detail');
+    await control.refresh();
+    assert.equal(control.getSnapshot().enabled, true);
+    assert.ok(control.getSnapshot().error);
+    assert.ok(!control.getSnapshot().error.includes(readError.message));
+    readError = null;
+    await control.toggle();
+    assert.equal(control.getSnapshot().enabled, true);
+    assert.equal(control.getSnapshot().error, '');
+    assert.deepEqual(writes, []);
+    await control.toggle();
+    assert.equal(control.getSnapshot().enabled, true);
+    assert.ok(control.getSnapshot().error.includes(activeTurnError));
+    await control.toggle();
+    assert.equal(control.getSnapshot().enabled, true);
+    assert.equal(control.getSnapshot().error, '');
+    assert.deepEqual(writes, [['one', 'fast', false]]);
 });
 
 test('draft Fast checks the selected model capability instead of borrowing the Main model capability', async () => {
@@ -212,7 +285,8 @@ test('injected web UI renders only a lightning switch, toggles the live session,
     const { Component, Controls } = new Function('s', 'J', 't', 'K', 'b', 'f', 've',
         COLLABORATION_SOURCE.replace(COLLABORATION_SOURCE_ANCHOR, '') + ';return {Component:PaseodogCollaboration,Controls:PaseodogFastControls};')(
         React, { jsx: React.createElement, jsxs: React.createElement }, { Text: 'text' },
-        { AgentControlTrigger: 'trigger' }, { Zap: 'zap' },
+        { AgentControlTrigger: (props) => React.createElement('trigger', props,
+            React.createElement(props.icon, { size: 16, color: props.iconColor })) }, { Zap: 'zap' },
         { useUnistyles: () => ({ theme: { colors: { accent: 'green', foregroundMuted: 'gray', destructive: 'red' } } }) },
         'controls',
     );
@@ -227,9 +301,16 @@ test('injected web UI renders only a lightning switch, toggles the live session,
         assert.equal(trigger().props.showToolbarLabel, false);
         assert.equal(trigger().props.showCaret, false);
         assert.equal(trigger().props.accessibilityState.checked, false);
+        assert.equal(renderer.root.findByType('zap').props.fill, undefined);
         await act(async () => { trigger().props.onPress(); trigger().props.onPress(); });
         assert.equal(trigger().props.accessibilityState.checked, true);
         assert.equal(trigger().props.iconColor, 'green');
+        assert.equal(renderer.root.findByType('zap').props.fill, 'green');
+        assert.deepEqual(writes, [['one', 'fast', true]]);
+        client.fetchAgent = async () => { throw new Error('temporary disconnect'); };
+        await act(async () => connectionListener({ status: 'connected' }));
+        assert.equal(trigger().props.accessibilityState.checked, 'mixed');
+        assert.equal(renderer.root.findByType('zap').props.fill, 'red');
         assert.deepEqual(writes, [['one', 'fast', true]]);
         await act(async () => { client.isConnected = false; connectionListener({ status: 'disconnected' }); });
         assert.equal(trigger().props.disabled, true);

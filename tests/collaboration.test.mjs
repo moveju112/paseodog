@@ -16,7 +16,7 @@ import { gitBlob } from '../scripts/patch-mixdog.mjs';
 import {
     createCollaborationState, COLLABORATION_SOURCE, COLLABORATION_SOURCE_ANCHOR,
     COLLABORATION_RENDER, COLLABORATION_ANCHOR, COLLABORATION_DRAFT_ANCHOR, COLLABORATION_DRAFT_RENDER,
-    LEGACY_COLLABORATION_SOURCES, withoutCollaboration,
+    LEGACY_COLLABORATION_SOURCES, PREVIOUS_FAST_SOURCES, withoutCollaboration,
     FAST_RENDER, FAST_DRAFT_RENDER,
 } from '../patches/paseo-collaboration.mjs';
 import { withoutAutoEffort } from '../patches/paseo-auto-effort.mjs';
@@ -104,6 +104,12 @@ test('new-agent draft composer gets Fast, and each exact previous install upgrad
     assert.ok(draftStart > 0 && result.slice(draftStart, draftEnd).endsWith(FAST_DRAFT_RENDER));
     assert.ok(result.slice(draftStart, draftEnd).includes('modelSelectorServerId:w'));
     assert.ok(result.includes('Trigger:K.AgentControlTrigger,Icon:b.Zap'));
+    for (const source of PREVIOUS_FAST_SOURCES) {
+        const previous = result.replace(COLLABORATION_SOURCE, source);
+        assert.equal(patchedComposerSource(previous), result);
+        assert.throws(() => patchedComposerSource(previous.replace('enabled: null, error:', 'enabled: false, error:')),
+            /Partial Paseo collaboration patch/);
+    }
     // 모든 이전 협업 UI는 원본 해시를 통과한 뒤 Fast 토글로 바뀐다.
     const [v1, v2] = LEGACY_COLLABORATION_SOURCES;
     const legacyBase = result.replace(FAST_RENDER, COLLABORATION_RENDER).replace(FAST_DRAFT_RENDER, COLLABORATION_DRAFT_RENDER)

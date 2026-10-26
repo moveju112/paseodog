@@ -13,6 +13,7 @@ import { AgentControlTrigger } from "@/composer/agent-controls/control";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useAppActivelyVisible } from "@/hooks/use-app-visible";
 import { getFastControl } from "@/utils/paseodog-fast-control.mjs";
+import type { AgentControlIconProps } from "@/agent-controls/icons";
 import type { Theme } from "@/styles/theme";
 
 // 아이콘 색만 테마 반응형으로 받도록 트리거 하나만 감싼다 (ref는 그대로 전달).
@@ -20,6 +21,10 @@ const ThemedAgentControlTrigger = withUnistyles(AgentControlTrigger);
 const mutedIconMapping = (theme: Theme) => ({ iconColor: theme.colors.foregroundMuted });
 const accentIconMapping = (theme: Theme) => ({ iconColor: theme.colors.accent });
 const destructiveIconMapping = (theme: Theme) => ({ iconColor: theme.colors.destructive });
+
+function EnabledFastIcon({ size, color }: AgentControlIconProps) {
+  return <Zap size={size} color={color} fill={color} />;
+}
 
 interface CollaborationProps {
   provider: string;
@@ -80,12 +85,16 @@ export function PaseodogCollaboration({
   surface = "toolbar",
 }: CollaborationProps) {
   const { control, snapshot, connected, scope } = useFastMode(provider, serverId);
-  const enabled = snapshot.enabled === true && !snapshot.error;
+  const enabled = snapshot.enabled === true;
   const blocked =
     disabled || !connected || snapshot.busy || (!snapshot.error && !snapshot.available);
   const accessibilityState = useMemo(
-    () => ({ checked: enabled, disabled: blocked, busy: snapshot.busy }),
-    [enabled, blocked, snapshot.busy],
+    () => ({
+      checked: snapshot.error ? ("mixed" as const) : enabled,
+      disabled: blocked,
+      busy: snapshot.busy,
+    }),
+    [enabled, blocked, snapshot.busy, snapshot.error],
   );
   const handlePress = useCallback(() => {
     if (!blocked) void control?.toggle();
@@ -103,7 +112,7 @@ export function PaseodogCollaboration({
   return (
     <View style={styles.container}>
       <ThemedAgentControlTrigger
-        icon={Zap}
+        icon={enabled ? EnabledFastIcon : Zap}
         uniProps={iconMapping}
         surface={surface}
         label="Fast"
