@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 다른 모듈을 불러오기 전에 부모를 기록해 시작 중 데몬 종료도 감지한다.
+const parentAtStart = process.ppid;
 import { VERSION } from '../../plugin/server/util.mjs';
 if (process.argv.includes('--version')) { console.log(VERSION); process.exit(0); }
 if (process.argv.includes('--check')) {
@@ -18,8 +20,8 @@ if (process.argv.includes('--controls-stdio')) {
     console.log = console.error;
     const { serveControlsStdio } = await import('../src/controls.mjs');
     const server = serveControlsStdio({ input: process.stdin, output: wire, onExit: () => process.exit(0) });
-    const { watchParent } = await import('../src/parent-watch.mjs');
-    watchParent(() => server.stop());
+    const { watchParent, ownerFromEnv } = await import('../src/parent-watch.mjs');
+    watchParent(() => server.stop(), { initial: parentAtStart, owner: ownerFromEnv() });
     process.on('SIGINT', () => void server.stop());
     process.on('SIGTERM', () => void server.stop());
     process.on('uncaughtException', () => void server.stop());
@@ -46,8 +48,8 @@ process.stdout.write = process.stderr.write.bind(process.stderr);
 console.log = console.error;
 const { serveWorker } = await import('../src/worker.mjs');
 const server = serveWorker({ input: process.stdin, output: wire, onExit: () => process.exit(0) });
-const { watchParent } = await import('../src/parent-watch.mjs');
-watchParent((reason) => server.stop(reason));
+const { watchParent, ownerFromEnv } = await import('../src/parent-watch.mjs');
+watchParent((reason) => server.stop(reason), { initial: parentAtStart, owner: ownerFromEnv() });
 process.on('SIGINT', () => void server.stop('sigint'));
 process.on('SIGTERM', () => void server.stop('sigterm'));
     process.on('uncaughtException', (e) => { console.error(e.message); void server.stop('uncaught exception'); });

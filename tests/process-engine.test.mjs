@@ -95,6 +95,19 @@ test('engine stops once its parent process changes and ignores an unchanged pare
     await delay(30);
     assert.equal(reasons.length, 1);
     cancel();
+    // 감시 시작 전에 부모가 이미 바뀌었어도 시작 시 기록한 부모와 비교해 종료한다.
+    const late = [];
+    watchParent((reason) => late.push(reason), { ppid: () => 1413, initial: 4242, intervalMs: 5 });
+    await delay(30);
+    assert.deepEqual(late, ['Parent process exited']);
+    // 소유자 프로세스가 사라지면 부모가 그대로여도 종료한다.
+    const ownerGone = [];
+    watchParent((reason) => ownerGone.push(reason), { ppid: () => 4242, initial: 4242, owner: 5151, alive: () => false, intervalMs: 5 })();
+    const ownerLive = [];
+    const stopOwnerWatch = watchParent((reason) => ownerLive.push(reason), { ppid: () => 4242, initial: 4242, owner: 5151, alive: () => true, intervalMs: 5 });
+    await delay(30);
+    stopOwnerWatch();
+    assert.deepEqual(ownerLive, []);
     const orphaned = [];
     watchParent((reason) => orphaned.push(reason), { ppid: () => 1, intervalMs: 5 })();
     await delay(20);
@@ -111,8 +124,8 @@ test('real engine worker exits after its parent dies even while its stdin never 
     // 읽기·쓰기 겸용으로 열어 EOF가 오지 않는 표준입력을 만든다. 중간 부모는 엔진을 띄운 뒤 종료한다.
     const launcher = `const { spawn } = require('node:child_process'); const fs = require('node:fs');
         const input = fs.openSync(${JSON.stringify(fifo)}, 'r+');
-        const child = spawn(process.execPath, [${JSON.stringify(engine)}, '--stdio'], { stdio: [input, 'ignore', 'ignore'], detached: true });
-        fs.closeSync(input); process.stdout.write(String(child.pid) + '\\n'); setTimeout(() => process.exit(0), 200);`;
+        const child = spawn(process.execPath, [${JSON.stringify(engine)}, '--stdio'], { stdio: [input, 'ignore', 'ignore'], detached: true, env: { ...process.env, PASEODOG_ENGINE_OWNER_PID: String(process.pid) } });
+        fs.closeSync(input); process.stdout.write(String(child.pid) + '\\n', () => process.exit(0));`;
     const { NODE_TEST_CONTEXT: _context, ...env } = process.env;
     const parent = spawn(process.execPath, ['-e', launcher], { stdio: ['ignore', 'pipe', 'ignore'], env });
     processes.push(parent);

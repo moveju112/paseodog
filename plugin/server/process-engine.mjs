@@ -45,6 +45,8 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
                 else delete env[key];
             }
             for (const key of ['NODE_OPTIONS', 'NODE_PATH']) delete env[key];
+            // 엔진은 이 프로세스가 사라지면 연결 EOF가 오지 않아도 스스로 종료한다.
+            env.PASEODOG_ENGINE_OWNER_PID = String(process.pid);
             const scope = scopeFactory({ launch, mode: scopeMode });
             // Fail closed before launching an unsupervised native shell. On Linux,
             // systemd --user is mandatory so setpgid() descendants stay in scope.
