@@ -15,7 +15,7 @@ const RULES = [
     [/(^|\/)__tests__\//, []],
     [/\.(test|spec)\.[cm]?[jt]sx?$/, []],
     [/\.md$/, []],
-    [/^scripts\/(release-[\w-]+|build-release|build-web|build-metrics|verified-build-cache|test|test-files|check|check-upstream|benchmark-report|live-acceptance|live-smoke|doctor)\.mjs$/, []],
+    [/^scripts\/(release-[\w-]+|build-release|build-web|build-metrics|verified-build-cache|runtime-changes|test|test-files|check|check-upstream|benchmark-report|live-acceptance|live-smoke|doctor)\.mjs$/, []],
     [/^scripts\/(android-update-manifest\.py|check-env\.sh)$/, []],
     [/^android\/packages\/app\/(android|plugins)\//, ['android']],
     // 데몬 웹 패치·런타임이 앱·서버 소스와 protocol을 직접 가져다 쓴다(patches/*.mjs). 런타임에도 포함한다.

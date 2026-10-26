@@ -396,7 +396,7 @@ test('path classification separates platforms and falls back to every target for
     assert.deepEqual(pathTargets('patches/paseo-usage-donut.mjs'), ['runtime']);
     for (const path of ['docs/ai-rules/tasks/RELEASE.md', 'tests/journal.test.mjs', 'CHANGELOG.md',
         'plugin/shared/release.json', 'android/packages/app/src/polyfills/diagnostics-channel.test.ts',
-        'scripts/release-pipeline.mjs'])
+        'scripts/release-pipeline.mjs', 'scripts/runtime-changes.mjs'])
         assert.deepEqual(pathTargets(path), [], path);
     assert.deepEqual(pathTargets('secrets/unknown.bin'), ['android', 'desktop', 'web', 'runtime']);
     assert.deepEqual(classifyPaths(['plugin/index.server.ts', 'docs/x.md']).runtime, ['plugin/index.server.ts']);
