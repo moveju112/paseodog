@@ -133,6 +133,90 @@ test('host-boundary source patch is hash-locked, idempotent and fails on upstrea
     const original=`async function x(){\n${ANCHOR}\n}`;const expected=gitBlob(original);const patched=patchedSource(original,expected);
     assert.ok(patched.includes(MARKER));assert.equal(patchedSource(patched,expected),patched);assert.throws(()=>patchedSource(original+'//drift',expected),/hash mismatch/);
 });
+// 저장된 프로젝트와 소유권이 일치하는 worktree만 복원하고 실행 경로를 바꾸지 않는다.
+test('native restore accepts the owned managed worktree, including subfolder projects', async () => {
+    for (const projectSubdir of ['', 'packages/app']) {
+        const cwd = `/managed/restore${projectSubdir ? `/${projectSubdir}` : ''}`;
+        const projectPath = `/work${projectSubdir ? `/${projectSubdir}` : ''}`;
+        const workspace = { projectPath, cwd, worktreeId: 'restore', repoCommonDir: '/work/.git',
+            branch: 'fix/restore', revision: 1 };
+        const session = { ...makeSession(), cwd, workspace };
+        let closed = 0, asked = 0, lookedUp;
+        const runtime = { id: session.id, session, resume: async () => ({ id: session.id, cwd }),
+            ask() { asked++; }, abort() {}, compact() {}, close() { closed++; } };
+        const engine = await createNativeEngine({
+            config: { cwd: projectPath, mcpServers: {} }, nativeSessionId: session.id,
+        }, { modules: {
+            loadConfig: () => ({}), createMixdogSessionRuntime: async () => runtime,
+            getSessionWorktree: async (id) => {
+                lookedUp = id;
+                return { id: 'restore', path: '/managed/restore', projectPath, projectSubdir,
+                    repoCommonDir: '/work/.git', ownerSessionId: session.id, branch: 'fix/restore', state: 'ready' };
+            },
+        } });
+        assert.equal(lookedUp, session.id);
+        assert.equal(engine.id, session.id);
+        assert.equal(runtime.session.cwd, cwd);
+        assert.equal(runtime.session.workspace, workspace);
+        assert.equal(asked, 0);
+        await engine.close('done');
+        assert.equal(closed, 1);
+    }
+});
+test('native worktree restore rejects mismatched identity, ownership and workspace records before inference', async () => {
+    const workspace = { projectPath: '/work', cwd: '/managed/restore', worktreeId: 'restore',
+        repoCommonDir: '/work/.git', branch: 'fix/restore', revision: 1 };
+    const entry = { id: 'restore', path: '/managed/restore', projectPath: '/work', projectSubdir: '',
+        repoCommonDir: '/work/.git', ownerSessionId: 'sess1', branch: 'fix/restore', state: 'ready' };
+    const cases = [
+        { workspace: null }, { workspace: { worktreeId: null } },
+        { workspace: { projectPath: '/other' } }, { workspace: { cwd: '/elsewhere' } },
+        { workspace: { revision: -1 } },
+        { workspace: { transition: { state: 'recovery', txId: 'missing' } } },
+        { entry: null }, { entry: { id: 'other' } }, { entry: { state: 'recovery' } },
+        { entry: { ownerSessionId: 'other' } }, { entry: { projectPath: '/other' } },
+        { entry: { path: '/managed/other' } }, { entry: { projectSubdir: 'other' } },
+        { entry: { repoCommonDir: '/other/.git' } }, { entry: { branch: 'other' } },
+        { sessionId: 'other' }, { remoteAttached: true },
+    ];
+    for (const invalid of cases) {
+        const session = { ...makeSession(), cwd: workspace.cwd, id: invalid.sessionId || 'sess1',
+            workspace: invalid.workspace === null ? null : { ...workspace, ...invalid.workspace },
+            remoteAttached: invalid.remoteAttached };
+        let asked = 0, closed = 0;
+        await assert.rejects(createNativeEngine({
+            config: { cwd: '/work', mcpServers: {} }, nativeSessionId: 'sess1',
+        }, { modules: {
+            loadConfig: () => ({}),
+            createMixdogSessionRuntime: async () => ({
+                session, resume: async () => ({ id: 'sess1', cwd: workspace.cwd }),
+                ask() { asked++; }, abort() {}, compact() {}, close() { closed++; },
+            }),
+            getSessionWorktree: async () => invalid.entry === null ? null : { ...entry, ...invalid.entry },
+        } }), invalid.remoteAttached ? /another live/ : /cwd differs/);
+        assert.equal(asked, 0);
+        assert.equal(closed, 1);
+    }
+});
+test('native worktree restore still rejects a changed model route', async () => {
+    const session = { ...makeSession(), cwd: '/managed/restore', workspace: {
+        projectPath: '/work', cwd: '/managed/restore', worktreeId: 'restore',
+        repoCommonDir: '/work/.git', branch: 'fix/restore',
+    } };
+    let closed = 0;
+    await assert.rejects(createNativeEngine({
+        config: { cwd: '/work', mcpServers: {} }, nativeSessionId: 'sess1', route: { model: 'expected' },
+    }, { modules: {
+        loadConfig: () => ({}), createMixdogSessionRuntime: async () => ({
+            session, resume: async () => ({ id: 'sess1', cwd: session.cwd, model: 'other' }),
+            ask() { assert.fail('restore must not infer'); }, abort() {}, compact() {}, close() { closed++; },
+        }),
+        getSessionWorktree: async () => ({ id: 'restore', path: '/managed/restore', projectSubdir: '',
+            projectPath: '/work', repoCommonDir: '/work/.git', branch: 'fix/restore',
+            ownerSessionId: 'sess1', state: 'ready' }),
+    } }), /model differs/);
+    assert.equal(closed, 1);
+});
 test('native session owned by a raw Mixdog process is not remotely forwarded past the host guard',async()=>{
     let closed=0,asked=0;await assert.rejects(createNativeEngine({config:{cwd:'/work',mcpServers:{}},nativeSessionId:'sess1'}, {modules:{loadConfig:()=>({}),createMixdogSessionRuntime:async()=>({session:{remoteAttached:true},ask(){asked++;},abort(){},close(){closed++;},compact(){},resume:()=>({id:'sess1',cwd:'/work'})})}}),/another live/);assert.equal(asked,0);assert.equal(closed,1);
 });
