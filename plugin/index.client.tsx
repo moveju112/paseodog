@@ -378,7 +378,7 @@ function EngineSettings({ theme, host, section }: PluginSurfaceProps & { section
             <TextInput accessibilityLabel="명령 최대 실행 시간 (분)" value={turnMinutes}
                 onChangeText={setTurnMinutes} keyboardType="number-pad" editable={!busy}
                 style={{ ...text, minHeight: 48, padding: 10, borderWidth: 1, borderColor: colors.foreground }} />
-            <Text style={text}>1~{MAX_TURN_MINUTES}분의 정수를 입���하세요.</Text>
+            <Text style={text}>1~{MAX_TURN_MINUTES}분의 정수를 입력하세요.</Text>
             {button('실행 시간 저장', () => void request({ action: 'turnDuration', maxTurnMinutes: Number(turnMinutes) }),
                 false, busy || !/^\d+$/.test(turnMinutes) || Number(turnMinutes) < 1 || Number(turnMinutes) > MAX_TURN_MINUTES)}
             <Text style={{ ...text, fontSize: 18 }}>자동 오케스트레이터</Text>

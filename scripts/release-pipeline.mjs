@@ -123,7 +123,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             '--tag', tag, '--target-abi', 'arm64-v8a', '--output', join(workspace, 'paseodog-android-update.json'),
             releaseArtifacts(workspace, version)[0],
         ]), { artifacts: [join(workspace, 'paseodog-android-update.json')] });
-        // 업로드 직전마다 서명·해시를 다시 확인해 재개 사이 산출물 변조를 차단���다.
+        // 업로드 직전마다 서명·해시를 다시 확인해 재개 사이 산출물 변조를 차단한다.
         const assets = await verifyArtifacts(config, run);
         const expected = Object.fromEntries(await Promise.all(assets.map(async path => [basename(path), (await stat(path)).size])));
         await stage('github-draft', () => execute('github-draft', 'gh', ['release', 'create', tag, '--draft',
