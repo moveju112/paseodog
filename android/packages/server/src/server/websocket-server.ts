@@ -1686,6 +1686,7 @@ export class VoiceAssistantWebSocketServer {
           pending.identity.transport === "relay"
             ? readRelayPasswordHash(this.paseoHome)
             : undefined,
+        paseoHome: this.paseoHome,
         localCredential: this.credentialSource?.localCredential?.() ?? null,
         transport: pending.identity.transport === "relay" ? "relay" : "direct",
       });

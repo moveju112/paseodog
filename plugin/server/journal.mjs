@@ -6,6 +6,7 @@ import { safeKey, plainObject } from './util.mjs';
 
 const MAX_BYTES = 16 * 1024 * 1024;
 const MAX_ITEMS = 2000;
+const MAX_HISTORY_BYTES = 8 * 1024 * 1024;
 const MAX_RECEIPTS = 20000;
 // 계승 목록과 세션 도구에서 같은 첫 사용자 지시로 대상을 구분한다.
 export function sessionDescription(row) {
@@ -46,9 +47,8 @@ function readJson(path) {
         return JSON.parse(data.toString('utf8'));
     } finally { closeSync(fd); }
 }
-function atomicJson(path, value) {
+function atomicJson(path, data) {
     if (existsSync(path) && lstatSync(path).isSymbolicLink()) throw new Error('Refusing symlink journal');
-    const data = Buffer.from(JSON.stringify(value));
     if (data.length > MAX_BYTES) throw new Error('Session journal full; archive this session and open a new one');
     const tmp = `${path}.${randomUUID()}.tmp`;
     let fd;
@@ -73,7 +73,7 @@ export class JournalStore {
         const nonce = randomUUID();
         const owner = { pid: process.pid, start: pidIdentity(process.pid), host: hostname(), nonce };
         for (let attempt = 0; attempt < 2; attempt++) {
-            try { mkdirSync(dir, { mode: 0o700 }); atomicJson(join(dir, 'owner.json'), owner); break; }
+            try { mkdirSync(dir, { mode: 0o700 }); atomicJson(join(dir, 'owner.json'), Buffer.from(JSON.stringify(owner))); break; }
             catch (error) {
                 if (error.code !== 'EEXIST') throw error;
                 if (!lstatSync(dir).isDirectory() || lstatSync(dir).isSymbolicLink()) throw new Error('Unsafe session lock');
@@ -124,11 +124,17 @@ export class JournalStore {
         if (data.items.length > MAX_ITEMS) {
             data.items = data.items.slice(-MAX_ITEMS); data.historyTruncated = true;
         }
-        // Bound text snapshots independently of receipts, which must not be evicted.
-        while (Buffer.byteLength(JSON.stringify(data.items)) > 8 * 1024 * 1024 && data.items.length > 1) {
-            data.items.shift(); data.historyTruncated = true;
+        let serialized = JSON.stringify(data);
+        // 전체 JSON이 본문 한도 안이면 포함된 items도 한도 안이다. 같은 본문을 다시 직렬화하지 않는다.
+        if (data.items.length > 1 && Buffer.byteLength(serialized) > MAX_HISTORY_BYTES) {
+            const previousLength = data.items.length;
+            // receipt는 줄이지 않고 기존과 동일한 오래된 본문만 제거한다.
+            while (data.items.length > 1 && Buffer.byteLength(JSON.stringify(data.items)) > MAX_HISTORY_BYTES) {
+                data.items.shift(); data.historyTruncated = true;
+            }
+            if (data.items.length !== previousLength) serialized = JSON.stringify(data);
         }
-        atomicJson(this.file(data.id), data);
+        atomicJson(this.file(data.id), Buffer.from(serialized));
     }
     remove(id) { try { unlinkSync(this.file(id)); } catch (error) { if (error.code !== 'ENOENT') throw error; } }
     list() {

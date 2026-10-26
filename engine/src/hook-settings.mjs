@@ -13,8 +13,10 @@ function load(status) {
     if (process.env.MIXDOG_HOOKS_FILE)
         throw new Error('MIXDOG_HOOKS_FILE 재정의 중에는 앱에서 훅을 편집할 수 없어요.');
     const path = join(dirname(status.rulesPath), 'hooks', 'hooks.json');
-    const legacy = readHookDocument(status.rulesPath);
-    const document = readHookDocument(path) ?? { hooks: {} };
+    // 설정 조회·편집은 손상본을 복구하거나 옮기지 않고 그대로 보존한다.
+    const readOptions = { restore: false, onDamaged(error) { throw error; } };
+    const legacy = readHookDocument(status.rulesPath, readOptions);
+    const document = readHookDocument(path, readOptions) ?? { hooks: {} };
     if (!document || typeof document !== 'object' || Array.isArray(document)
         || normalizeRules(document).length || !document.hooks
         || typeof document.hooks !== 'object' || Array.isArray(document.hooks))

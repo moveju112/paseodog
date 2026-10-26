@@ -3,7 +3,7 @@ import { createMixdogProvider } from './server/provider.js';
 import { execCommand, spawnProcess, terminateProcess } from '@getpaseo/plugin/server';
 import { createEngineControls } from './server/controls.mjs';
 import { engineControls, engineStatus, engineAuth, engineMetrics, nativeConfigView, engineSession, engineResources, engineTitle } from './shared/controls.js';
-import { createClaudeUsageSource } from './server/usage.js';
+import { createClaudeUsageSource, createCodexUsageSource } from './server/usage.js';
 import { readNativeConfig } from './server/native-config.mjs';
 import { clientErrors } from './shared/client-errors.js';
 import { createClientErrorCollector } from './server/client-errors.mjs';
@@ -19,6 +19,7 @@ export default function contribute(server: PluginServerContext) {
     const clientErrorCollector = createClientErrorCollector();
     server.handle(clientErrors, (request) => clientErrorCollector.handle(request));
     server.registerUsageSource(createClaudeUsageSource(controls));
+    server.registerUsageSource(createCodexUsageSource(controls));
     server.handle(engineTitle, (request) => controls.read({ ...request, action: 'title' }));
     server.handle(engineAuth, (request) => controls.auth(request));
     server.handle(engineSession, (request) => controls.sessionAction(request));

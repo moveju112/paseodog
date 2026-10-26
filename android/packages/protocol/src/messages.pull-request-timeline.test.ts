@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, expectTypeOf, test } from "vitest";
 import { z } from "zod";
 import {
   CheckoutPrStatusResponseSchema,
@@ -9,6 +9,22 @@ import {
 } from "./messages.js";
 
 describe("pull request timeline message schemas", () => {
+  test("prefault keeps legacy missing payloads populated and nonoptional", () => {
+    const parsed = PullRequestTimelineResponseSchema.parse({
+      type: "pull_request_timeline_response",
+    });
+    expectTypeOf(parsed.payload).toMatchTypeOf<{ cwd: string; items: unknown[] }>();
+    expect(parsed.payload).toMatchObject({
+      cwd: "",
+      prNumber: null,
+      items: [],
+      truncated: false,
+      error: null,
+      requestId: "",
+      githubFeaturesEnabled: true,
+    });
+  });
+
   test("requires request identity fields", () => {
     expect(() =>
       PullRequestTimelineRequestSchema.parse({

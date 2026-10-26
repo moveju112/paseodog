@@ -5,7 +5,7 @@ Consult only the matching row. Diagnosis does not authorize the suggested mutati
 | Symptom | Next evidence / remedy |
 |---|---|
 | `Provider 'paseodog' is not available. Available providers: none.` | Inspect provider diagnostic before choosing a remedy; do not assume a restart is needed. |
-| `PaseoDog engine version mismatch` | Compare loaded vs disk release. Arrange an authorized idle-only reload; do not revert metadata. |
+| `PaseoDog engine version mismatch` | Compare loaded vs disk release. Arrange an authorized reload without waiting for idle; do not revert metadata. |
 | PC app and wrapper see different sessions | Check the connected host/home and app startup log; a stock daemon is not an apply target. |
 | `Session already owned` | Find the live owner; never delete its lock or start a second owner. |
 | Ready/doctor passes but feature fails | Reproduce the affected behavior on the actual host; readiness is not feature evidence. |

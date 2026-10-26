@@ -1,4 +1,4 @@
-export const EXPO_ACTIVITY_RESULT_VERSION = '3.0.29';
+export const EXPO_ACTIVITY_RESULT_VERSION = '3.0.30';
 export const EXPO_ACTIVITY_RESULT_FILE = 'android/src/main/java/expo/modules/kotlin/AppContext.kt';
 export const EXPO_ACTIVITY_RESULT_BLOB = '1c125e6f827fac1db85052293be44de2381970b9';
 export const EXPO_ACTIVITY_RESULT_EDITS = [

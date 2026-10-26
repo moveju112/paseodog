@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { configure } from '../scripts/configure.mjs';
@@ -50,6 +50,9 @@ test('packaged patch entry point imports with only the declared runtime scripts 
     }
     const bundled = await import(pathToFileURL(join(root, 'scripts/patch-mixdog.mjs')).href);
     assert.equal(typeof bundled.patch, 'function');
+    const checked = bundled.patch(fileURLToPath(new URL('../engine/node_modules/mixdog/', import.meta.url)), { check: true });
+    assert.equal(checked.patched, true);
+    assert.equal(checked.version, bundled.PIN);
 });
 
 test('Android user-facing version can follow the common release version without losing its fallback', () => {

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { controlRuntime } from '../engine/src/controls.mjs';
 import { createEngineControls } from '../plugin/server/controls.mjs';
+import { createClaudeUsageSource, createCodexUsageSource } from '../plugin/server/usage.ts';
 import { patchPaseoUsage } from '../scripts/patch-paseo-usage.mjs';
 import { createWorkflowHelpers } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/runtime-core/workflow.mjs';
 import { createWorkflowPacksApi } from '../engine/node_modules/mixdog/src/session-runtime/workflow-agents-api/workflow-packs.mjs';
@@ -85,6 +86,104 @@ test('missing auth, failed quota and stale successful quota remain distinguishab
     }, { action: 'usage' }), /native failure/);
 });
 
+test('Codex source uses dedicated runtime auth despite an expired standalone CLI store', async (t) => {
+    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-codex-quota-');
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const authPath = join(directory, 'auth.json');
+    const before = '{"tokens":{"access_token":"fixture-expired"}}\n';
+    await writeFile(authPath, before);
+    const requests = [];
+    const refreshes = [];
+    const updatedAt = '2026-10-25T08:00:00.000Z';
+    const resetsAt = '2026-10-25T13:00:00.000Z';
+    const nativeRuntime = {
+        async getUsageDashboard(input) {
+            refreshes.push(input);
+            return { rows: [
+                { id: 'anthropic-oauth', authenticated: true, windows: [{ label: '5H', usedPct: 99 }] },
+                {
+                    id: 'openai-oauth', authenticated: true, updatedAt: Date.parse(updatedAt),
+                    account: { accessToken: 'fixture-private', refreshToken: 'fixture-private-refresh' },
+                    windows: [
+                        { label: '5H', usedPct: 12, resetAt: Date.parse(resetsAt) },
+                        { label: '7D', usedPct: 34, resetAt: null },
+                    ],
+                },
+            ] };
+        },
+    };
+    const controls = createEngineControls({
+        async execCommand(command, args, options) {
+            assert.equal(options.env.CODEX_HOME, directory);
+            const request = JSON.parse(args.at(-1));
+            requests.push(request);
+            return { stdout: JSON.stringify(await controlRuntime(nativeRuntime, request)) };
+        },
+    });
+    controls.bind({ command: '/engine', args: [], env: { CODEX_HOME: directory } });
+    t.after(() => controls.close());
+    const source = createCodexUsageSource(controls);
+    const [account] = await source.discover({ kind: 'global' });
+    const result = await source.fetch(account.input);
+    assert.deepEqual(requests, [{ action: 'usage', provider: 'openai-oauth' }]);
+    assert.deepEqual(refreshes, [{
+        refresh: true, refreshSetup: false, refreshProviders: ['openai-oauth'],
+    }]);
+    assert.deepEqual(result, {
+        status: 'available',
+        windows: [
+            { id: 'codex-0', label: '5H', summary: true, usedPct: 12, resetsAt },
+            { id: 'codex-1', label: '7D', summary: true, usedPct: 34, resetsAt: null },
+        ],
+        details: [{ id: 'updated-at', label: 'PaseoDog 갱신 시각', value: updatedAt }],
+    });
+    assert.doesNotMatch(JSON.stringify(result), /fixture-|accessToken|refreshToken|account/);
+    assert.equal(await readFile(authPath, 'utf8'), before);
+});
+
+test('runtime Codex and standalone CLI usage have separate identities and session scopes', async () => {
+    const calls = [];
+    const controls = { usage: async (provider) => {
+        calls.push(provider);
+        return { status: 'available', windows: [] };
+    } };
+    const codex = createCodexUsageSource(controls);
+    const claude = createClaudeUsageSource(controls);
+    assert.notEqual(codex.id, 'codex');
+    assert.notEqual(codex.id, claude.id);
+    assert.equal(codex.label, 'Codex (PaseoDog)');
+    const accounts = [{ key: 'mixdog-openai-oauth', harness: 'Mixdog', input: {} }];
+    assert.deepEqual(await codex.discover({ kind: 'global' }), accounts);
+    assert.deepEqual(await codex.discover({ kind: 'session', provider: 'paseodog', env: {} }), accounts);
+    for (const provider of ['codex', 'opencode', 'pi', 'omp'])
+        assert.deepEqual(await codex.discover({ kind: 'session', provider, env: {} }), []);
+    assert.equal(codex.input.safeParse({ path: '/unrelated/auth.json' }).success, false);
+    await codex.fetch({});
+    await claude.fetch({});
+    assert.deepEqual(calls, ['openai-oauth', 'anthropic-oauth']);
+    assert.deepEqual(await claude.discover({ kind: 'global' }), [
+        { key: 'mixdog-anthropic-oauth', harness: 'Mixdog', input: {} },
+    ]);
+});
+
+test('Codex only asks for account connection when the runtime reports missing auth', async () => {
+    for (const [rows, asksForLogin] of [
+        [[], false],
+        [[{ id: 'openai-oauth', authenticated: false }], true],
+        [[{ id: 'openai-oauth', authenticated: true, windows: [] }], false],
+    ]) {
+        const result = await controlRuntime({ getUsageDashboard: async () => ({ rows }) }, {
+            action: 'usage', provider: 'openai-oauth',
+        });
+        assert.equal(result.status, 'error');
+        assert.ok(result.error.includes('Codex'));
+        assert.equal(result.error.includes('계정을 연결'), asksForLogin);
+    }
+    await assert.rejects(controlRuntime({
+        getUsageDashboard() { throw new Error('Must not query unsupported provider'); },
+    }, { action: 'usage', provider: 'unrelated' }), /Unsupported usage provider/);
+});
+
 test('usage does not reuse or replace the settings snapshot cache', async () => {
     const calls = [];
     const controls = createEngineControls({
@@ -99,8 +198,13 @@ test('usage does not reuse or replace the settings snapshot cache', async () => 
     const settings = await controls.read();
     await controls.usage();
     await controls.usage();
+    await controls.usage('openai-oauth');
     assert.deepEqual(await controls.read(), settings);
-    assert.deepEqual(calls, [{}, { action: 'usage' }, { action: 'usage' }, {}]);
+    assert.deepEqual(calls, [
+        {}, { action: 'usage', provider: 'anthropic-oauth' },
+        { action: 'usage', provider: 'anthropic-oauth' },
+        { action: 'usage', provider: 'openai-oauth' }, {},
+    ]);
     await controls.close();
 });
 

@@ -18,14 +18,20 @@ async function settleBuilds(builds) {
 // 공통 의존성은 한 번만 빌드하고 웹이 준비되는 즉시 PC 패키징을 시작한다.
 export async function runReleaseBuild(run) {
     await run('dependencies');
+    const android = run('android');
     await settleBuilds([
-        run('android'),
+        android,
         (async () => {
+            await run('desktop-dependencies');
             await run('web');
             await run('desktop-main');
-            // APK와 PC 두 플랫폼을 한꺼번에 실행하면 메모리 압박으로 Gradle이 종료될 수 있다.
-            await run('linux');
-            await run('windows');
+            const linux = run('linux');
+            // APK 또는 Linux가 끝나 빈 자리가 생기면 Windows를 시작한다. 최대 두 작업은 유지한다.
+            const windows = (async () => {
+                await Promise.race([android, linux]);
+                await run('windows');
+            })();
+            await settleBuilds([linux, windows]);
         })(),
     ]);
 }
@@ -51,9 +57,10 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
     const builder = ['npx', 'electron-builder', '--config', 'electron-builder.cjs',
         `-c.directories.output=${output}`, `-c.extraMetadata.version=${version}`, '--publish', 'never'];
     const commands = {
-        dependencies: [androidRoot, ['npm', 'run', 'build:desktop-deps']],
+        dependencies: [androidRoot, ['npm', 'run', 'build:release-app-deps']],
+        'desktop-dependencies': [androidRoot, ['npm', 'run', 'build:desktop-runtime-deps']],
         android: [join(androidRoot, 'packages/app/android'), ['./gradlew', '--init-script', signingInit,
-            'assembleRelease', `-PpaseodogVersionCode=${versionCode}`, `-PpaseodogVersionName=${version}`]],
+            'assembleRelease', '--profile', `-PpaseodogVersionCode=${versionCode}`, `-PpaseodogVersionName=${version}`]],
         web: [join(androidRoot, 'packages/app'), ['npx', 'expo', 'export', '--platform', 'web',
             ...(metroWorkers ? ['--max-workers', metroWorkers] : [])]],
         'desktop-main': [desktopRoot, ['npm', 'run', 'build:main']],
@@ -74,6 +81,7 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
                 env: { ...process.env, TMPDIR: temporary, CI: '1',
                     PASEODOG_BUILD_CACHE_ROOT: cacheRoot,
                     PASEODOG_RELEASE_METRICS: join(workspace, `${name}-metrics.jsonl`),
+                    ...(name === 'windows' ? { ELECTRON_BUILDER_COMPRESSION_LEVEL: '1' } : {}),
                     ...(metroWorkers ? { PASEODOG_METRO_WORKERS: metroWorkers } : {}),
                     APP_VARIANT: 'production', PASEO_WEB_PLATFORM: name === 'web' ? 'electron' : '' },
                 stdio: ['ignore', 'pipe', 'pipe'],
@@ -97,7 +105,9 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
     };
     const artifacts = {
         dependencies: ['packages/highlight/dist', 'packages/client/dist', 'packages/protocol/dist',
-            'packages/relay/dist', 'packages/plugin/dist', 'packages/server/dist', 'packages/cli/dist']
+            'packages/relay/dist', 'packages/plugin/dist', 'packages/expo-two-way-audio/build']
+            .map(path => join(androidRoot, path)),
+        'desktop-dependencies': ['packages/server/dist', 'packages/cli/dist']
             .map(path => join(androidRoot, path)),
         android: [join(workspace, `PaseoDog-${version}-arm64-v8a.apk`)],
         web: [join(androidRoot, 'packages/app/dist')],

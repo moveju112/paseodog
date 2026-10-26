@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createProcessScope } from '../plugin/server/process-scope.mjs';
 import { createWindowsJobScope, ensureWindowsJobHelper, windowsCompilerPath, windowsJobHelperPath } from '../plugin/server/windows-job.mjs';
-import { installSteps, launcherScript } from '../scripts/install.mjs';
+import { engineInstallSteps, installSteps, launcherScript } from '../scripts/install.mjs';
 
 const launchFor = (stateDir) => ({ command: 'C:\\Program Files\\nodejs\\node.exe', args: ['C:\\pd\\engine.mjs'],
     env: { PASEODOG_STATE_DIR: stateDir } });
@@ -73,11 +73,28 @@ test('job helper build failure surfaces compiler output and leaves no partial fi
 test('install steps keep the patch order and skip only POSIX root tests on Windows', () => {
     const linux = installSteps('linux').map(({ args }) => args.join(' '));
     const windows = installSteps('win32').map(({ args }) => args.join(' '));
-    assert.deepEqual(linux.slice(0, 3), ['--prefix tools ci', '--prefix engine ci --install-strategy=nested', '--prefix plugin ci']);
-    assert.deepEqual(linux.slice(3, 5), ['scripts/patch-mixdog.mjs', 'scripts/patch-mixdog.mjs --check']);
+    const engine = engineInstallSteps().map(({ args }) => args.join(' '));
+    assert.deepEqual(linux.slice(0, engine.length + 2), ['--prefix tools ci', ...engine, '--prefix plugin ci']);
+    assert.deepEqual(linux.slice(engine.length + 2, engine.length + 4), ['scripts/patch-mixdog.mjs', 'scripts/patch-mixdog.mjs --check']);
     assert.deepEqual(linux.slice(-5), ['scripts/patch-paseo-composer.mjs --check', 'run check', 'test', 'run typecheck',
         'scripts/configure.mjs --trust-plugins']);
     assert.deepEqual(windows, linux.filter((step) => step !== 'test'));
+});
+
+test('engine installation completes every pinned child hook before the pruning hook', () => {
+    const steps = engineInstallSteps();
+    assert.deepEqual(steps[0], { command: 'npm',
+        args: ['--prefix', 'engine', 'ci', '--install-strategy=nested', '--ignore-scripts'] });
+    const lock = JSON.parse(readFileSync(new URL('../engine/package-lock.json', import.meta.url)));
+    const required = Object.entries(lock.packages).filter(([, pkg]) => pkg.hasInstallScript).map(([path]) => path);
+    const hooks = steps.slice(1).map(({ command, args }) => {
+        assert.equal(command, 'npm');
+        assert.deepEqual(args.slice(2), ['run', 'postinstall']);
+        return args[1].slice('engine/'.length);
+    });
+    assert.deepEqual([...hooks].sort(), required.sort());
+    assert.equal(hooks.at(-1), 'node_modules/mixdog');
+    for (const path of hooks.slice(0, -1)) assert.ok(path.startsWith('node_modules/mixdog/node_modules/'));
 });
 
 test('launchers preserve paths with spaces and special characters', () => {

@@ -47,11 +47,12 @@ test('assistant heading updates its nickname without replacing Markdown content'
     const createRenderer = new Function(code + '\nreturn createWorkRecordRenderer;')();
     let nickname = 'Dog';
     const render = createRenderer({
-        React, View: 'view', Text: 'text', Pressable: 'pressable',
+        React, View: 'view', Text: 'text', Image: 'image', Pressable: 'pressable',
         StyleSheet: { create: () => ({}) },
         useTranslation: () => ({ i18n: { language: 'ko' } }),
         useAssistantNickname: () => nickname,
         useAssistantIcon: () => '',
+        useAssistantPhoto: () => '',
         getClient: () => null,
     });
     const row = { item: { kind: 'assistant_message', answerStart: true, text: '**본문**' } };

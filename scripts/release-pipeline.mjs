@@ -12,6 +12,7 @@ import { verifyReleaseWeb } from './release-web-check.mjs';
 import { root } from './paths.mjs';
 import { restartDesktop } from './release-apply.mjs';
 import { verifyReleaseSource } from './release-verification.mjs';
+import { releasePreflight } from './release-preflight.mjs';
 import release from '../plugin/shared/release.json' with { type: 'json' };
 
 const self = fileURLToPath(import.meta.url);
@@ -129,36 +130,50 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
         await stage('github-draft', () => execute('github-draft', 'gh', ['release', 'create', tag, '--draft',
             '--repo', config.repo, '--target', commit, '--title', `PaseoDog ${version}`, '--notes-file', join(root, 'CHANGELOG.md')]),
         { mutation: true });
-        await stage('github-upload', () => execute('github-upload', 'gh', ['release', 'upload', tag, '--repo', config.repo, ...assets]),
-            { mutation: true });
+        const webOutput = join(workspace, 'web-cloudflare');
+        await mkdir(join(config.cacheRoot, 'web-cloudflare'), { recursive: true });
+        // 업로드와 웹 export는 입력을 공유하지 않는다. 둘 다 끝나기 전에는 공개하거나 잠금을 해제하지 않는다.
+        const prepared = await Promise.allSettled([
+            stage('github-upload', () => execute('github-upload', 'gh',
+                ['release', 'upload', tag, '--repo', config.repo, ...assets]), { mutation: true }),
+            stage('browser-export', () => buildWeb({
+                output: webOutput, hosting: 'cloudflare', metroWorkers: String(config.metroWorkers), dependenciesBuilt: true,
+            }, (command, args, options) => execute('browser-export', 'systemd-run', [
+                '--user', '--scope', '-q', '-p', 'MemoryHigh=16G', '-p', 'MemorySwapMax=2G', command, ...args,
+            ], options.cwd, { ...options.env, TMPDIR: join(config.cacheRoot, 'web-cloudflare') })),
+            { artifacts: [webOutput] }),
+        ]);
+        const failures = prepared.filter(result => result.status === 'rejected').map(result => result.reason);
+        if (failures.length) throw new AggregateError(failures, failures.map(error => error.message).join('; '));
+        await assertSource();
         const published = JSON.parse(await capture('gh', ['release', 'view', tag, '--repo', config.repo,
             '--json', 'assets,targetCommitish']));
         if (published.targetCommitish !== commit) throw new Error('GitHub release target differs from verified commit');
         verifyRemoteAssets(published.assets, expected);
         await stage('github-publish', () => execute('github-publish', 'gh',
             ['release', 'edit', tag, '--repo', config.repo, '--draft=false', '--latest']), { mutation: true });
-        const webOutput = join(workspace, 'web-cloudflare');
-        await mkdir(join(config.cacheRoot, 'web-cloudflare'), { recursive: true });
-        await stage('browser-export', () => buildWeb({
-            output: webOutput, hosting: 'cloudflare', metroWorkers: String(config.metroWorkers), dependenciesBuilt: true,
-        }, (command, args, options) => execute('browser-export', 'systemd-run', [
-            '--user', '--scope', '-q', '-p', 'MemoryHigh=16G', '-p', 'MemorySwapMax=2G', command, ...args,
-        ], options.cwd, { ...options.env, TMPDIR: join(config.cacheRoot, 'web-cloudflare') })),
-        { artifacts: [webOutput] });
-        await assertSource();
-        await stage('pages-deploy', () => execute('pages-deploy', 'npx', ['--no-install', 'wrangler', 'pages', 'deploy',
-            webOutput, '--project-name', config.pagesProject, '--branch', 'main'], join(root, 'android/packages/app')),
-        { mutation: true });
-        await checkWeb({ url: config.webUrl, output: webOutput });
-        await stage('web-patch', async () => {
-            await execute('web-patch', process.execPath, ['scripts/patch-paseo-composer.mjs']);
-            await execute('web-patch-check', process.execPath, ['scripts/patch-paseo-composer.mjs', '--check']);
-        });
-        console.log('Publication complete; waiting for idle before PC/runtime apply.');
-        await waitForIdle(listAgents);
-        const installed = (await capture('dpkg-query', ['-W', '-f=${Version}', 'paseodog'])).trim();
-        if (installed !== version.replace('-', '~')) await stage('pc-install', () =>
-            execute('pc-install', 'sudo', ['-n', 'dpkg', '-i', releaseArtifacts(workspace, version)[2]]), { mutation: true });
+        // 공개된 검증 산출물의 PC 설치와 웹 배포는 독립적이다. 둘 다 성공한 뒤에만 재로딩한다.
+        const applied = await Promise.allSettled([
+            (async () => {
+                await stage('pages-deploy', () => execute('pages-deploy', 'npx', ['--no-install', 'wrangler', 'pages', 'deploy',
+                    webOutput, '--project-name', config.pagesProject, '--branch', 'main'], join(root, 'android/packages/app')),
+                { mutation: true });
+                await checkWeb({ url: config.webUrl, output: webOutput });
+                await stage('web-patch', async () => {
+                    await execute('web-patch', process.execPath, ['scripts/patch-paseo-composer.mjs']);
+                    await execute('web-patch-check', process.execPath, ['scripts/patch-paseo-composer.mjs', '--check']);
+                });
+            })(),
+            (async () => {
+                console.log('Publication complete; waiting for idle before PC/runtime apply.');
+                await waitForIdle(listAgents);
+                const installed = (await capture('dpkg-query', ['-W', '-f=${Version}', 'paseodog'])).trim();
+                if (installed !== version.replace('-', '~')) await stage('pc-install', () =>
+                    execute('pc-install', 'sudo', ['-n', 'dpkg', '-i', releaseArtifacts(workspace, version)[2]]), { mutation: true });
+            })(),
+        ]);
+        const applyFailures = applied.filter(result => result.status === 'rejected').map(result => result.reason);
+        if (applyFailures.length) throw new AggregateError(applyFailures, applyFailures.map(error => error.message).join('; '));
         await waitForIdle(listAgents);
         await stage('plugin-reload', () => execute('plugin-reload', process.execPath,
             [...wrapper, 'plugin', 'reload', 'paseodog-provider']), { mutation: true });
@@ -185,7 +200,10 @@ if (process.argv[1] && resolve(process.argv[1]) === self) {
         } });
         if (!values.config || !isAbsolute(values.config)) throw new Error('--config requires an absolute JSON path');
         const config = validateReleaseConfig(JSON.parse(await readFile(values.config, 'utf8')));
-        if (values['verify-only']) await verifyReleaseSource(config);
+        if (values['verify-only']) {
+            await releasePreflight(config);
+            await verifyReleaseSource(config);
+        }
         else if (values['unlock-stopped']) await unlockStoppedDelivery(config.workspace);
         else if (values.status) console.log(await readFile(join(config.workspace, 'release-state.json'), 'utf8'));
         else if (values.start) {
@@ -193,7 +211,10 @@ if (process.argv[1] && resolve(process.argv[1]) === self) {
             await mkdir(config.workspace, { recursive: true, mode: 0o700 });
             const [command, args] = detachedCommand(values.config, config.workspace);
             await runCommand(command, args);
-        } else if (values.execute) await deliverRelease(config, { retryStage: values['retry-stage'] });
+        } else if (values.execute) {
+            await releasePreflight(config);
+            await deliverRelease(config, { retryStage: values['retry-stage'] });
+        }
         else console.log(JSON.stringify({ version: config.version, phases,
             note: 'Plan only. --start or --execute performs authorized publication and idle-only apply.' }, null, 2));
     } catch (error) { console.error(error.message); process.exitCode = 1; }

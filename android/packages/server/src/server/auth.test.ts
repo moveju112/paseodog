@@ -176,6 +176,7 @@ describe("hello admission", () => {
         await resolveSessionAdmission({
           ...input,
           transport: "relay",
+          paseoHome: home,
           relayPasswordHash: CORRECT_PASSWORD_HASH,
           credential: { kind: "password", password: "wrong" },
         }),

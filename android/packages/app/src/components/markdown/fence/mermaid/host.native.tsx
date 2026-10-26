@@ -55,7 +55,7 @@ function MermaidWebView({
   onRenderFailed,
   style,
 }: MermaidWebViewProps) {
-  const webViewRef = useRef<WebView | null>(null);
+  const webViewRef = useRef<WebView<unknown> | null>(null);
   const driverRef = useRef<MermaidRuntimeRequestDriver | null>(null);
   driverRef.current ??= new MermaidRuntimeRequestDriver();
 
@@ -115,7 +115,7 @@ function MermaidWebView({
   );
 
   return (
-    <WebView
+    <WebView<unknown>
       ref={webViewRef}
       source={WEBVIEW_SOURCE}
       originWhitelist={WEBVIEW_ORIGIN_WHITELIST}

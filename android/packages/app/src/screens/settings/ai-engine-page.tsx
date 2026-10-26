@@ -17,6 +17,9 @@ import {
 } from "./ai-engine-contract";
 import { useAiEngineSettings } from "./use-ai-engine-settings";
 import { EngineAccounts } from "./engine-accounts";
+import { AgentMessageSettings } from "./agent-message-settings";
+import { TurnDurationSettings } from "./turn-duration-settings";
+import { isBasicAgent } from "./basic-agent-roles";
 
 // 호스트 설정 목록의 개별 항목과 1:1로 대응하는 엔진 설정 구역
 export type EngineSection =
@@ -66,6 +69,7 @@ const inputStyle = {
 } as const;
 
 const layout = {
+  grow: { flex: 1 },
   page: { gap: 16 },
   toolbar: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
   control: { maxWidth: "60%", minWidth: 0 },
@@ -397,10 +401,72 @@ function InstructionsSection({ snapshot, disabled, request }: SectionProps) {
 }
 
 // 내장 도구 모듈 전용 설정 구역 (웹 검색·장기 메모리·Git·Office·Tidy·Visualize·Media·Local)
+function BuiltinToolRow({
+  tool,
+  enabled,
+  disabled,
+  request,
+}: {
+  tool: (typeof builtinToolMeta)[number];
+  enabled: boolean;
+  disabled: boolean;
+  request: EngineRequest;
+}) {
+  const toggle = useCallback(
+    (value: boolean) => {
+      void request({ action: "features", builtinTool: tool.id, enabled: value });
+    },
+    [request, tool.id],
+  );
+  return (
+    <SettingRow title={tool.label} hint={tool.hint}>
+      <Switch
+        accessibilityLabel={tool.label}
+        disabled={disabled}
+        value={enabled}
+        onValueChange={toggle}
+      />
+    </SettingRow>
+  );
+}
+
+function InstallToolRow({
+  pack,
+  disabled,
+  request,
+}: {
+  pack: (typeof builtinToolMeta)[number];
+  disabled: boolean;
+  request: EngineRequest;
+}) {
+  const install = useCallback(() => {
+    void request({ action: "features", installFeature: pack.id });
+  }, [request, pack.id]);
+  return (
+    <SettingRow title={`확장 팩 · ${pack.label}`} hint="필요 시 호스트에 즉시 설치">
+      <Button size="sm" variant="outline" disabled={disabled} onPress={install}>
+        설치
+      </Button>
+    </SettingRow>
+  );
+}
+
 function ToolsSection({ snapshot, disabled, request }: SectionProps) {
   const toolModules = snapshot.toolModules;
   const uninstalledModules = builtinToolMeta.filter(
     (tool) => toolModules?.[tool.id]?.installed === false,
+  );
+  const toggleWebSearch = useCallback(
+    (webSearch: boolean) => {
+      void request({ action: "features", webSearch });
+    },
+    [request],
+  );
+  const toggleMemory = useCallback(
+    (memoryTools: boolean) => {
+      void request({ action: "features", memoryTools });
+    },
+    [request],
   );
 
   return (
@@ -410,8 +476,8 @@ function ToolsSection({ snapshot, disabled, request }: SectionProps) {
           <Switch
             accessibilityLabel="웹 검색 도구"
             disabled={disabled}
-            value={toolModules?.webSearch ?? true}
-            onValueChange={(webSearch) => void request({ action: "features", webSearch })}
+            value={toolModules?.webSearch ?? false}
+            onValueChange={toggleWebSearch}
           />
         </SettingRow>
         <SettingRow title="장기 메모리 도구" hint="세션 간 핵심 사실·선호도 기억 도구 활성화">
@@ -419,40 +485,20 @@ function ToolsSection({ snapshot, disabled, request }: SectionProps) {
             accessibilityLabel="장기 메모리 도구"
             disabled={disabled}
             value={toolModules?.memory?.enabled ?? true}
-            onValueChange={(memoryTools) => void request({ action: "features", memoryTools })}
+            onValueChange={toggleMemory}
           />
         </SettingRow>
         {builtinToolMeta.map((tool) => (
-          <SettingRow key={tool.id} title={tool.label} hint={tool.hint}>
-            <Switch
-              accessibilityLabel={tool.label}
-              disabled={disabled}
-              value={toolModules?.[tool.id]?.enabled ?? true}
-              onValueChange={(toolEnabled) =>
-                void request({
-                  action: "features",
-                  builtinTool: tool.id,
-                  enabled: toolEnabled,
-                })
-              }
-            />
-          </SettingRow>
+          <BuiltinToolRow
+            key={tool.id}
+            tool={tool}
+            disabled={disabled}
+            enabled={toolModules?.[tool.id]?.enabled ?? true}
+            request={request}
+          />
         ))}
         {uninstalledModules.map((pack) => (
-          <SettingRow
-            key={`install-${pack.id}`}
-            title={`확장 팩 · ${pack.label}`}
-            hint="필요 시 호스트에 즉시 설치"
-          >
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={disabled}
-              onPress={() => void request({ action: "features", installFeature: pack.id })}
-            >
-              설치
-            </Button>
-          </SettingRow>
+          <InstallToolRow key={pack.id} pack={pack} disabled={disabled} request={request} />
         ))}
       </View>
     </SettingsSection>
@@ -460,6 +506,79 @@ function ToolsSection({ snapshot, disabled, request }: SectionProps) {
 }
 
 // 스킬 및 라이프사이클 훅 전용 설정 구역 (기본값 전부 OFF)
+function SkillRow({
+  skill,
+  enabled,
+  disabled,
+  onToggle,
+}: {
+  skill: NonNullable<EngineSnapshot["skills"]>["items"][number];
+  enabled: boolean;
+  disabled: boolean;
+  onToggle: (name: string, enabled: boolean) => void;
+}) {
+  const toggle = useCallback((next: boolean) => onToggle(skill.name, next), [onToggle, skill.name]);
+  return (
+    <SettingRow title={`스킬 · ${skill.name}`} hint={skill.description || skill.name}>
+      <Switch
+        accessibilityLabel={`스킬 ${skill.name}`}
+        disabled={disabled}
+        value={enabled}
+        onValueChange={toggle}
+      />
+    </SettingRow>
+  );
+}
+
+function HookRow({
+  hook,
+  disabled,
+  request,
+}: {
+  hook: NonNullable<EngineSnapshot["hooks"]>["rules"][number];
+  disabled: boolean;
+  request: EngineRequest;
+}) {
+  const toggle = useCallback(
+    (enabled: boolean) => {
+      void request({
+        action: "preferences",
+        hookAction: "toggle",
+        hookIndex: hook.index,
+        hookRevision: hook.revision,
+        enabled,
+      });
+    },
+    [request, hook.index, hook.revision],
+  );
+  const remove = useCallback(() => {
+    void request({
+      action: "preferences",
+      hookAction: "delete",
+      hookIndex: hook.index,
+      hookRevision: hook.revision,
+    });
+  }, [request, hook.index, hook.revision]);
+  return (
+    <SettingRow
+      title={`훅 · ${hook.event}${hook.matcher ? ` (${hook.matcher})` : ""}`}
+      hint={hook.command}
+    >
+      <View style={layout.formActions}>
+        <Switch
+          accessibilityLabel={`훅 ${hook.index}`}
+          disabled={disabled || !hook.revision}
+          value={hook.enabled}
+          onValueChange={toggle}
+        />
+        <Button size="sm" variant="ghost" disabled={disabled || !hook.revision} onPress={remove}>
+          삭제
+        </Button>
+      </View>
+    </SettingRow>
+  );
+}
+
 function SkillsSection({ snapshot, disabled, request }: SectionProps) {
   const [addingHook, setAddingHook] = useState(false);
   const [hookEvent, setHookEvent] = useState("PostToolUse");
@@ -467,10 +586,12 @@ function SkillsSection({ snapshot, disabled, request }: SectionProps) {
   const [hookPattern, setHookPattern] = useState("");
 
   const skills = snapshot.skills?.items ?? [];
-  const rawDisabledSkills = snapshot.skills?.disabled ?? [];
+  const rawDisabledSkills = snapshot.skills?.disabled;
   const disabledSkillSet = useMemo(() => new Set(rawDisabledSkills), [rawDisabledSkills]);
   const wildcardDisabled = disabledSkillSet.has("*");
   const hooks = snapshot.hooks?.rules ?? [];
+  const toggleAddingHook = useCallback(() => setAddingHook((current) => !current), []);
+  const closeAddingHook = useCallback(() => setAddingHook(false), []);
 
   const toggleSkill = useCallback(
     (skillName: string, nextEnabled: boolean) => {
@@ -513,67 +634,21 @@ function SkillsSection({ snapshot, disabled, request }: SectionProps) {
             const skillEnabled =
               !skill.disabled && !wildcardDisabled && !disabledSkillSet.has(skill.name);
             return (
-              <SettingRow
+              <SkillRow
                 key={skill.name}
-                title={`스킬 · ${skill.name}`}
-                hint={skill.description || skill.name}
-              >
-                <Switch
-                  accessibilityLabel={`스킬 ${skill.name}`}
-                  disabled={disabled}
-                  value={skillEnabled}
-                  onValueChange={(next) => toggleSkill(skill.name, next)}
-                />
-              </SettingRow>
+                skill={skill}
+                disabled={disabled}
+                enabled={skillEnabled}
+                onToggle={toggleSkill}
+              />
             );
           })
         )}
         {hooks.map((hook) => (
-          <SettingRow
-            key={String(hook.index)}
-            title={`훅 · ${hook.event}${hook.matcher ? ` (${hook.matcher})` : ""}`}
-            hint={hook.command}
-          >
-            <View style={layout.formActions}>
-              <Switch
-                accessibilityLabel={`훅 ${hook.index}`}
-                disabled={disabled || !hook.revision}
-                value={hook.enabled}
-                onValueChange={(next) =>
-                  void request({
-                    action: "preferences",
-                    hookAction: "toggle",
-                    hookIndex: hook.index,
-                    hookRevision: hook.revision,
-                    enabled: next,
-                  })
-                }
-              />
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={disabled || !hook.revision}
-                onPress={() =>
-                  void request({
-                    action: "preferences",
-                    hookAction: "delete",
-                    hookIndex: hook.index,
-                    hookRevision: hook.revision,
-                  })
-                }
-              >
-                삭제
-              </Button>
-            </View>
-          </SettingRow>
+          <HookRow key={String(hook.index)} hook={hook} disabled={disabled} request={request} />
         ))}
         <View style={[settingsStyles.row, settingsStyles.rowBorder, layout.actions]}>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={disabled}
-            onPress={() => setAddingHook((current) => !current)}
-          >
+          <Button size="sm" variant="outline" disabled={disabled} onPress={toggleAddingHook}>
             {addingHook ? "훅 추가 닫기" : "+ 새 훅 규칙"}
           </Button>
         </View>
@@ -611,7 +686,7 @@ function SkillsSection({ snapshot, disabled, request }: SectionProps) {
             style={[settingsStyles.rowTitle, inputStyle]}
           />
           <View style={layout.formActions}>
-            <Button size="sm" variant="ghost" onPress={() => setAddingHook(false)}>
+            <Button size="sm" variant="ghost" onPress={closeAddingHook}>
               취소
             </Button>
             <Button size="sm" disabled={disabled || !hookCommand.trim()} onPress={createHook}>
@@ -690,6 +765,102 @@ function AgentListRow({
   );
 }
 
+function WorkflowListRow({
+  item,
+  disabled,
+  onPress,
+}: {
+  item: EngineSnapshot["workflows"][number];
+  disabled: boolean;
+  onPress: (item: EngineSnapshot["workflows"][number]) => void;
+}) {
+  const open = useCallback(() => onPress(item), [item, onPress]);
+  return (
+    <Pressable
+      accessibilityLabel={`작업 규칙 ${item.name}`}
+      disabled={disabled}
+      onPress={open}
+      style={[
+        settingsStyles.row,
+        settingsStyles.rowBorder,
+        layout.listItemRow,
+        !item.active && layout.listItemDimmed,
+      ]}
+    >
+      <View style={layout.listItemBadge}>
+        <Text style={settingsStyles.rowTitle}>≣</Text>
+      </View>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>
+          {item.name}
+          {item.userOverride ? " (커스텀)" : ""}
+        </Text>
+        {item.description ? <Text style={settingsStyles.rowHint}>{item.description}</Text> : null}
+      </View>
+    </Pressable>
+  );
+}
+
+interface FallbackDraft {
+  id: number;
+  route: FallbackRoute;
+}
+const fallbackEffortOptions = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "XHigh" },
+];
+
+function FallbackModelRow({
+  draft,
+  index,
+  disabled,
+  options,
+  onModel,
+  onEffort,
+  onRemove,
+}: {
+  draft: FallbackDraft;
+  index: number;
+  disabled: boolean;
+  options: { value: string; label: string }[];
+  onModel: (index: number, value: string) => void;
+  onEffort: (index: number, value: string) => void;
+  onRemove: (index: number) => void;
+}) {
+  const changeModel = useCallback((value: string) => onModel(index, value), [index, onModel]);
+  const changeEffort = useCallback((value: string) => onEffort(index, value), [index, onEffort]);
+  const remove = useCallback(() => onRemove(index), [index, onRemove]);
+  return (
+    <View style={[layout.modelChainRow, settingsStyles.rowBorder]}>
+      <Select
+        title={`폴백 모델 ${index + 1}`}
+        disabled={disabled}
+        value={`${draft.route.provider}/${draft.route.model}`}
+        options={options}
+        onChange={changeModel}
+      />
+      <Select
+        title={`폴백 추론 수준 ${index + 1}`}
+        disabled={disabled}
+        value={draft.route.effort || "medium"}
+        options={fallbackEffortOptions}
+        onChange={changeEffort}
+      />
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={disabled}
+        accessibilityLabel={`폴백 모델 ${index + 1} 삭제`}
+        onPress={remove}
+      >
+        ×
+      </Button>
+    </View>
+  );
+}
+
 // Mixdog 스타일 통합 워크플로우 화면 (작업 규칙 리스트+모달 · 기본 에이전트 · 서브에이전트 리스트+모달 · 오케스트레이션 · 실행 환경)
 function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
   // 작업 규칙(Workflow) 모달 상태
@@ -721,7 +892,8 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
   const [agentEffort, setAgentEffort] = useState<string | null>("medium");
   const [agentAutoEffort, setAgentAutoEffort] = useState(false);
   const [agentFast, setAgentFast] = useState(false);
-  const [agentFallbacks, setAgentFallbacks] = useState<FallbackRoute[]>([]);
+  const [agentFallbacks, setAgentFallbacks] = useState<FallbackDraft[]>([]);
+  const nextFallbackId = useRef(0);
   const [agentRevision, setAgentRevision] = useState(0);
   const [agentReadState, setAgentReadState] = useState<"loading" | "loaded" | "ready" | "failed">(
     "loading",
@@ -829,17 +1001,7 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
       });
       if (saved) setWorkflowModalMode(null);
     }
-  }, [
-    editingWorkflowId,
-    request,
-    snapshot.workflows,
-    wfActive,
-    wfBody,
-    wfDesc,
-    wfName,
-    wfNewId,
-    workflowModalMode,
-  ]);
+  }, [editingWorkflowId, request, wfActive, wfBody, wfDesc, wfName, wfNewId, workflowModalMode]);
 
   const deleteWorkflowModal = useCallback(async () => {
     if (!editingWorkflowId || editingWorkflowId === "default") return;
@@ -852,7 +1014,7 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
     const ws = snapshot.webSearchRoute;
     const provider = ws?.effectiveProvider || ws?.provider || snapshot.route.provider;
     const model = ws?.effectiveModel || ws?.model || snapshot.route.model;
-    setWsEnabled(snapshot.toolModules?.webSearch ?? true);
+    setWsEnabled(snapshot.toolModules?.webSearch ?? false);
     setWsModelValue(ws?.inherited ? "" : `${provider}/${model}`);
     setWsEffortValue(ws?.effectiveEffort || ws?.effort || "medium");
     setWebSearchModalOpen(true);
@@ -898,7 +1060,12 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
       setAgentEffort(agent.route.effort ?? "medium");
       setAgentAutoEffort(Boolean(agent.route.autoEffort));
       setAgentFast(Boolean(agent.route.fast));
-      setAgentFallbacks(agent.route.fallbacks ? [...agent.route.fallbacks] : []);
+      setAgentFallbacks(
+        (agent.route.fallbacks ?? []).map((route) => ({
+          id: ++nextFallbackId.current,
+          route: { ...route },
+        })),
+      );
       setAgentRevision((r) => r + 1);
       setAgentModalMode("edit");
       void request({ action: "agentDefinition", agent: agent.id }).then((loaded) => {
@@ -975,10 +1142,11 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
       snapshot.models.find((m) => m.id !== agentModel || m.provider !== agentProvider) ||
       snapshot.models[0];
     if (!candidate) return;
-    setAgentFallbacks((current) => [
-      ...current,
-      { provider: candidate.provider, model: candidate.id, effort: "medium", fast: false },
-    ]);
+    const draft = {
+      id: ++nextFallbackId.current,
+      route: { provider: candidate.provider, model: candidate.id, effort: "medium", fast: false },
+    };
+    setAgentFallbacks((current) => [...current, draft]);
   }, [agentModel, agentProvider, snapshot.models]);
 
   // 폴백 모델 변경
@@ -988,7 +1156,9 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
       if (!chosen) return;
       setAgentFallbacks((current) =>
         current.map((item, idx) =>
-          idx === index ? { ...item, provider: chosen.provider, model: chosen.id } : item,
+          idx === index
+            ? { ...item, route: { ...item.route, provider: chosen.provider, model: chosen.id } }
+            : item,
         ),
       );
     },
@@ -998,7 +1168,9 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
   // 폴백 추론 수준 변경
   const updateFallbackEffort = useCallback((index: number, effort: string) => {
     setAgentFallbacks((current) =>
-      current.map((item, idx) => (idx === index ? { ...item, effort } : item)),
+      current.map((item, idx) =>
+        idx === index ? { ...item, route: { ...item.route, effort } } : item,
+      ),
     );
   }, []);
 
@@ -1022,7 +1194,7 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
       autoEffort: agentAutoEffort,
       fast: agentFast,
       disabled: !agentEnabled,
-      fallbacks: agentFallbacks,
+      fallbacks: agentFallbacks.map((item) => item.route),
     };
     if (agentModalMode === "edit" && editingAgentId) {
       const saved = await request({
@@ -1084,8 +1256,8 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
     if (await request({ action: "agentDelete", agent: editingAgentId })) closeAgentModal();
   }, [closeAgentModal, editingAgentId, request]);
 
-  const maintainerAgent = snapshot.agents.find((item) => item.id === "maintainer");
-  const subAgents = snapshot.agents.filter((item) => item.id !== "maintainer");
+  const basicAgents = snapshot.agents.filter(isBasicAgent);
+  const subAgents = snapshot.agents.filter((item) => !isBasicAgent(item));
   const editingAgentTarget = snapshot.agents.find((item) => item.id === editingAgentId);
 
   const modelOptions = useMemo(
@@ -1171,215 +1343,233 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
     [agentEnabled, agentModalMode, disabled, handleToggleAgentEnabled],
   );
 
-  const wsActive = snapshot.toolModules?.webSearch ?? true;
+  const wsActive = snapshot.toolModules?.webSearch ?? false;
+  const changeOutputStyle = useCallback(
+    (outputStyle: string) => {
+      void request({ action: "preferences", outputStyle });
+    },
+    [request],
+  );
+  const changeLanguage = useCallback(
+    (language: string) => {
+      void request({ action: "preferences", profile: { language: language || "" } });
+    },
+    [request],
+  );
+  const changeExperience = useCallback(
+    (experienceLevel: string) => {
+      void request({ action: "preferences", profile: { experienceLevel: experienceLevel || "" } });
+    },
+    [request],
+  );
+  const changeSessionTitles = useCallback(
+    (aiSessionTitles: boolean) => {
+      void request({ action: "preferences", aiSessionTitles });
+    },
+    [request],
+  );
+  const changeShell = useCallback(
+    (shellCommand: string) => {
+      void request({ action: "preferences", shellCommand: shellCommand || "" });
+    },
+    [request],
+  );
 
-  return (
-    <>
-      {/* 1. 작업 규칙 (Workflow Rules) */}
-      <SettingsSection title="작업 규칙">
-        <View style={layout.sectionHeaderRow}>
-          <Text style={settingsStyles.rowHint}>에이전트가 따르는 작업 방식과 원칙입니다.</Text>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={disabled}
-            accessibilityLabel="새 작업 규칙 추가"
-            onPress={openCreateWorkflowModal}
-          >
-            +
-          </Button>
-        </View>
-        <Text style={settingsStyles.rowHint}>
-          기본값은 사용 안 함입니다. 사용 안 함은 WORKFLOW.md를 읽거나 대화 지침에 추가하지
-          않습니다.
-        </Text>
-        <View style={settingsStyles.card}>
-          {snapshot.workflows.map((item) => (
-            <Pressable
-              key={item.id}
-              accessibilityLabel={`작업 규칙 ${item.name}`}
+  // 목록과 편집기 렌더링의 분기를 구역별로 분리하되 모달 상태는 그대로 유지한다.
+  function renderSections() {
+    return (
+      <>
+        {/* 1. 작업 규칙 (Workflow Rules) */}
+        <SettingsSection title="작업 규칙">
+          <View style={layout.sectionHeaderRow}>
+            <Text style={settingsStyles.rowHint}>에이전트가 따르는 작업 방식과 원칙입니다.</Text>
+            <Button
+              size="sm"
+              variant="ghost"
               disabled={disabled}
-              onPress={() => openEditWorkflowModal(item)}
+              accessibilityLabel="새 작업 규칙 추가"
+              onPress={openCreateWorkflowModal}
+            >
+              +
+            </Button>
+          </View>
+          <Text style={settingsStyles.rowHint}>
+            기본값은 사용 안 함입니다. 사용 안 함은 WORKFLOW.md를 읽거나 대화 지침에 추가하지
+            않습니다.
+          </Text>
+          <View style={settingsStyles.card}>
+            {snapshot.workflows.map((item) => (
+              <WorkflowListRow
+                key={item.id}
+                item={item}
+                disabled={disabled}
+                onPress={openEditWorkflowModal}
+              />
+            ))}
+          </View>
+        </SettingsSection>
+
+        {/* 2. 역할별 기본 에이전트 */}
+        <SettingsSection title="기본 에이전트">
+          <Text style={settingsStyles.rowHint}>
+            기본값은 모두 off이며 역할마다 모델을 따로 선택해 켤 수 있어요. 필요한 조건에서만
+            호출하며, 탐색·실패 분석·인계·검토는 메인이 필요할 때 위임해요.
+          </Text>
+          <View style={settingsStyles.card}>
+            <Pressable
+              accessibilityLabel="기본 에이전트 Web Search"
+              disabled={disabled}
+              onPress={openWebSearchModal}
               style={[
                 settingsStyles.row,
                 settingsStyles.rowBorder,
                 layout.listItemRow,
-                !item.active && layout.listItemDimmed,
+                !wsActive && layout.listItemDimmed,
               ]}
             >
               <View style={layout.listItemBadge}>
-                <Text style={settingsStyles.rowTitle}>≣</Text>
+                <Text style={settingsStyles.rowTitle}>
+                  {providerGlyph(
+                    snapshot.webSearchRoute?.effectiveProvider || snapshot.route.provider,
+                    snapshot.webSearchRoute?.effectiveModel || snapshot.route.model,
+                  )}
+                </Text>
               </View>
               <View style={settingsStyles.rowContent}>
-                <Text style={settingsStyles.rowTitle}>
-                  {item.name}
-                  {item.userOverride ? " (커스텀)" : ""}
+                <Text style={settingsStyles.rowTitle}>Web Search</Text>
+                <Text style={settingsStyles.rowHint}>
+                  {formatWebSearchSubtitle(
+                    snapshot.webSearchRoute,
+                    snapshot.route,
+                    snapshot.models,
+                  )}
                 </Text>
-                {item.description ? (
-                  <Text style={settingsStyles.rowHint}>{item.description}</Text>
-                ) : null}
               </View>
             </Pressable>
-          ))}
-        </View>
-      </SettingsSection>
+            {basicAgents.map((agent) => (
+              <AgentListRow
+                key={agent.id}
+                agent={agent}
+                models={snapshot.models}
+                disabled={disabled}
+                onPress={openEditAgentModal}
+              />
+            ))}
+          </View>
+        </SettingsSection>
 
-      {/* 2. 기본 에이전트 (Web Search + Maintainer) */}
-      <SettingsSection title="기본 에이전트">
-        <Text style={settingsStyles.rowHint}>
-          웹 검색과 설정 유지를 담당하는 기본 에이전트입니다.
-        </Text>
-        <View style={settingsStyles.card}>
-          <Pressable
-            accessibilityLabel="기본 에이전트 Web Search"
-            disabled={disabled}
-            onPress={openWebSearchModal}
-            style={[
-              settingsStyles.row,
-              settingsStyles.rowBorder,
-              layout.listItemRow,
-              !wsActive && layout.listItemDimmed,
-            ]}
-          >
-            <View style={layout.listItemBadge}>
-              <Text style={settingsStyles.rowTitle}>
-                {providerGlyph(
-                  snapshot.webSearchRoute?.effectiveProvider || snapshot.route.provider,
-                  snapshot.webSearchRoute?.effectiveModel || snapshot.route.model,
-                )}
-              </Text>
-            </View>
-            <View style={settingsStyles.rowContent}>
-              <Text style={settingsStyles.rowTitle}>Web Search</Text>
-              <Text style={settingsStyles.rowHint}>
-                {formatWebSearchSubtitle(snapshot.webSearchRoute, snapshot.route, snapshot.models)}
-              </Text>
-            </View>
-          </Pressable>
-          {maintainerAgent && (
-            <AgentListRow
-              agent={maintainerAgent}
-              models={snapshot.models}
+        {/* 3. 에이전트 (Sub-agents) */}
+        <SettingsSection title="에이전트">
+          <View style={layout.sectionHeaderRow}>
+            <Text style={settingsStyles.rowHint}>
+              클릭하여 편집합니다. 비활성 에이전트는 흐리게 표시됩니다.
+            </Text>
+            <Button
+              size="sm"
+              variant="ghost"
               disabled={disabled}
-              onPress={openEditAgentModal}
-            />
-          )}
-        </View>
-      </SettingsSection>
+              accessibilityLabel="새 에이전트 추가"
+              onPress={openCreateAgentModal}
+            >
+              +
+            </Button>
+          </View>
+          <View style={settingsStyles.card}>
+            {subAgents.map((agent) => (
+              <AgentListRow
+                key={agent.id}
+                agent={agent}
+                models={snapshot.models}
+                disabled={disabled}
+                onPress={openEditAgentModal}
+              />
+            ))}
+          </View>
+        </SettingsSection>
 
-      {/* 3. 에이전트 (Sub-agents) */}
-      <SettingsSection title="에이전트">
-        <View style={layout.sectionHeaderRow}>
-          <Text style={settingsStyles.rowHint}>
-            클릭하여 편집합니다. 비활성 에이전트는 흐리게 표시됩니다.
-          </Text>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={disabled}
-            accessibilityLabel="새 에이전트 추가"
-            onPress={openCreateAgentModal}
-          >
-            +
-          </Button>
-        </View>
-        <View style={settingsStyles.card}>
-          {subAgents.map((agent) => (
-            <AgentListRow
-              key={agent.id}
-              agent={agent}
-              models={snapshot.models}
-              disabled={disabled}
-              onPress={openEditAgentModal}
-            />
-          ))}
-        </View>
-      </SettingsSection>
+        {/* 4. 자동 오케스트레이터 */}
+        <OrchestrationCard mode={snapshot.orchestration} request={request} />
+      </>
+    );
+  }
 
-      {/* 4. 자동 오케스트레이터 */}
-      <OrchestrationCard mode={snapshot.orchestration} request={request} />
+  function renderPreferences() {
+    return (
+      <>
+        {/* 5. 출력 스타일 및 사용자 프로필 */}
+        <SettingsSection title="출력 스타일 및 사용자 프로필">
+          <View style={settingsStyles.card}>
+            <SettingRow title="응답 출력 스타일" hint="모델의 답변 톤앤매너와 설명 밀도">
+              <Select
+                title="응답 출력 스타일"
+                disabled={disabled}
+                value={snapshot.outputStyle ?? ""}
+                options={outputStyleOptions}
+                onChange={changeOutputStyle}
+              />
+            </SettingRow>
+            <SettingRow title="선호 응답 언어" hint="모델이 기본으로 응답할 언어">
+              <Select
+                title="선호 응답 언어"
+                disabled={disabled}
+                value={snapshot.profile?.language ?? ""}
+                options={languageOptions}
+                onChange={changeLanguage}
+              />
+            </SettingRow>
+            <SettingRow title="개발 숙련도 프로필" hint="설명 수준을 사용자 숙련도에 맞춤">
+              <Select
+                title="개발 숙련도 프로필"
+                disabled={disabled}
+                value={snapshot.profile?.experienceLevel ?? ""}
+                options={experienceOptions}
+                onChange={changeExperience}
+              />
+            </SettingRow>
+            <SettingRow
+              title="AI 세션 제목 자동 생성"
+              hint="첫 대화 내용을 바탕으로 세션 제목 자동 요약"
+            >
+              <Switch
+                accessibilityLabel="AI 세션 제목 자동 생성"
+                disabled={disabled}
+                value={snapshot.aiSessionTitles ?? true}
+                onValueChange={changeSessionTitles}
+              />
+            </SettingRow>
+          </View>
+        </SettingsSection>
 
-      {/* 5. 출력 스타일 및 사용자 프로필 */}
-      <SettingsSection title="출력 스타일 및 사용자 프로필">
-        <View style={settingsStyles.card}>
-          <SettingRow title="응답 출력 스타일" hint="모델의 답변 톤앤매너와 설명 밀도">
-            <Select
-              title="응답 출력 스타일"
-              disabled={disabled}
-              value={snapshot.outputStyle ?? ""}
-              options={outputStyleOptions}
-              onChange={(outputStyle) => void request({ action: "preferences", outputStyle })}
-            />
-          </SettingRow>
-          <SettingRow title="선호 응답 언어" hint="모델이 기본으로 응답할 언어">
-            <Select
-              title="선호 응답 언어"
-              disabled={disabled}
-              value={snapshot.profile?.language ?? ""}
-              options={languageOptions}
-              onChange={(language) =>
-                void request({ action: "preferences", profile: { language: language || "" } })
-              }
-            />
-          </SettingRow>
-          <SettingRow title="개발 숙련도 프로필" hint="설명 수준을 사용자 숙련도에 맞춤">
-            <Select
-              title="개발 숙련도 프로필"
-              disabled={disabled}
-              value={snapshot.profile?.experienceLevel ?? ""}
-              options={experienceOptions}
-              onChange={(experienceLevel) =>
-                void request({
-                  action: "preferences",
-                  profile: { experienceLevel: experienceLevel || "" },
-                })
-              }
-            />
-          </SettingRow>
-          <SettingRow
-            title="AI 세션 제목 자동 생성"
-            hint="첫 대화 내용을 바탕으로 세션 제목 자동 요약"
-          >
-            <Switch
-              accessibilityLabel="AI 세션 제목 자동 생성"
-              disabled={disabled}
-              value={snapshot.aiSessionTitles ?? true}
-              onValueChange={(aiSessionTitles) =>
-                void request({ action: "preferences", aiSessionTitles })
-              }
-            />
-          </SettingRow>
-        </View>
-      </SettingsSection>
-
-      {/* 자동 Worktree 격리는 미지원이므로 실행 쉘만 제공한다. */}
-      <SettingsSection title="실행 쉘">
-        <View style={settingsStyles.card}>
-          <Text style={settingsStyles.rowHint}>
-            자동 Worktree 격리는 아직 지원하지 않습니다. 기존 작업 폴더에서 실행됩니다.
-          </Text>
-          <SettingRow
-            title="명령 실행 쉘"
-            hint={
-              snapshot.shell?.effective
-                ? `현재: ${snapshot.shell.effective}`
-                : "명령 실행에 사용할 기본 쉘"
-            }
-          >
-            <Select
+        {/* 자동 Worktree 격리는 미지원이므로 실행 쉘만 제공한다. */}
+        <SettingsSection title="실행 쉘">
+          <View style={settingsStyles.card}>
+            <Text style={settingsStyles.rowHint}>
+              자동 Worktree 격리는 아직 지원하지 않습니다. 기존 작업 폴더에서 실행됩니다.
+            </Text>
+            <SettingRow
               title="명령 실행 쉘"
-              disabled={disabled}
-              value={snapshot.shell?.command ?? ""}
-              options={shellOptions}
-              onChange={(shellCommand) =>
-                void request({ action: "preferences", shellCommand: shellCommand || "" })
+              hint={
+                snapshot.shell?.effective
+                  ? `현재: ${snapshot.shell.effective}`
+                  : "명령 실행에 사용할 기본 쉘"
               }
-            />
-          </SettingRow>
-        </View>
-      </SettingsSection>
+            >
+              <Select
+                title="명령 실행 쉘"
+                disabled={disabled}
+                value={snapshot.shell?.command ?? ""}
+                options={shellOptions}
+                onChange={changeShell}
+              />
+            </SettingRow>
+          </View>
+        </SettingsSection>
+      </>
+    );
+  }
 
-      {/* 모달 1: 작업 규칙 편집 / 새 작업 규칙 */}
+  function renderWorkflowModal() {
+    return (
       <AdaptiveModalSheet
         visible={workflowModalMode !== null}
         header={workflowSheetHeader}
@@ -1482,8 +1672,11 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
           </View>
         </View>
       </AdaptiveModalSheet>
+    );
+  }
 
-      {/* 모달 2: Web Search 기본 에이전트 편집 */}
+  function renderWebSearchModal() {
+    return (
       <AdaptiveModalSheet
         visible={webSearchModalOpen}
         header={webSearchSheetHeader}
@@ -1533,8 +1726,21 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
           </View>
         </View>
       </AdaptiveModalSheet>
+    );
+  }
 
-      {/* 모달 3: Mixdog 스타일 에이전트 편집 / 새 에이전트 모달 */}
+  function isAgentSaveDisabled() {
+    return (
+      disabled ||
+      busy ||
+      (agentModalMode === "edit" &&
+        (agentReadState !== "ready" || !agentExpectedRevision || !agentBody.trim())) ||
+      (agentModalMode === "create" && !agentName.trim() && !newAgentId.trim())
+    );
+  }
+
+  function renderAgentModal() {
+    return (
       <AdaptiveModalSheet
         visible={agentModalMode !== null}
         header={agentSheetHeader}
@@ -1598,7 +1804,7 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
           {/* 모델 (체인 + 폴백 추가) */}
           <View style={layout.fieldBlock}>
             <View style={layout.sectionHeaderRow}>
-              <View style={{ flex: 1 }}>
+              <View style={layout.grow}>
                 <Text style={settingsStyles.rowTitle}>모델</Text>
                 <Text style={settingsStyles.rowHint}>
                   첫 번째 모델을 먼저 사용합니다. 실패하면 다음 모델을 사용합니다.
@@ -1633,40 +1839,17 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
                 />
               </View>
               {/* 폴백 모델 행 목록 */}
-              {agentFallbacks.map((fb, idx) => (
-                <View
-                  key={`${fb.provider}-${fb.model}-${idx}`}
-                  style={[layout.modelChainRow, settingsStyles.rowBorder]}
-                >
-                  <Select
-                    title={`폴백 모델 ${idx + 1}`}
-                    disabled={disabled}
-                    value={`${fb.provider}/${fb.model}`}
-                    options={modelOptions}
-                    onChange={(val) => updateFallbackModel(idx, val)}
-                  />
-                  <Select
-                    title={`폴백 추론 수준 ${idx + 1}`}
-                    disabled={disabled}
-                    value={fb.effort || "medium"}
-                    options={[
-                      { value: "low", label: "Low" },
-                      { value: "medium", label: "Medium" },
-                      { value: "high", label: "High" },
-                      { value: "xhigh", label: "XHigh" },
-                    ]}
-                    onChange={(eff) => updateFallbackEffort(idx, eff)}
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={disabled}
-                    accessibilityLabel={`폴백 모델 ${idx + 1} 삭제`}
-                    onPress={() => removeFallbackModel(idx)}
-                  >
-                    ×
-                  </Button>
-                </View>
+              {agentFallbacks.map((draft, index) => (
+                <FallbackModelRow
+                  key={draft.id}
+                  draft={draft}
+                  index={index}
+                  disabled={disabled}
+                  options={modelOptions}
+                  onModel={updateFallbackModel}
+                  onEffort={updateFallbackEffort}
+                  onRemove={removeFallbackModel}
+                />
               ))}
             </View>
             {currentAgentModelMeta?.fastCapable && (
@@ -1722,23 +1905,23 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
               <Button size="sm" variant="ghost" onPress={closeAgentModal}>
                 취소
               </Button>
-              <Button
-                size="sm"
-                disabled={
-                  disabled ||
-                  busy ||
-                  (agentModalMode === "edit" &&
-                    (agentReadState !== "ready" || !agentExpectedRevision || !agentBody.trim())) ||
-                  (agentModalMode === "create" && !agentName.trim() && !newAgentId.trim())
-                }
-                onPress={saveAgentModal}
-              >
+              <Button size="sm" disabled={isAgentSaveDisabled()} onPress={saveAgentModal}>
                 저장
               </Button>
             </View>
           </View>
         </View>
       </AdaptiveModalSheet>
+    );
+  }
+
+  return (
+    <>
+      {renderSections()}
+      {renderPreferences()}
+      {renderWorkflowModal()}
+      {renderWebSearchModal()}
+      {renderAgentModal()}
     </>
   );
 }
@@ -2039,6 +2222,10 @@ export function AiEnginePage({ serverId, section }: { serverId: string; section:
           request={request}
         />
       )}
+      {section === "workflow" && (
+        <TurnDurationSettings key={`duration:${serverId}`} serverId={serverId} />
+      )}
+      {section === "workflow" && <AgentMessageSettings key={serverId} serverId={serverId} />}
     </View>
   );
 }

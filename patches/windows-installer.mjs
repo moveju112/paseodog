@@ -1,5 +1,5 @@
-export const WINDOWS_INSTALLER_VERSION = '26.8.1';
-export const WINDOWS_UNINSTALLER_BLOB = 'e9daa9f78bd740b094f07503427733a84645ab7a';
+export const WINDOWS_INSTALLER_VERSION = '26.18.0';
+export const WINDOWS_UNINSTALLER_BLOB = '89b2dc8f7d728973ee3cfcc959d06137efa36071';
 export const WINDOWS_UNINSTALLER_MARKER = '; paseodog-standard-uninstaller\n';
 const uninstallerAnchor = '        if (customScriptPath != null) {';
 const uninstallerGuard = `        if (customScriptPath != null && !script.startsWith(${JSON.stringify(WINDOWS_UNINSTALLER_MARKER)})) {`;

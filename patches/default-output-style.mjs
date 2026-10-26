@@ -27,7 +27,7 @@ export const DEFAULT_OUTPUT_STYLE_PATCHES = [
     },
     {
         file: 'src/lib/rules-builder.cjs',
-        blob: 'be44e8e0fdfdea57ea38ea726183b2c35b2103f7',
+        blob: '6e08d0968a47dd554e5fbb395416210741e4a816',
         edits: [[
             '  DEFAULT_OUTPUT_STYLE_ID,\n',
             '  DEFAULT_OUTPUT_STYLE_ID,\n  NO_OUTPUT_STYLE,\n',

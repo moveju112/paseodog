@@ -1,5 +1,8 @@
 import { SessionDelivery } from "./session/owned-subscriptions/index.js";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Server as HTTPServer } from "http";
 import type pino from "pino";
 import type { AgentManager } from "./agent/agent-manager.js";
@@ -22,11 +25,7 @@ import { APPLICATION_SOCKET_LEASE_MS } from "./websocket/physical-socket.js";
 
 type SocketListener = (...args: unknown[]) => void;
 
-vi.mock("./relay-password.js", () => ({
-  readRelayPasswordHash: vi.fn(
-    () => "$2b$12$OLxyuuP9uLK30Uzc4wQX0O6liuU/Q1t5P2b0Ebf36mULvpVK3DRZW",
-  ),
-}));
+let paseoHome: string;
 
 const wsModuleMock = vi.hoisted(() => {
   class MockWebSocketServer {
@@ -274,7 +273,7 @@ function createServer(options?: {
     }),
     createStub<AgentStorage>({}),
     createStub<DownloadTokenStore>({}),
-    "/tmp/paseo-test",
+    paseoHome,
     createStub<DaemonConfigStore>(daemonConfigStore),
     null,
     { allowedOrigins: new Set(), startPaused: options?.startPaused },
@@ -493,6 +492,38 @@ function holdSessionCleanup(session: (typeof sessionMock.instances)[number]): {
 }
 
 describe("relay external socket reconnect behavior", () => {
+  test("locks new and resumed relay logins without closing existing or local sessions", async () => {
+    const server = createServer();
+    const existing = new MockSocket();
+    try {
+      await attachRelayAndHello({ server, socket: existing, clientId: "existing-owner" });
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const socket = new MockSocket();
+        await server.attachExternalSocket(socket, { transport: "relay" }, null, {
+          ...createHelloMessage(`guess-${attempt}`),
+          auth: { kind: "password", password: "wrong" },
+        });
+        expect(socket.readyState).toBe(3);
+        expect(sentServerInfoEnvelopes(socket)).toHaveLength(0);
+      }
+      for (const clientId of ["new-owner", "existing-owner"]) {
+        const socket = new MockSocket();
+        await server.attachExternalSocket(
+          socket,
+          { transport: "relay" },
+          null,
+          createHelloMessage(clientId),
+        );
+        expect(socket.readyState).toBe(3);
+        expect(sentServerInfoEnvelopes(socket)).toHaveLength(0);
+      }
+      expect(existing.readyState).toBe(1);
+      await attachDirectAndHello({ server, socket: new MockSocket(), clientId: "local-recovery" });
+    } finally {
+      await server.close();
+    }
+  });
+
   test("closes only a hello socket when post-admission setup throws", async () => {
     const server = createServer();
     class ThrowOnceSocket extends MockSocket {
@@ -600,11 +631,18 @@ describe("relay external socket reconnect behavior", () => {
   });
   beforeEach(() => {
     sessionMock.instances.length = 0;
+    paseoHome = mkdtempSync(join(tmpdir(), "paseo-relay-reconnect-"));
+    writeFileSync(
+      join(paseoHome, "relay-password"),
+      "$2b$12$OLxyuuP9uLK30Uzc4wQX0O6liuU/Q1t5P2b0Ebf36mULvpVK3DRZW\n",
+      { mode: 0o600 },
+    );
     vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    rmSync(paseoHome, { recursive: true, force: true });
   });
 
   test("keeps the same session when relay reconnects within grace window", async () => {

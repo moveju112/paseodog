@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { openReleaseState, insideWorkspace } from '../scripts/release-state.mjs';
-import { validateReleaseConfig, activeAgents, detachedCommand, waitForIdle, deliverRelease, unlockStoppedDelivery } from '../scripts/release-pipeline.mjs';
+import { validateReleaseConfig, activeAgents, waitForIdle, detachedCommand, deliverRelease, unlockStoppedDelivery } from '../scripts/release-pipeline.mjs';
 import { verifiedBuildCache } from '../scripts/verified-build-cache.mjs';
 import { measureBuildStep } from '../scripts/build-metrics.mjs';
 import { verifyRemoteAssets, verifyUpdaterManifest } from '../scripts/release-artifacts.mjs';
@@ -63,19 +63,6 @@ test('running mutation and parallel build checkpoints survive restart without lo
     await assert.rejects(resumed.stage('publish', () => assert.fail('must not replay'), { mutation: true }), /Uncertain mutation/);
 });
 
-test('idle gate waits for every active turn and times out without mutating anything', async () => {
-    let time = 0;
-    let reads = 0;
-    await waitForIdle(async () => ++reads < 3 ? [{ status: 'running' }] : [], {
-        sleep: async ms => { time += ms; }, now: () => time,
-    });
-    assert.equal(reads, 3);
-    assert.deepEqual(activeAgents([{ status: 'idle' }, { status: 'initializing' }]), [{ status: 'initializing' }]);
-    await assert.rejects(waitForIdle(async () => [{ status: 'running' }], {
-        sleep: async ms => { time += ms; }, now: () => time, timeoutMs: 10000,
-    }), /apply is pending/);
-});
-
 test('active delivery locks cannot be removed and competing runs cannot enter the pipeline', async t => {
     const directory = await temporary(t);
     await writeFile(join(directory, 'delivery.lock'), String(process.pid));
@@ -97,6 +84,19 @@ test('test harness serializes heavyweight runs and releases the slot after failu
     await rejected;
     await withTestLock(async () => { events.push('third'); }, directory);
     assert.deepEqual(events, ['first', 'released', 'second', 'third']);
+});
+
+test('idle gate waits for every active turn and times out without mutating anything', async () => {
+    let time = 0;
+    let reads = 0;
+    await waitForIdle(async () => ++reads < 3 ? [{ status: 'running' }] : [], {
+        sleep: async ms => { time += ms; }, now: () => time,
+    });
+    assert.equal(reads, 3);
+    assert.deepEqual(activeAgents([{ status: 'idle' }, { status: 'initializing' }]), [{ status: 'initializing' }]);
+    await assert.rejects(waitForIdle(async () => [{ status: 'running' }], {
+        sleep: async ms => { time += ms; }, now: () => time, timeoutMs: 10000,
+    }), /apply is pending/);
 });
 
 test('source verification hashes directory symlinks and invalidates changed links or tracked bytes', async t => {
@@ -132,10 +132,37 @@ test('unchanged pre-commit source checks are reused for delivery and a changed t
     assert.equal((await verifyReleaseSource(config, run)).cached, true);
     assert.equal(checks, before);
     assert.equal((await verifyReleaseSource({ ...config, appTests: ['src/second.test.ts'] }, run)).cached, false);
-    assert.equal(checks, before * 2);
+    assert.equal(checks, before + 1);
 });
 
-test('integrated delivery verifies before publishing and resumes without replaying mutations', async t => {
+test('verification retains completed checks across failure and output-workspace changes', async t => {
+    const cacheRoot = await temporary(t);
+    const workspace = await temporary(t);
+    const counts = new Map();
+    let fail = true;
+    const run = async (command, args, options) => {
+        if (command === 'git') return '';
+        const name = options.log.split('/').at(-1);
+        counts.set(name, (counts.get(name) || 0) + 1);
+        if (name === 'test.log' && fail) throw new Error('test failure');
+        return '';
+    };
+    const config = { cacheRoot, workspace, appTests: ['src/first.test.ts'] };
+    await assert.rejects(verifyReleaseSource(config, run), /test failure/);
+    assert.equal(counts.size, 5);
+    fail = false;
+    const resumed = await verifyReleaseSource({ ...config, workspace: await temporary(t) }, run);
+    assert.equal(resumed.results.filter(result => result.cached).length, 4);
+    assert.equal(counts.get('test.log'), 2);
+    assert.equal(counts.get('check.log'), 1);
+    assert.equal(counts.get('app-types.log'), 1);
+    await verifyReleaseSource({ ...config, verificationEpoch: 1 }, run);
+    assert.equal(counts.get('check.log'), 2);
+});
+
+for (const failure of [null, 'upload', 'export', 'install', 'pages']) {
+test(`integrated delivery protects active turns, overlaps upload/export and resumes safely: ${failure ?? 'success'}`,
+    { timeout: 10000 }, async t => {
     const directory = await temporary(t);
     const key = join(directory, 'approved.keystore'), init = join(directory, 'signing.gradle'), previous = join(directory, 'previous.apk');
     await writeFile(key, 'fixture'); await writeFile(init, `storeFile = file("${key}")`); await writeFile(previous, 'old');
@@ -147,6 +174,10 @@ test('integrated delivery verifies before publishing and resumes without replayi
     t.after(() => rm(config.cacheRoot, { recursive: true, force: true }));
     const calls = [];
     let assets = [];
+    let exportStarted;
+    const exporting = new Promise(resolve => { exportStarted = resolve; });
+    let installStarted;
+    const installing = new Promise(resolve => { installStarted = resolve; });
     const run = async (command, args) => {
         calls.push([command, ...args]);
         if (command === 'git') {
@@ -161,13 +192,31 @@ test('integrated delivery verifies before publishing and resumes without replayi
             targetCommitish: 'abc', assets: assets.map(path => ({ name: path.split('/').at(-1), size: 7 })),
         });
         if (command === 'npx' && args[0] === 'expo') throw new Error('Browser export must run in a bounded scope');
+        if (command === 'gh' && args[1] === 'upload') {
+            await exporting;
+            await new Promise(resolve => setImmediate(resolve));
+            if (failure === 'upload') throw new Error('upload failed');
+        }
         if (command === 'systemd-run' && args.includes('expo')) {
+            exportStarted();
+            await new Promise(resolve => setImmediate(resolve));
+            if (failure === 'export') throw new Error('export failed');
             const output = args[args.indexOf('--output-dir') + 1];
             const { mkdir } = await import('node:fs/promises');
             await mkdir(output); await writeFile(join(output, 'index.html'), 'fixture');
         }
-        if (args.includes('ls') && args.includes('--json')) return '[]';
-        if (command === 'dpkg-query') return config.version.replace('-', '~');
+        if (args.includes('ls') && args.includes('--json'))
+            return JSON.stringify([{ status: 'idle' }]);
+        if (command === 'dpkg-query') return '1.0.0~rc.7.11000';
+        if (command === 'sudo' && args.includes('dpkg')) {
+            installStarted();
+            await new Promise(resolve => setImmediate(resolve));
+            if (failure === 'install') throw new Error('install failed');
+        }
+        if (command === 'npx' && args.includes('wrangler')) {
+            await installing;
+            if (failure === 'pages') throw new Error('pages failed');
+        }
         if (args.includes('diagnostic')) return '{"diagnostic":"Provider is available"}';
         return '';
     };
@@ -181,6 +230,23 @@ test('integrated delivery verifies before publishing and resumes without replayi
         launchDesktop: async () => { calls.push(['desktop']); },
         installedRelease: async () => ({ versionCode: Number(config.versionCode) }),
     };
+    if (failure) {
+        await assert.rejects(deliverRelease(config, operations), new RegExp(`${failure} failed`));
+        const saved = JSON.parse(await readFile(join(directory, 'release-state.json'), 'utf8'));
+        assert.equal(saved.stages['github-upload'].status, failure === 'upload' ? 'failed' : 'complete');
+        assert.equal(saved.stages['browser-export'].status, failure === 'export' ? 'failed' : 'complete');
+        if (['install', 'pages'].includes(failure)) {
+            assert.equal(saved.stages['pc-install'].status, failure === 'install' ? 'failed' : 'complete');
+            assert.equal(saved.stages['pages-deploy'].status, failure === 'pages' ? 'failed' : 'complete');
+            assert.equal(calls.some(row => row.includes('reload')), false);
+            assert.equal(calls.some(row => row[0] === 'desktop'), false);
+        } else {
+            assert.equal(calls.some(row => row[0] === 'gh' && row[2] === 'edit'), false);
+            assert.equal(calls.some(row => row.includes('deploy')), false);
+        }
+        await assert.rejects(readFile(join(directory, 'delivery.lock')), { code: 'ENOENT' });
+        return;
+    }
     await deliverRelease(config, operations);
     const firstCount = calls.filter(row => row[0] === 'gh' && ['create', 'upload', 'edit'].includes(row[2])).length;
     assert.equal(firstCount, 3);
@@ -189,11 +255,19 @@ test('integrated delivery verifies before publishing and resumes without replayi
     const browserAt = calls.findIndex(row => row[0] === 'check-browser');
     const reloadAt = calls.findIndex(row => row.includes('reload'));
     assert.ok(verifyAt < publishAt && publishAt < browserAt && browserAt < reloadAt);
+    const idleChecks = calls.flatMap((row, index) => row.includes('ls') && row.includes('--json') ? [index] : []);
+    const installAt = calls.findIndex(row => row[0] === 'sudo' && row.includes('dpkg'));
+    const desktopAt = calls.findIndex(row => row[0] === 'desktop');
+    assert.equal(idleChecks.length, 3);
+    assert.ok(publishAt < idleChecks[0] && idleChecks[0] < installAt);
+    assert.ok(installAt < idleChecks[1] && idleChecks[1] < reloadAt);
+    assert.ok(reloadAt < idleChecks[2] && idleChecks[2] < desktopAt);
     await deliverRelease(config, operations);
     assert.equal(calls.filter(row => row[0] === 'gh' && ['create', 'upload', 'edit'].includes(row[2])).length, 3);
     assert.equal(calls.filter(row => row[0] === 'desktop').length, 1);
     assert.equal(calls.filter(row => row[0] === 'build').length, 1);
 });
+}
 
 test('delivery defaults are explicit targets and detached execution is a service, not a caller-owned scope', () => {
     const input = {

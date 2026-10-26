@@ -1,13 +1,40 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { resolve,join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
+import { spawn } from 'node:child_process';
 import { root } from './paths.mjs';
-// Android 모노레포는 자체 TypeScript·lint 검사로 검증하며 JSONC를 일반 JSON 검사에 넣지 않는다.
-function walk(path){return readdirSync(path,{withFileTypes:true}).flatMap(x=>['node_modules','.git','reports'].includes(x.name)||(path===root&&x.name==='android')?[]:x.isDirectory()?walk(join(path,x.name)):[join(path,x.name)]);}
-let count=0,failures=0;
-for(const file of walk(root)){
-    if(file.endsWith('.mjs')){const check=spawnSync(process.execPath,['--check',file],{encoding:'utf8'});if(check.status!==0){console.error(check.stderr);failures++;}count++;}
-    else if(file.endsWith('.json')){try{JSON.parse(readFileSync(file,'utf8'));}catch(e){console.error(file,e.message);failures++;}}
-    else if(file.endsWith('.sh')&&process.platform!=='win32'){const check=spawnSync('bash',['-n',file],{encoding:'utf8'});if(check.status!==0){console.error(check.stderr);failures++;}}
+
+// 검사 대상과 플래그는 유지하고 짧은 구문 검사만 최대 4개씩 실행한다.
+function walk(path) {
+    return readdirSync(path, { withFileTypes: true }).flatMap(entry =>
+        ['node_modules', '.git', 'reports'].includes(entry.name) || (path === root && entry.name === 'android') ? []
+            : entry.isDirectory() ? walk(join(path, entry.name)) : [join(path, entry.name)]);
 }
-console.log(`Checked ${count} JavaScript modules, JSON and shell syntax; failures=${failures}`);process.exitCode=failures?1:0;
+const files = walk(root);
+let cursor = 0, count = 0, failures = 0;
+async function worker() {
+    while (cursor < files.length) {
+        const file = files[cursor++];
+        if (file.endsWith('.json')) {
+            try { JSON.parse(readFileSync(file, 'utf8')); }
+            catch (error) { console.error(file, error.message); failures++; }
+            continue;
+        }
+        const javascript = file.endsWith('.mjs');
+        if (!javascript && !(file.endsWith('.sh') && process.platform !== 'win32')) continue;
+        if (javascript) count++;
+        await new Promise(resolve => {
+            const child = spawn(javascript ? process.execPath : 'bash',
+                [javascript ? '--check' : '-n', file], { stdio: ['ignore', 'ignore', 'pipe'] });
+            let error = '';
+            child.stderr.on('data', bytes => { error += bytes; });
+            child.on('error', failure => { error += failure.message; });
+            child.on('close', code => {
+                if (code !== 0) { console.error(file, error); failures++; }
+                resolve();
+            });
+        });
+    }
+}
+await Promise.all(Array.from({ length: 4 }, worker));
+console.log(`Checked ${count} JavaScript modules, JSON and shell syntax; failures=${failures}`);
+process.exitCode = failures ? 1 : 0;

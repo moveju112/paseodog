@@ -12,6 +12,7 @@ import { composerFixture } from './composer-fixture.mjs';
 import { withoutWhite2Theme } from '../scripts/patch-paseo-theme.mjs';
 import { withoutSingleWorkspace } from '../patches/paseo-single-workspace.mjs';
 import { withoutHostSwitch } from '../patches/paseo-host-switch.mjs';
+import { withoutComposerControls } from '../patches/paseo-composer-controls.mjs';
 import { gitBlob } from '../scripts/patch-mixdog.mjs';
 import {
     createCollaborationState, COLLABORATION_SOURCE, COLLABORATION_SOURCE_ANCHOR,
@@ -43,6 +44,7 @@ import { withoutSettingsOrganization } from '../patches/paseo-settings-organizat
 import { withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
 // 사이드바 쿼터 패치 해제 (도넛 -> 고정 순서, 실제 composer 체인 순서)
 const withoutUsageOrder = (source) => {
+    source = withoutComposerControls(source);
     source = withoutHostSwitch(source);
     source = withoutSingleWorkspace(source);
     source = withoutSettingsBehavior(source);

@@ -137,6 +137,8 @@ export const ar: TranslationResources = {
       cancelingAgent: "وكيل الإلغاء",
       stopAgent: "توقف الوكيل",
       interrupt: "مقاطعة",
+      confirmTitle: "إيقاف الوكيل؟",
+      confirmMessage: "سيتوقف تشغيل الوكيل الحالي. سيتم الاحتفاظ بمسودتك.",
     },
     voice: {
       enableVoiceMode: "تمكين الوضع الصوتي",

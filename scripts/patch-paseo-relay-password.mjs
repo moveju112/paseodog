@@ -11,7 +11,7 @@ export const RELAY_PASSWORD_PATCHES = [
     // previous: 이전에 배포한 PaseoDog 결과물 blob. 검토된 업그레이드 경로로만 허용한다.
     { package: 'server', file: 'dist/server/server/session-admission-auth.js',
         blob: '95030cbe6f06c782953a68d5db06c53d8ca3b5c5', source: 'server/src/server/session-admission-auth.ts',
-        previous: ['ad35d4a821a7862b783f8c253ec3288dc39aa2d7'] },
+        previous: ['ad35d4a821a7862b783f8c253ec3288dc39aa2d7', 'c1bb96fef533338148778fc69c9c95cf2d0b3267'] },
     { package: 'server', file: 'dist/server/server/pairing-offer.js',
         blob: '3c6d163a523a6b0403980557c7b5456e3f83427a', source: 'server/src/server/pairing-offer.ts',
         previous: ['5c125a60944c228e98c2ea93d08bf9e9716219a4', '8fefab2893f5c4f0c160dde00d1b2589f4c667ce',
@@ -37,7 +37,7 @@ export const RELAY_PASSWORD_PATCHES = [
                 + '        }\n        catch (error) {\n            this.logger.error({ err: error }, "Failed to handle daemon pairing offer request");\n',
         ]] },
     { package: 'server', file: 'dist/server/server/websocket-server.js',
-        blob: 'd2faa2c4fbddfe3264a604a36e5b09802386d69c', edits: [[
+        blob: 'd2faa2c4fbddfe3264a604a36e5b09802386d69c', legacyEditCounts: [3], edits: [[
             'import { resolveSessionAdmission } from "./session-admission-auth.js";',
             'import { resolveSessionAdmission } from "./session-admission-auth.js";\nimport { readRelayPasswordHash } from "./relay-password.js";',
         ], [
@@ -46,6 +46,9 @@ export const RELAY_PASSWORD_PATCHES = [
         ], [
             '                daemonConfigReload: true,\n',
             '                daemonConfigReload: true,\n                relayPasswordAuth: true,\n',
+        ], [
+            '                relayPasswordHash: pending.identity.transport === "relay" ? readRelayPasswordHash(this.paseoHome) : undefined,\n',
+            '                relayPasswordHash: pending.identity.transport === "relay" ? readRelayPasswordHash(this.paseoHome) : undefined,\n                paseoHome: this.paseoHome,\n',
         ]] },
     { package: 'protocol', file: 'dist/messages.js',
         blob: '7bd464871d7543be7cb4d352511bb62bd3a1d5a2', legacyEditCounts: [2], edits: [[
@@ -73,6 +76,11 @@ export function relayPasswordModule() {
     return stripTypeScriptTypes(readFileSync(resolve(sourceRoot, 'server/src/server/relay-password.ts'), 'utf8'));
 }
 
+export function withoutRelayPasswordEdits(source, edits) {
+    for (const [before, after] of [...edits].reverse()) source = source.replace(after, () => before);
+    return source;
+}
+
 // 원본 또는 완성본만 허용하고 다른 버전·부분 적용·임의 변경을 거부한다.
 export function patchedRelayPasswordSource(source, spec) {
     if (spec.source) {
@@ -81,8 +89,7 @@ export function patchedRelayPasswordSource(source, spec) {
             throw new Error(`Paseo relay password hash mismatch: ${spec.file}`);
         return result;
     }
-    let original = source;
-    for (const [before, after] of [...spec.edits].reverse()) original = original.replace(after, () => before);
+    const original = withoutRelayPasswordEdits(source, spec.edits);
     if (gitBlob(original) !== spec.blob) throw new Error(`Paseo relay password hash mismatch: ${spec.file}`);
     let result = original;
     const legacyResults = [];
@@ -109,7 +116,7 @@ export function patchPaseoRelayPassword(base = resolve(root, 'tools/node_modules
     const before = existsSync(helperPath) ? readFileSync(helperPath, 'utf8') : undefined;
     const after = relayPasswordModule();
     // 이전 PaseoDog 헬퍼 결과물만 교체를 허용하고 그 밖의 변경은 거부한다.
-    if (before !== undefined && before !== after && !['9021b6d4d426481e6ca13efdd0dc56721079299e', 'd83f134f54c11153d3f462c6eb952564751e925d'].includes(gitBlob(before)))
+    if (before !== undefined && before !== after && !['9021b6d4d426481e6ca13efdd0dc56721079299e', 'd83f134f54c11153d3f462c6eb952564751e925d', '7e45d9ff60a902001755779df3bde4e2d33d9168'].includes(gitBlob(before)))
         throw new Error('Paseo relay password helper drift');
     changes.push({ path: helperPath, before, after });
     if (check && changes.some((file) => file.before !== file.after)) throw new Error('Paseo relay password patch is missing');

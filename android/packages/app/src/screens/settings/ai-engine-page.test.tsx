@@ -9,6 +9,7 @@ import {
   renderHook,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 
 const host = vi.hoisted(() => ({
@@ -221,6 +222,7 @@ const route = {
   fast: false,
 };
 const snapshot = {
+  maxTurnMinutes: 120,
   route,
   instructionFiles: "agents",
   compaction: { auto: true, onModelChange: true, mainBufferPercent: 0.2, mainBufferRatio: 20 },
@@ -287,6 +289,78 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("native host AI engine settings", () => {
+  it("preserves duplicate fallback row identity after removal and saves only route data", async () => {
+    const fallback = { provider: "subscription", model: "small", effort: "medium", fast: false };
+    host.invokePluginRpc.mockResolvedValue({
+      ...snapshot,
+      agents: [{ ...snapshot.agents[0], route: { ...route, fallbacks: [fallback, fallback] } }],
+    });
+    render(<AiEnginePage serverId="fallback-host" section="workflow" />);
+    fireEvent.click(await screen.findByRole("button", { name: "에이전트 Worker" }));
+    await waitFor(() => expect(screen.queryByText("원본을 불러오는 중입니다.")).toBeNull());
+    const secondModel = screen.getByRole("button", { name: "폴백 모델 2" });
+    const secondRow = secondModel.parentElement!.parentElement!;
+    fireEvent.click(within(secondRow).getByRole("button", { name: "High" }));
+    fireEvent.click(screen.getByRole("button", { name: "폴백 모델 1 삭제" }));
+    expect(screen.getByRole("button", { name: "폴백 모델 1" })).toBe(secondModel);
+    expect(screen.getByRole("button", { name: "폴백 추론 수준 1" }).textContent).toBe("High");
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() =>
+      expect(host.invokePluginRpc).toHaveBeenCalledWith(
+        "paseodog-provider",
+        "engine-controls",
+        expect.objectContaining({
+          action: "agentSave",
+          route: expect.objectContaining({
+            fallbacks: [{ ...fallback, effort: "high" }],
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("routes tool, install and skill row actions to the selected item", async () => {
+    const configured = {
+      ...snapshot,
+      toolModules: {
+        webSearch: true,
+        git: { installed: false, enabled: true },
+        memory: { enabled: true },
+        office: { enabled: true },
+        tidy: { enabled: true },
+        visualize: { enabled: true },
+        media: { enabled: true },
+        localProvider: { enabled: true },
+        autoEffort: { enabled: true },
+      },
+    };
+    host.invokePluginRpc.mockResolvedValue(configured);
+    const page = render(<AiEnginePage serverId="tools-host" section="tools" />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Git 도구" }));
+    await waitFor(() =>
+      expect(host.invokePluginRpc).toHaveBeenCalledWith("paseodog-provider", "engine-controls", {
+        action: "features",
+        builtinTool: "git",
+        enabled: false,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "설치" }));
+    await waitFor(() =>
+      expect(host.invokePluginRpc).toHaveBeenCalledWith("paseodog-provider", "engine-controls", {
+        action: "features",
+        installFeature: "git",
+      }),
+    );
+    page.rerender(<AiEnginePage serverId="tools-host" section="skills" />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "스킬 Demo Skill" }));
+    await waitFor(() =>
+      expect(host.invokePluginRpc).toHaveBeenCalledWith("paseodog-provider", "engine-controls", {
+        action: "preferences",
+        disabledSkills: [],
+      }),
+    );
+  });
+
   it("addresses a hook toggle using the displayed revision", async () => {
     const revision = "a".repeat(24);
     host.invokePluginRpc.mockResolvedValue({

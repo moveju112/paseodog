@@ -138,6 +138,8 @@ export const ptBR: TranslationResources = {
       cancelingAgent: "Cancelando agente",
       stopAgent: "Parar agente",
       interrupt: "Interromper",
+      confirmTitle: "Parar o agente?",
+      confirmMessage: "A execução atual do agente será interrompida. Seu rascunho será mantido.",
     },
     voice: {
       enableVoiceMode: "Ativar modo de voz",
