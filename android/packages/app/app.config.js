@@ -173,7 +173,17 @@ export default {
       [
         // 터미널 셀 폭을 고정하기 위해 실제 고정폭 폰트를 번들한다. 기기 글꼴 설정이 monospace를 덮어쓸 수 있다.
         "expo-font",
-        { android: { fonts: ["./assets/fonts/JetBrainsMono.ttf"] } },
+        {
+          android: {
+            // RN은 굵게·기울임에 `_bold`/`_italic`/`_bold_italic` 파일을 찾고, 없으면 비고정폭 시스템 폰트로 대체한다.
+            fonts: [
+              "./assets/fonts/JetBrainsMono.ttf",
+              "./assets/fonts/JetBrainsMono_bold.ttf",
+              "./assets/fonts/JetBrainsMono_italic.ttf",
+              "./assets/fonts/JetBrainsMono_bold_italic.ttf",
+            ],
+          },
+        },
       ],
       [
         "expo-gradle-jvmargs",

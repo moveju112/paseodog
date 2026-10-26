@@ -25,6 +25,9 @@ interface TerminalRunBase {
   styleKey: string;
   style: TextStyle;
   foregroundColor: string;
+  // A single wide character in its own run. Fallback fonts (Hangul, CJK, emoji) never
+  // advance exactly two cells, so each wide glyph gets a fixed box instead of flowing.
+  wide: boolean;
 }
 
 export interface TerminalTextRun extends TerminalRunBase {
@@ -107,9 +110,12 @@ function appendRun(input: {
   col: number;
 }): void {
   const renderKind = input.customGlyph ? "custom-glyph" : "text";
+  const wide = input.cellCount > 1;
   const previousRun = input.runs[input.runs.length - 1];
   if (
     previousRun &&
+    !wide &&
+    !previousRun.wide &&
     previousRun.styleKey === input.styleKey &&
     previousRun.renderKind === renderKind
   ) {
@@ -133,6 +139,7 @@ function appendRun(input: {
     styleKey: input.styleKey,
     style: input.style,
     foregroundColor: input.foregroundColor,
+    wide,
   };
   if (input.customGlyph) {
     input.runs.push({

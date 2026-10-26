@@ -37,7 +37,37 @@ describe("terminal row model", () => {
     });
 
     expect(rows[0].runs.map((run) => ({ text: run.text, cellCount: run.cellCount }))).toEqual([
-      { text: "A界", cellCount: 3 },
+      { text: "A", cellCount: 2 },
+      { text: "界", cellCount: 1 },
+    ]);
+  });
+
+  test("gives every wide character its own two-cell run so fallback glyphs stay on the grid", () => {
+    const resolver = createTerminalCellStyleResolver(DEFAULT_TERMINAL_THEME);
+
+    const rows = buildRows({
+      grid: [
+        [
+          cell("$"),
+          cell(" "),
+          cell("나", { width: 2 }),
+          cell("", { width: 0 }),
+          cell("아", { width: 2 }),
+          cell("", { width: 0 }),
+          cell("x"),
+          cell("y"),
+        ],
+      ],
+      resolver,
+    });
+
+    expect(
+      rows[0].runs.map((run) => ({ text: run.text, cellCount: run.cellCount, wide: run.wide })),
+    ).toEqual([
+      { text: "$ ", cellCount: 2, wide: false },
+      { text: "나", cellCount: 2, wide: true },
+      { text: "아", cellCount: 2, wide: true },
+      { text: "xy", cellCount: 2, wide: false },
     ]);
   });
 

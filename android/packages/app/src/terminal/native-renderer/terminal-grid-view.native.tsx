@@ -112,8 +112,8 @@ function TerminalGridRun({ run, cellWidth, cellHeight, textStyle }: TerminalGrid
     [cellHeight, cellWidth, run.cellCount, run.style.backgroundColor],
   );
   const runTextStyle = useMemo<StyleProp<TextStyle>>(
-    () => [textStyle, run.style],
-    [run.style, textStyle],
+    () => [textStyle, run.style, run.wide && styles.wideText],
+    [run.style, run.wide, textStyle],
   );
 
   return (
@@ -454,6 +454,10 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
     margin: 0,
     padding: 0,
+  },
+  // Centers a fallback-font glyph inside its fixed two-cell box.
+  wideText: {
+    textAlign: "center",
   },
   measureText: {
     includeFontPadding: false,

@@ -212,19 +212,24 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             await waitForIdle(listAgents, sleep ? { sleep } : undefined);
             // 데몬 갱신은 기존 업데이터 경로를 그대로 쓴다. 다른 세션이 이후 커밋을 올렸으면 그 커밋까지 반영될 수 있다.
             if (config.updaterRoot && config.updaterUnit) await stage('runtime-update', async () => {
-                await execute('runtime-update', 'systemctl', ['--user', 'start', config.updaterUnit]);
-                // 전환 뒤 별도 검증 서비스가 applied로 바꾼다. 그 결과가 나올 때까지 기다린다.
                 const readReceipt = async () => JSON.parse(await readFile(join(config.updaterRoot, 'receipt.json'), 'utf8'));
-                let receipt = await readReceipt();
-                for (let waited = 0; receipt.phase === 'awaiting-verification' && waited < 180000; waited += 2000) {
-                    await (sleep || (ms => new Promise(resolve => setTimeout(resolve, ms))))(2000);
+                const containsCommit = revision => revision === commit
+                    || capture('git', ['merge-base', '--is-ancestor', commit, revision]).then(() => true, () => false);
+                let receipt;
+                // 업데이터는 이미 준비해 둔 이전 리비전을 먼저 적용할 수 있다. 그때는 한 번 더 실행해 배포 커밋까지 따라잡게 한다.
+                for (let attempt = 0; attempt < 2; attempt += 1) {
+                    await execute('runtime-update', 'systemctl', ['--user', 'start', config.updaterUnit]);
+                    // 전환 뒤 별도 검증 서비스가 applied로 바꾼다. 그 결과가 나올 때까지 기다린다.
                     receipt = await readReceipt();
+                    for (let waited = 0; receipt.phase === 'awaiting-verification' && waited < 180000; waited += 2000) {
+                        await (sleep || (ms => new Promise(resolve => setTimeout(resolve, ms))))(2000);
+                        receipt = await readReceipt();
+                    }
+                    if (receipt.phase !== 'applied' || !/^[0-9a-f]{40}$/.test(receipt.revision || ''))
+                        throw new Error(`Daemon updater did not apply: ${receipt.phase}`);
+                    if (await containsCommit(receipt.revision)) return { revision: receipt.revision };
                 }
-                if (receipt.phase !== 'applied' || !/^[0-9a-f]{40}$/.test(receipt.revision || ''))
-                    throw new Error(`Daemon updater did not apply: ${receipt.phase}`);
-                if (receipt.revision !== commit)
-                    await capture('git', ['merge-base', '--is-ancestor', commit, receipt.revision]);
-                return { revision: receipt.revision };
+                throw new Error(`Daemon updater applied ${receipt.revision}, which does not contain ${commit}`);
             }, { mutation: true });
             // 업데이터가 플러그인 설치·재로딩과 사후 검증을 맡는다. 여기서 다시 로드하면 그 검증과 경합한다.
             if (!(config.updaterRoot && config.updaterUnit)) await stage('plugin-reload', () => execute('plugin-reload',

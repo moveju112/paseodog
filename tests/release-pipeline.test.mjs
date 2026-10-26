@@ -513,9 +513,9 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
         repo: 'moveju112/paseodog', pagesProject: 'paseodog', webUrl: 'https://paseodog.choondoggy.com/',
         targets: ['android', 'runtime'], updaterRoot, updaterUnit: 'paseodog-update.service',
     });
-    const commit = 'f'.repeat(40), carried = 'v1.0.0-rc.7.11090';
+    const commit = 'f'.repeat(40), carried = 'v1.0.0-rc.7.11090', stale = 'e'.repeat(40);
     const calls = [];
-    let assets = [], active = [{ status: 'running' }];
+    let assets = [], active = [{ status: 'running' }], updaterStarts = 0;
     const run = async (command, args) => {
         calls.push([command, ...args]);
         if (command === 'git' && args[0] === 'rev-parse') return commit + '\n';
@@ -535,11 +535,18 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
             const rows = active; active = [];
             return JSON.stringify(rows);
         }
+        if (command === 'git' && args[0] === 'merge-base') {
+            // 이전에 준비된 리비전은 배포 커밋을 포함하지 않는다.
+            if (args.at(-1) === stale) throw new Error('git failed (1)');
+        }
         if (command === 'systemctl') {
             assert.deepEqual(active, [], 'daemon update must wait for idle');
+            updaterStarts += 1;
+            // 첫 실행은 미리 준비된 이전 리비전을 적용하고, 두 번째 실행이 배포 커밋까지 따라잡는다.
+            const revision = updaterStarts === 1 ? stale : commit;
             // 업데이터는 전환 직후 종료하고, 검증 서비스가 잠시 뒤 applied로 바꾼다.
-            await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'awaiting-verification', revision: commit }));
-            setTimeout(() => void writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'applied', revision: commit })), 20);
+            await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'awaiting-verification', revision }));
+            setTimeout(() => void writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'applied', revision })), 20);
         }
         if (args.includes('diagnostic')) return '{"diagnostic":"Provider is available"}';
         return '';
@@ -569,6 +576,7 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
     assert.equal(JSON.parse(await readFile(join(updaterRoot, 'preverified.json'), 'utf8')).revision, commit);
     const updateAt = calls.findIndex(row => row[0] === 'systemctl');
     assert.ok(updateAt > 0);
+    assert.equal(updaterStarts, 2);
     // 업데이터가 플러그인과 사후 검증을 맡으므로 배포가 다시 로드하지 않는다.
     assert.equal(calls.some(row => row.includes('reload')), false);
     assert.ok(calls.findIndex(row => row.includes('diagnostic')) > updateAt);
