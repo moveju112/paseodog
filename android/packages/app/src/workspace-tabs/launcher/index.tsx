@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useRouter, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
-import { Globe, SquarePen, SquareTerminal } from "lucide-react-native";
+import { Globe, Import, SquarePen, SquareTerminal } from "lucide-react-native";
 import invariant from "tiny-invariant";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { resolvePluginIcon } from "@/plugins/icons";
@@ -42,6 +42,7 @@ export interface NewTabLauncher {
   showPullRequest: boolean;
   showBrowser: boolean;
   terminalDisabled: boolean;
+  importSession?: { disabled: boolean; open: () => void };
   launch: (selection: NewTabSelection, destination: WorkspaceTabLaunchDestination) => void;
 }
 
@@ -197,6 +198,16 @@ export function useWorkspaceTabLaunchCatalog(input: {
       const item = builtIns[id];
       return item.hidden || !panelSupportsHost(item.panelKind, host) ? [] : [item];
     });
+    if (surface === "menu" && host === "main" && launcher.importSession) {
+      tabItems.splice(tabItems.findIndex((item) => item.id === "agent") + 1, 0, {
+        id: "import-session",
+        label: t("workspace.header.actions.importSession"),
+        Icon: Import,
+        disabled: launcher.importSession.disabled,
+        panelKind: "draft",
+        launch: launcher.importSession.open,
+      });
+    }
 
     const pluginItems: WorkspaceTabLaunchItem[] = [];
     for (const plugin of plugins) {

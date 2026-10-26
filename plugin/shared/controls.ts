@@ -14,6 +14,31 @@ export const daemonRelease = defineRpc({
     }).strict(),
 });
 
+export const daemonUpdate = defineRpc({
+    name: 'daemon-update',
+    input: z.discriminatedUnion('action', [
+        z.object({ action: z.literal('status') }).strict(),
+        z.object({
+            action: z.literal('request'),
+            versionCode: z.number().int().positive().safe(),
+            confirmed: z.literal(true),
+        }).strict(),
+    ]),
+    output: z.object({
+        available: z.boolean(),
+        versionCode: z.number().int().positive().optional(),
+        reason: z.string().nullable().optional(),
+        request: z.object({
+            id: z.string().uuid(),
+            versionCode: z.number().int().positive(),
+            phase: z.enum(['queued', 'start-unknown', 'preparing', 'waiting', 'applying', 'complete',
+                'failed', 'rolling-back', 'rolled-back', 'rollback-failed']),
+            updatedAt: z.number(),
+            message: z.string(),
+        }).strict().nullable(),
+    }).strict(),
+});
+
 // 완료된 대화의 제목만 생성하며 세션 실행·도구 호출·설정 변경은 허용하지 않는다.
 export const engineTitle = defineRpc({
     name: 'engine-title',

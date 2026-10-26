@@ -73,6 +73,45 @@ async function loadClient(t) {
     return { settingsScreens, screens, panels, liveScreen, footer, renderScreen };
 }
 
+async function showUsageDetails(tree) {
+    await act(async () => tree.root.findAllByType('pressable')
+        .find(node => node.props.accessibilityLabel === '사용량 자세히').props.onPress());
+}
+
+test('summary prioritizes measured tok/s and details separate Fast without refetching', async t => {
+    const { footer, renderScreen } = await loadClient(t);
+    let calls = 0;
+    globalThis.__paseodogTestRpc = async () => {
+        calls++;
+        return {
+            range: { fromMs: 1, toMs: 2 }, totals: { outputTokensPerSecond: 38.2, turns: 3, tokens: 1000 },
+            providers: [], series: [], quotas: [],
+            efforts: [
+                { provider: 'openai', model: 'test', agent: 'worker', effort: 'high', fast: true, outputTokensPerSecond: 40, turns: 1 },
+                { provider: 'openai', model: 'test', agent: 'worker', effort: 'high', fast: false, outputTokensPerSecond: 20, turns: 1 },
+                { provider: 'openai', model: 'test', agent: 'worker', effort: 'high', fast: null, outputTokensPerSecond: null, turns: 1 },
+            ],
+        };
+    };
+    const { tree } = await renderScreen(footer);
+    const button = label => tree.root.findAllByType('pressable').find(node => node.props.accessibilityLabel === label);
+    const content = () => tree.root.findAllByType('text').map(node => node.children.join('')).join('\n');
+    await act(async () => button('AI 사용량·에이전트 분석').props.onPress());
+    assert.equal(button('사용량 요약').props.accessibilityState.selected, true);
+    assert.ok(content().includes('38.2 tok/s'));
+    assert.ok(!content().includes('환산액') && !content().includes('추이') && !content().includes('Effort'));
+    await showUsageDetails(tree);
+    assert.equal(button('사용량 자세히').props.accessibilityState.selected, true);
+    for (const [fast, value] of [['켜짐', '40.0'], ['꺼짐', '20.0'], ['미기록', '—']]) {
+        const row = tree.root.findAllByType('view')
+            .find(node => node.props.accessibilityLabel === `worker openai test high Fast ${fast} 사용량`);
+        assert.ok(row.findAllByType('text').some(node => node.children.join('') === value));
+    }
+    await act(async () => button('사용량 요약').props.onPress());
+    assert.ok(!content().includes('에이전트·Effort'));
+    assert.equal(calls, 1);
+});
+
 test('plugin registers tools and diagnostics but no duplicate settings screens', async t => {
     const { settingsScreens, screens, panels, liveScreen } = await loadClient(t);
     assert.deepEqual(settingsScreens, []);
@@ -114,9 +153,10 @@ test('usage shows independent agent/effort rows even without provider model summ
     const { tree } = await renderScreen(footer);
     await act(async () => tree.root.findAllByType('pressable')
         .find((node) => node.props.accessibilityLabel === 'AI 사용량·에이전트 분석').props.onPress());
+    await showUsageDetails(tree);
     const labels = tree.root.findAllByType('view').map((node) => node.props.accessibilityLabel);
-    assert.ok(labels.includes('worker openai test low 사용량'));
-    assert.ok(labels.includes('에이전트 미기록 openai test effort 미기록 사용량'));
+    assert.ok(labels.includes('worker openai test low Fast 미기록 사용량'));
+    assert.ok(labels.includes('에이전트 미기록 openai test effort 미기록 Fast 미기록 사용량'));
     const content = tree.root.findAllByType('text').map((node) => node.children.join('')).join('\n');
     assert.ok(content.includes('에이전트·Effort'));
     assert.ok(labels.includes('worker 에이전트 사용량'));
@@ -143,6 +183,7 @@ test('usage groups effort rows by agent then provider model without repeating he
     const { tree } = await renderScreen(footer);
     await act(async () => tree.root.findAllByType('pressable')
         .find((node) => node.props.accessibilityLabel === 'AI 사용량·에이전트 분석').props.onPress());
+    await showUsageDetails(tree);
     const views = tree.root.findAllByType('view');
     const groups = views.filter((node) => node.props.accessibilityLabel?.endsWith(' 에이전트 사용량'));
     assert.deepEqual(groups.map((node) => node.props.accessibilityLabel),
@@ -152,15 +193,15 @@ test('usage groups effort rows by agent then provider model without repeating he
     const rows = (group) => group.findAllByType('view').filter((node) => node.props.accessibilityLabel?.endsWith(' 사용량')
         && !node.props.accessibilityLabel.endsWith(' 에이전트 사용량'));
     assert.deepEqual(rows(groups[0]).map((row) => texts(row)), [
-        ['openai · gpt', 'low', '1', '10', '$0.10'],
-        ['', 'high', '2', '20', '$0.20'],
-        ['azure · gpt', 'low', '3', '30', '$0.30'],
-        ['openai · mini', '미기록', '5', '50', '미확인'],
+        ['openai · gpt', 'low', '미기록', '—', '1', '10', '$0.10'],
+        ['', 'high', '미기록', '—', '2', '20', '$0.20'],
+        ['azure · gpt', 'low', '미기록', '—', '3', '30', '$0.30'],
+        ['openai · mini', '미기록', '미기록', '—', '5', '50', '미확인'],
     ]);
-    assert.deepEqual(rows(groups[1]).map((row) => texts(row)), [['openai · gpt', 'high', '4', '40', '$0.40']]);
-    assert.deepEqual(rows(groups[2]).map((row) => texts(row)), [['openai · gpt', '미기록', '6', '60', '$0.60']]);
+    assert.deepEqual(rows(groups[1]).map((row) => texts(row)), [['openai · gpt', 'high', '미기록', '—', '4', '40', '$0.40']]);
+    assert.deepEqual(rows(groups[2]).map((row) => texts(row)), [['openai · gpt', '미기록', '미기록', '—', '6', '60', '$0.60']]);
     assert.deepEqual(rows(groups[0]).map((row) => row.props.accessibilityLabel).slice(0, 2),
-        ['worker openai gpt low 사용량', 'worker openai gpt high 사용량']);
+        ['worker openai gpt low Fast 미기록 사용량', 'worker openai gpt high Fast 미기록 사용량']);
     // 표 머리글은 에이전트 묶음마다 한 번만 표시한다.
     assert.equal(texts(groups[0]).filter((value) => value === 'Effort').length, 1);
 });
@@ -174,9 +215,10 @@ test('effort section remains visible with missing or empty historical detail', a
         const { tree } = await renderScreen(footer);
         await act(async () => tree.root.findAllByType('pressable')
             .find((node) => node.props.accessibilityLabel === 'AI 사용량·에이전트 분석').props.onPress());
+        await showUsageDetails(tree);
         const content = tree.root.findAllByType('text').map((node) => node.children.join('')).join('\n');
         assert.ok(content.includes('에이전트·Effort'));
-        assert.ok(content.includes('선택한 기간에 Effort별 상세 기록이 없습니다.'));
+        assert.ok(content.includes('선택한 기간에 Effort·Fast별 상세 기록이 없습니다.'));
     }
 });
 
@@ -204,6 +246,7 @@ test('usage dashboard preserves metrics, quota percentages and period refresh co
     const { tree } = await renderScreen(footer);
     const button = (label) => tree.root.findAllByType('pressable').find((node) => node.props.accessibilityLabel === label);
     await act(async () => button('AI 사용량·에이전트 분석').props.onPress());
+    await showUsageDetails(tree);
     const content = tree.root.findAllByType('text').map((node) => node.children.join('')).join('\n');
     for (const value of ['환산액', '$14.55', '$0.00', '90.0%', 'test-model', '68%', '미연결',
         '리셋 티켓 3개 남음', '10:00', '입력']) assert.ok(content.includes(value), value);
@@ -247,6 +290,7 @@ test('model usage metrics share columns across models and providers without wrap
     const { tree } = await renderScreen(footer);
     const trigger = tree.root.findAllByType('pressable').find((node) => node.props.accessibilityLabel === 'AI 사용량·에이전트 분석');
     await act(async () => trigger.props.onPress());
+    await showUsageDetails(tree);
     const rows = tree.root.findAllByType('view').filter((node) => node.props.accessibilityLabel?.endsWith(' 사용량 지표'));
     assert.equal(rows.length, 3);
     const cells = rows.map((row) => row.findAllByType('text'));
@@ -277,6 +321,7 @@ test('usage separates OAuth quota failure from disconnected accounts and guides 
     const pressable = (label) => tree.root.findAllByType('pressable').find((node) =>
         node.props.accessibilityLabel === label || node.findAllByType('text')[0]?.children.join('') === label);
     await act(async () => pressable('AI 사용량·에이전트 분석').props.onPress());
+    await showUsageDetails(tree);
     const content = () => tree.root.findAllByType('text').map((node) => node.children.join('')).join('\n');
     assert.ok(content().includes(quotaError));
     assert.ok(!content().includes('연결된 OAuth 계정 없음'));

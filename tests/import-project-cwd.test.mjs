@@ -4,11 +4,39 @@ import { readFileSync } from 'node:fs';
 import { Script } from 'node:vm';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import { composerFixture } from './composer-fixture.mjs';
-import { IMPORT_CWD, IMPORT_CWD_ANCHOR, SOURCE_IMPORT_CWD } from '../patches/paseo-import-cwd.mjs';
+import { IMPORT_CWD, IMPORT_CWD_ANCHOR, SOURCE_IMPORT_CWD, IMPORT_MENU_INSERT, IMPORT_LAUNCHER } from '../patches/paseo-import-cwd.mjs';
 import { IMPORT_SOURCE_FILE, patchedImportSource } from '../scripts/patch-paseo-import-cwd.mjs';
 
 const source = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
 const nativeSource = readFileSync(new URL('../android/' + IMPORT_SOURCE_FILE, import.meta.url), 'utf8');
+
+test('web + menu reuses workspace import availability and callback without creating a tab', () => {
+    const patched = composerFixture(source);
+    assert.ok(patched.includes(IMPORT_MENU_INSERT));
+    assert.ok(patched.includes(IMPORT_LAUNCHER));
+    assert.throws(() => patchedComposerSource(patched.replace(IMPORT_MENU_INSERT, IMPORT_MENU_INSERT + ';')),
+        /source hash mismatch/);
+    for (const available of [true, false]) {
+        let opened = 0;
+        const launcher = new Script(`[${IMPORT_LAUNCHER}][0]()` ).runInNewContext({
+            Sa: false, Wa: false, ss: true, ns: false, Gr() { throw new Error('must not launch a tab'); },
+            nt: available, st() { opened++; },
+        });
+        for (const [host, surface] of [['main', 'menu'], ['explorer', 'menu'], ['main', 'panel']]) {
+            const items = [{ id: 'agent' }, { id: 'terminal' }];
+            new Script(IMPORT_MENU_INSERT).runInNewContext({
+                T: surface, L: host, D: launcher, p: items, S: value => value, o: { Import: 'Import' },
+            });
+            const item = items.find(row => row.id === 'import-session');
+            if (host !== 'main' || surface !== 'menu') { assert.equal(item, undefined); continue; }
+            assert.equal(items[1], item);
+            assert.equal(item.disabled, !available);
+            assert.equal(item.launch, launcher.importSession.open);
+            if (!item.disabled) item.launch();
+        }
+        assert.equal(opened, available ? 1 : 0);
+    }
+});
 
 // 실제 번들의 요청 구성 함수를 실행해 프로젝트별 서버 응답을 확인한다.
 function loadSessionQueries(bundle) {

@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { Script } from 'node:vm';
 import { createDaemonUpdateCallouts } from '../android/packages/app/src/desktop/updates/daemon-update-callouts.ts';
 import { DAEMON_RELEASE } from '../plugin/server/util.mjs';
-import { daemonRelease } from '../plugin/shared/controls.ts';
+import { daemonRelease, daemonUpdate } from '../plugin/shared/controls.ts';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import { composerFixture } from './composer-fixture.mjs';
 import { withDaemonUpdate, withoutDaemonUpdate } from '../patches/paseo-daemon-update.mjs';
@@ -24,11 +24,23 @@ async function fixture(t, options = {}) {
     const cards = new Map(), calls = [], opened = [], fetchURLs = [];
     let connected = options.connected ?? true;
     let result = options.release ?? { version: '1.0.0-rc.7', versionCode: 11068 };
+    let updateStatus = options.updateStatus ?? { available: false, request: null };
     let update = manifest;
     let fetches = 0;
     const client = {
         async invokePluginRpc(...args) {
             calls.push(args);
+            if (args[1] === 'daemon-update') {
+                if (args[2].action === 'request') {
+                    if (options.requestError) throw options.requestError;
+                    return options.requestResult ?? {
+                        available: true, versionCode: manifest.versionCode,
+                        request: { phase: 'queued', versionCode: manifest.versionCode, message: '접수됨' },
+                    };
+                }
+                if (updateStatus instanceof Error) throw updateStatus;
+                return updateStatus;
+            }
             if (result instanceof Error) throw result;
             return result;
         },
@@ -60,6 +72,7 @@ async function fixture(t, options = {}) {
     return {
         cards, calls, opened, fetchURLs, get fetches() { return fetches; },
         setRelease(value) { result = value; },
+        setStatus(value) { updateStatus = value; },
         setUpdate(value) { update = value; },
         async disconnect() {
             connected = false;
@@ -79,12 +92,95 @@ test('same Paseo base and product version still notifies for an older daemon bui
     assert.match(card.description, /Linux 호스트: 1\.0\.0-rc\.7\.11068 → 1\.0\.0-rc\.7\.11069/);
     assert.match(card.description, /이 앱을 업데이트해도 연결된 데몬은 업데이트되지 않습니다/);
     assert.match(card.description, /실행 중인 작업이 중지될 수 있습니다/);
-    assert.deepEqual(state.calls, [['paseodog-provider', 'daemon-release', {}]]);
+    assert.deepEqual(state.calls, [
+        ['paseodog-provider', 'daemon-release', {}],
+        ['paseodog-provider', 'daemon-update', { action: 'status' }],
+    ]);
     assert.deepEqual(state.fetchURLs, ['https://api.github.com/repos/moveju112/paseodog/releases/latest']);
     assert.equal(card.actions.length, 1);
     card.actions[0].onPress();
     assert.deepEqual(state.opened, ['https://github.com/moveju112/paseodog/releases/latest']);
-    assert.equal(state.calls.length, 1); // 안내를 열어도 원격 변경 RPC는 보내지 않는다.
+    assert.equal(state.calls.length, 2); // 안내를 열어도 원격 변경 RPC는 보내지 않는다.
+});
+
+test('prepared host requires a separate confirmation and sends only the pinned version', async t => {
+    const state = await fixture(t, { updateStatus: { available: true, versionCode: 11069, request: null } });
+    const card = () => state.cards.get('paseodog-daemon-update:linux');
+    assert.equal(card().actions[0].label, '데몬 업데이트');
+    await act(async () => card().actions[0].onPress());
+    assert.match(card().description, /업데이트할까요/);
+    assert.equal(state.calls.filter(call => call[2].action === 'request').length, 0);
+    await act(async () => card().actions.find(action => action.label === '취소').onPress());
+    assert.equal(card().actions[0].label, '데몬 업데이트');
+    await act(async () => card().actions[0].onPress());
+    await act(async () => {
+        const confirm = card().actions[0].onPress;
+        confirm();
+        confirm();
+    });
+    assert.deepEqual(state.calls.filter(call => call[2].action === 'request'), [
+        ['paseodog-provider', 'daemon-update', { action: 'request', versionCode: 11069, confirmed: true }],
+    ]);
+    assert.match(card().description, /접수됨/);
+    assert.equal(card().actions.length, 1);
+});
+
+for (const updateStatus of [new Error('Unknown plugin RPC'), { available: false, reason: '설정 필요', request: null },
+    { available: true, versionCode: 11070, request: null }]) {
+    test('unsupported, unprepared or differently pinned host never offers mutation', async t => {
+        const state = await fixture(t, { updateStatus });
+        assert.deepEqual(state.cards.get('paseodog-daemon-update:linux').actions.map(action => action.label), ['업데이트 안내']);
+    });
+}
+
+test('request error is visible, not retried automatically, and reconnect reloads the receipt', async t => {
+    const state = await fixture(t, {
+        updateStatus: { available: true, versionCode: 11069, request: null },
+        requestError: new Error('connection lost'),
+    });
+    const card = () => state.cards.get('paseodog-daemon-update:linux');
+    await act(async () => card().actions[0].onPress());
+    await act(async () => card().actions[0].onPress());
+    assert.match(card().description, /자동 재시도하지 않으며/);
+    state.setStatus({ available: true, versionCode: 11069,
+        request: { phase: 'waiting', versionCode: 11069, message: '작업 종료 대기' } });
+    await state.disconnect();
+    await state.reconnect();
+    assert.match(card().description, /작업 종료 대기/);
+    assert.equal(state.calls.filter(call => call[2].action === 'request').length, 1);
+});
+
+test('a completed older request does not block a newly prepared version', async t => {
+    const state = await fixture(t, { updateStatus: { available: true, versionCode: 11069,
+        request: { phase: 'complete', versionCode: 11068, message: '완료' } } });
+    assert.equal(state.cards.get('paseodog-daemon-update:linux').actions[0].label, '데몬 업데이트');
+});
+
+test('persisted update progress remains visible when public release lookup is unavailable', async t => {
+    const state = await fixture(t, { fetchError: new Error('offline'),
+        updateStatus: { available: true, versionCode: 11069,
+            request: { phase: 'rolling-back', versionCode: 11069, message: '이전 버전 복구 중' } } });
+    assert.match(state.cards.get('paseodog-daemon-update:linux').description, /이전 버전 복구 중/);
+});
+
+test('a stale confirmation callback cannot request an update after disconnect', async t => {
+    const state = await fixture(t, { updateStatus: { available: true, versionCode: 11069, request: null } });
+    const card = () => state.cards.get('paseodog-daemon-update:linux');
+    await act(async () => card().actions[0].onPress());
+    const confirm = card().actions[0].onPress;
+    await state.disconnect();
+    await act(async () => confirm());
+    assert.equal(state.calls.filter(call => call[2].action === 'request').length, 0);
+});
+
+test('update RPC requires explicit confirmation and rejects commands, URLs and extra fields', () => {
+    assert.deepEqual(daemonUpdate.input.parse({ action: 'status' }), { action: 'status' });
+    for (const input of [{ action: 'request', versionCode: 11069 },
+        { action: 'request', versionCode: 11069, confirmed: false },
+        { action: 'request', versionCode: Number.MAX_SAFE_INTEGER + 1, confirmed: true },
+        { action: 'request', versionCode: 11069, confirmed: true, command: '/bin/sh' },
+        { action: 'status', url: 'https://example.invalid' }])
+        assert.throws(() => daemonUpdate.input.parse(input));
 });
 
 for (const versionCode of [11069, 11070]) {
