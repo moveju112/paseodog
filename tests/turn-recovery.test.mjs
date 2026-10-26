@@ -69,3 +69,28 @@ test('auto-resume can be disabled and requires the dedicated state paths', () =>
         scheduleTurnRecovery({ env, delayMs: 0, run })();
     assert.equal(runs, 0);
 });
+
+// 복구 중 어떤 예외도 프로바이더 플러그인 프로세스를 종료시키지 않는다(번들 eval 환경 포함).
+test('scheduled recovery never throws out of its timer and needs no module URL', async (t) => {
+    const { state, paseo } = await fixture(t);
+    const source = await readFile(new URL('../plugin/server/turn-recovery.mjs', import.meta.url), 'utf8');
+    // 주석이 아닌 실제 코드에서 모듈 URL을 쓰지 않는다.
+    assert.doesNotMatch(source.replace(/\/\/.*$/gm, ''), /import\.meta/);
+    const cli = join(state, 'paseodog');
+    await writeFile(cli, '#!/bin/sh\n');
+    const env = { PASEODOG_STATE_DIR: state, PASEO_HOME: paseo };
+    let calls = 0;
+    const crashes = [];
+    const onCrash = (error) => crashes.push(error);
+    process.on('uncaughtException', onCrash);
+    t.after(() => process.off('uncaughtException', onCrash));
+    scheduleTurnRecovery({ env, delayMs: 0, cli, platform: 'linux', run: () => { calls++; throw new Error('sync'); } });
+    scheduleTurnRecovery({ env, delayMs: 0, cli, platform: 'linux', run: async () => { calls++; throw new Error('async'); } });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(calls, 2);
+    assert.deepEqual(crashes, []);
+    scheduleTurnRecovery({ env, delayMs: 0, cli: join(state, 'missing'), platform: 'linux', run: () => { calls++; } });
+    scheduleTurnRecovery({ env, delayMs: 0, cli, platform: 'win32', run: () => { calls++; } });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(calls, 2);
+});

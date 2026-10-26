@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 import { lockOwnerAlive } from './journal.mjs';
 import { safeKey } from './util.mjs';
 
@@ -50,9 +50,14 @@ export function agentsBySession(paseoHome) {
     return agents;
 }
 
+// 플러그인 서버는 번들로 eval되므로 import.meta.url로 경로를 만들 수 없다. 설치된 전용 실행기를 쓴다.
+export function defaultCli(home = homedir()) {
+    return join(home, '.local', 'bin', 'paseodog');
+}
+
 function sendContinue(cli, agentId) {
     return new Promise((resolve, reject) => {
-        execFile(process.execPath, [cli, 'agent', 'send', '--no-wait', '--prompt', CONTINUE_PROMPT, agentId],
+        execFile(cli, ['agent', 'send', '--no-wait', '--prompt', CONTINUE_PROMPT, agentId],
             { timeout: 120000, maxBuffer: 1024 * 1024 }, (error) => error ? reject(error) : resolve());
     });
 }
@@ -86,12 +91,16 @@ export async function resumeInterruptedTurns({ stateRoot, paseoHome, cli, send =
 }
 
 // 데몬이 준비된 뒤 한 번 실행한다. PASEODOG_AUTO_RESUME=false로 끈다.
-export function scheduleTurnRecovery({ env = process.env, delayMs = 20000, run = resumeInterruptedTurns } = {}) {
-    if (env.PASEODOG_AUTO_RESUME === 'false' || !env.PASEODOG_STATE_DIR || !env.PASEO_HOME) return () => {};
+export function scheduleTurnRecovery({ env = process.env, delayMs = 20000, run = resumeInterruptedTurns,
+    cli = defaultCli(), platform = process.platform } = {}) {
+    if (env.PASEODOG_AUTO_RESUME === 'false' || !env.PASEODOG_STATE_DIR || !env.PASEO_HOME
+        || platform === 'win32' || !existsSync(cli)) return () => {};
     const timer = setTimeout(() => {
-        void run({ stateRoot: env.PASEODOG_STATE_DIR, paseoHome: env.PASEO_HOME,
-            cli: fileURLToPath(new URL('../../bin/paseodog.mjs', import.meta.url)) })
-            .catch(() => console.error('[paseodog] auto-resume scan failed'));
+        // 복구 실패가 플러그인(프로바이더) 프로세스를 종료시키면 안 된다.
+        try {
+            Promise.resolve(run({ stateRoot: env.PASEODOG_STATE_DIR, paseoHome: env.PASEO_HOME, cli }))
+                .catch(() => console.error('[paseodog] auto-resume scan failed'));
+        } catch { console.error('[paseodog] auto-resume scan failed'); }
     }, delayMs);
     timer.unref?.();
     return () => clearTimeout(timer);
