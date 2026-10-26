@@ -19,6 +19,7 @@ import { useAiEngineSettings } from "./use-ai-engine-settings";
 import { EngineAccounts } from "./engine-accounts";
 import { AgentMessageSettings } from "./agent-message-settings";
 import { TurnDurationSettings } from "./turn-duration-settings";
+import { isBasicAgent } from "./basic-agent-roles";
 
 // 호스트 설정 목록의 개별 항목과 1:1로 대응하는 엔진 설정 구역
 export type EngineSection =
@@ -475,7 +476,7 @@ function ToolsSection({ snapshot, disabled, request }: SectionProps) {
           <Switch
             accessibilityLabel="웹 검색 도구"
             disabled={disabled}
-            value={toolModules?.webSearch ?? true}
+            value={toolModules?.webSearch ?? false}
             onValueChange={toggleWebSearch}
           />
         </SettingRow>
@@ -1013,7 +1014,7 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
     const ws = snapshot.webSearchRoute;
     const provider = ws?.effectiveProvider || ws?.provider || snapshot.route.provider;
     const model = ws?.effectiveModel || ws?.model || snapshot.route.model;
-    setWsEnabled(snapshot.toolModules?.webSearch ?? true);
+    setWsEnabled(snapshot.toolModules?.webSearch ?? false);
     setWsModelValue(ws?.inherited ? "" : `${provider}/${model}`);
     setWsEffortValue(ws?.effectiveEffort || ws?.effort || "medium");
     setWebSearchModalOpen(true);
@@ -1255,8 +1256,8 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
     if (await request({ action: "agentDelete", agent: editingAgentId })) closeAgentModal();
   }, [closeAgentModal, editingAgentId, request]);
 
-  const maintainerAgent = snapshot.agents.find((item) => item.id === "maintainer");
-  const subAgents = snapshot.agents.filter((item) => item.id !== "maintainer");
+  const basicAgents = snapshot.agents.filter(isBasicAgent);
+  const subAgents = snapshot.agents.filter((item) => !isBasicAgent(item));
   const editingAgentTarget = snapshot.agents.find((item) => item.id === editingAgentId);
 
   const modelOptions = useMemo(
@@ -1342,7 +1343,7 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
     [agentEnabled, agentModalMode, disabled, handleToggleAgentEnabled],
   );
 
-  const wsActive = snapshot.toolModules?.webSearch ?? true;
+  const wsActive = snapshot.toolModules?.webSearch ?? false;
   const changeOutputStyle = useCallback(
     (outputStyle: string) => {
       void request({ action: "preferences", outputStyle });
@@ -1408,10 +1409,11 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
           </View>
         </SettingsSection>
 
-        {/* 2. 기본 에이전트 (Web Search + Maintainer) */}
+        {/* 2. 역할별 기본 에이전트 */}
         <SettingsSection title="기본 에이전트">
           <Text style={settingsStyles.rowHint}>
-            웹 검색과 설정 유지를 담당하는 기본 에이전트입니다.
+            기본값은 모두 off이며 역할마다 모델을 따로 선택해 켤 수 있어요. 필요한 조건에서만
+            호출하며, 탐색·실패 분석·인계·검토는 메인이 필요할 때 위임해요.
           </Text>
           <View style={settingsStyles.card}>
             <Pressable
@@ -1444,14 +1446,15 @@ function WorkflowSection({ snapshot, disabled, busy, request }: SectionProps) {
                 </Text>
               </View>
             </Pressable>
-            {maintainerAgent && (
+            {basicAgents.map((agent) => (
               <AgentListRow
-                agent={maintainerAgent}
+                key={agent.id}
+                agent={agent}
                 models={snapshot.models}
                 disabled={disabled}
                 onPress={openEditAgentModal}
               />
-            )}
+            ))}
           </View>
         </SettingsSection>
 

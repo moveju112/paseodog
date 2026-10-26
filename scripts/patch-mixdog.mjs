@@ -1,10 +1,12 @@
-import { readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EFFORT_USAGE_PATCHES } from '../patches/effort-usage.mjs';
 import { DEFAULT_OUTPUT_STYLE_PATCHES } from '../patches/default-output-style.mjs';
 import { COMPACTION_SUMMARY_ROUTE_PATCH } from '../patches/compaction-summary-route.mjs';
+import { SESSION_TITLE_ROUTE_PATCH } from '../patches/session-title-route.mjs';
+import { BUILTIN_AGENT_FILES, BUILTIN_AGENT_PATCHES } from '../patches/builtin-agents.mjs';
 import { AGENT_ROUTE_SAFETY_EDITS, AGENT_EDITOR_SAFETY_PATCHES } from '../patches/agent-editor-safety.mjs';
 export const PIN = '1.3.5';
 export const ORIGINAL_BLOB = '3adfd3eeb9f354198de89d6651647d8f9afc6321';
@@ -14,6 +16,8 @@ export const MARKER = 'PaseoDog host-policy boundary v1';
 export const AGENT_PATCHES = [
     ...AGENT_EDITOR_SAFETY_PATCHES,
     COMPACTION_SUMMARY_ROUTE_PATCH,
+    SESSION_TITLE_ROUTE_PATCH,
+    ...BUILTIN_AGENT_PATCHES,
     ...EFFORT_USAGE_PATCHES,
     ...DEFAULT_OUTPUT_STYLE_PATCHES,
     {
@@ -432,7 +436,7 @@ export function patchedSource(text, expectedBlob = ORIGINAL_BLOB) {
 export function patch(root, { check = false } = {}) {
     // 같은 파일을 여러 spec으로 쓰면 앞 패치가 유실되므로 읽기·쓰기 전에 차단한다.
     const files = new Set(['src/session-runtime/turn/turn-run.mjs']);
-    for (const { file } of AGENT_PATCHES) {
+    for (const { file } of [...AGENT_PATCHES, ...BUILTIN_AGENT_FILES]) {
         if (files.has(file)) throw new Error(`Duplicate Mixdog patch target: ${file}`);
         files.add(file);
     }
@@ -447,10 +451,20 @@ export function patch(root, { check = false } = {}) {
         const before = readFileSync(path, 'utf8');
         return { path, before, after: transform(before) };
     });
+    // 추가 파일도 고정 버전 안에서 부재 또는 정확한 배포 내용만 허용하고 사용자 파일은 덮어쓰지 않는다.
+    for (const { file, content } of BUILTIN_AGENT_FILES) {
+        const path = resolve(root, file);
+        let before = null;
+        try { before = readFileSync(path, 'utf8'); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+        if (before !== null && before !== content) throw new Error(`Mixdog added source drift: ${file}`);
+        changes.push({ path, before, after: content });
+    }
     if (check && changes.some(({ before, after }) => before !== after))
         throw new Error('Required host-policy patch is missing; run npm --prefix engine run patch');
     for (const { path, before, after } of changes) {
         if (!check && before !== after) {
+            mkdirSync(dirname(path), { recursive: true });
             const temp = path + '.paseodog-tmp';
             writeFileSync(temp, after); renameSync(temp, path);
         }

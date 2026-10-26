@@ -2,6 +2,7 @@
 export const COMPACTION_SUMMARY_ROUTE_PATCH = {
     file: 'src/runtime/agent/orchestrator/session/loop/fresh-context.mjs',
     blob: '06f24d49b71be3140742811fa83a734948ede005',
+    previousEditCount: 1,
     edits: [[
         '  const mode = normalizeCompactionSummaryMode(config.compaction);',
         `  // PaseoDog: summaryModel은 summaryMode와 다른 명시적 모델 선택이다.
@@ -27,5 +28,25 @@ export const COMPACTION_SUMMARY_ROUTE_PATCH = {
     return { mode: 'explicit', warm: compactionCacheWarm(sessionId, now), steps: [explicit] };
   }
   const mode = normalizeCompactionSummaryMode(config.compaction);`,
+    ], [
+        '  const input = { sessionRef, provider, model, config, signal, getProviderFn, initProvidersFn };',
+        `  const input = { sessionRef, provider, model, config, signal, getProviderFn, initProvidersFn };
+  // PaseoDog: 전용 압축 에이전트가 켜져 있고 모델을 선택했을 때만 이 경로를 쓴다.
+  const compressor = resolveMaintenanceRoute({ agent: 'context-compressor', config, includeDefault: false });
+  if (compressor) {
+    const independent = async () => {
+      await initProvidersFn(config.providers || {}, { signal });
+      signal?.throwIfAborted();
+      return summaryRoute({
+        sessionRef,
+        provider: getProviderFn(compressor.provider),
+        providerName: compressor.provider,
+        model: compressor.model,
+        fast: compressor.fast,
+        source: 'context-compressor',
+      });
+    };
+    return { mode: 'explicit', warm: compactionCacheWarm(sessionId, now), steps: [independent] };
+  }`,
     ]],
 };
