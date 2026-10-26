@@ -110,14 +110,27 @@ export function createTerminalTextInputState(): TerminalTextInputState {
   // would delete whatever is actually sitting there rather than the character
   // the buffer thinks it is replacing. Stay off until the input state resets.
   let replacementDesynced = false;
+  // PASEODOG_ANDROID_TERMINAL_FIX_V1: reconcile Android IMEs that deliver onChangeText
+  // before onKeyPress. Each edit is emitted exactly once, regardless
+  // of which callback arrives first. Do not log typed credentials.
+  let textFirstPrintable: string | null = null;
+  let textFirstBackspaces = 0;
 
   return {
     receiveKeyPress(key: string): TerminalTextInputChange {
       const terminalKey = resolveNativeTerminalKey(key);
       if (terminalKey) {
+        textFirstPrintable = null;
+        textFirstBackspaces = 0;
         return { data: "", key: terminalKey, shouldClear: false };
       }
       if (key === "Backspace") {
+        textFirstPrintable = null;
+        if (textFirstBackspaces > 0) {
+          // The preceding onChangeText already forwarded this deletion.
+          textFirstBackspaces -= 1;
+          return { data: "", shouldClear: false };
+        }
         previousText = Array.from(previousText).slice(0, -1).join("");
         if (replacementDesynced) {
           return { data: "", shouldClear: false };
@@ -129,9 +142,19 @@ export function createTerminalTextInputState(): TerminalTextInputState {
         return { data: "\r", shouldClear: true };
       }
       if (isPrintableKey(key)) {
+        if (textFirstPrintable === key) {
+          // Samsung Keyboard can report the committed character via
+          // onChangeText first. Never send it again via onKeyPress.
+          textFirstPrintable = null;
+          return { data: "", shouldClear: false };
+        }
+        textFirstPrintable = null;
+        textFirstBackspaces = 0;
         previousText += key;
         return { data: key, shouldClear: false };
       }
+      textFirstPrintable = null;
+      textFirstBackspaces = 0;
       return { data: "", shouldClear: false };
     },
     receiveTextChange(text: string): TerminalTextInputChange {
@@ -146,17 +169,37 @@ export function createTerminalTextInputState(): TerminalTextInputState {
       }
 
       if (text.length === 0) {
+        const removed = Array.from(previousText).length;
         previousText = "";
+        textFirstPrintable = null;
+        if (removed && !replacementDesynced) {
+          textFirstBackspaces = removed;
+          return { data: "\x7f".repeat(removed), shouldClear: false };
+        }
+        textFirstBackspaces = 0;
         return { data: "", shouldClear: false };
       }
 
       if (text.includes("\n") || text.includes("\r")) {
         previousText = "";
         replacementDesynced = false;
+        textFirstPrintable = null;
+        textFirstBackspaces = 0;
         return { data: "", shouldClear: true };
       }
 
       if (!text.startsWith(previousText)) {
+        if (!replacementDesynced && previousText.startsWith(text)) {
+          // A trailing deletion can precede the native Backspace event.
+          // Code-point lengths avoid double-rubout of surrogate pairs.
+          const removed = Array.from(previousText.slice(text.length)).length;
+          previousText = text;
+          textFirstPrintable = null;
+          textFirstBackspaces = removed;
+          return { data: "\x7f".repeat(removed), shouldClear: false };
+        }
+        textFirstPrintable = null;
+        textFirstBackspaces = 0;
         let compositionEdit = "";
         if (!replacementDesynced) {
           compositionEdit = resolveCompositionEdit(previousText, text);
@@ -170,6 +213,10 @@ export function createTerminalTextInputState(): TerminalTextInputState {
 
       const appendedText = text.slice(previousText.length);
       previousText = text;
+      // Only suppress ONE late matching ASCII keypress. Normal key-first
+      // keyboards still get their immediate key fallback without duplication.
+      textFirstPrintable = isPrintableKey(appendedText) ? appendedText : null;
+      textFirstBackspaces = 0;
       return {
         data: appendedText,
         shouldClear: false,
@@ -178,6 +225,8 @@ export function createTerminalTextInputState(): TerminalTextInputState {
     reset(): void {
       previousText = "";
       replacementDesynced = false;
+      textFirstPrintable = null;
+      textFirstBackspaces = 0;
     },
   };
 }

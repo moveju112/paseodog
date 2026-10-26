@@ -13,6 +13,20 @@ describe("native terminal typed input", () => {
     return change.data;
   }
 
+  it("sends each character once when the keyboard reports text before the keypress", () => {
+    const input = createTerminalTextInputState();
+    const sent = [
+      input.receiveTextChange("d"),
+      input.receiveKeyPress("d"),
+      input.receiveTextChange("df"),
+      input.receiveKeyPress("f"),
+    ]
+      .map(inputData)
+      .join("");
+
+    expect(sent).toEqual("df");
+  });
+
   it("dispatches appended text once and ignores reset clears", () => {
     const input = createTerminalTextInputState();
 
