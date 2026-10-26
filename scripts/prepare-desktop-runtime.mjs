@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { chmod, copyFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -18,6 +18,28 @@ export const runtimeFiles = [
     'patches/agent-editor-safety.mjs',
     'android/packages/server/src/server/agent/agent-message-policy.ts',
 ];
+
+// 소스 checkout의 private umask가 root 소유 설치본의 읽기 권한을 제한하지 않게 한다.
+async function makeRuntimeReadable(path) {
+    const info = await lstat(path);
+    if (info.isDirectory()) {
+        await chmod(path, 0o755);
+        for (const entry of await readdir(path)) await makeRuntimeReadable(join(path, entry));
+    } else if (info.isFile()) {
+        await chmod(path, info.mode & 0o111 ? 0o755 : 0o644);
+    } else {
+        throw new Error('Runtime source must contain only regular files and directories');
+    }
+}
+
+export async function copyRuntimeSources(source, output) {
+    for (const name of runtimeFiles) {
+        const destination = join(output, name);
+        await mkdir(dirname(destination), { recursive: true });
+        await cp(join(source, name), destination, { recursive: true, errorOnExist: true, force: false });
+    }
+    await makeRuntimeReadable(output);
+}
 
 // 잠금 파일의 해시로 Windows 데스크톱 네이티브 패키지를 검증해 산출물에만 설치한다.
 async function prepareWindowsDesktopDependencies(resources) {
@@ -50,11 +72,7 @@ async function prepareWindowsDesktopDependencies(resources) {
 export async function prepareDesktopRuntime({ output, platform, arch }) {
     if (!['linux', 'win32'].includes(platform) || arch !== 'x64')
         throw new Error(`Unsupported PaseoDog desktop runtime: ${platform}-${arch}`);
-    await measureBuildStep(`${platform}:source-copy`, async () => { for (const name of runtimeFiles) {
-        const destination = join(output, name);
-        await mkdir(dirname(destination), { recursive: true });
-        await cp(join(root, name), destination, { recursive: true, errorOnExist: true, force: false });
-    } });
+    await measureBuildStep(`${platform}:source-copy`, () => copyRuntimeSources(root, output));
     // 대상별 선택 의존성을 설치하되 호스트용 postinstall은 실행하지 않는다.
     await measureBuildStep(`${platform}:npm-ci`, async () => {
         const result = spawnSync('npm', ['ci', '--ignore-scripts', '--install-strategy=nested',

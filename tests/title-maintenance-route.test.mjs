@@ -13,6 +13,9 @@ import { SESSION_TITLE_ROUTE_PATCH } from '../patches/session-title-route.mjs';
 import { BUILTIN_AGENTS, BUILTIN_AGENT_FILES } from '../patches/builtin-agents.mjs';
 import { withEffectiveDisabledAgents } from '../engine/node_modules/mixdog/src/runtime/shared/agent-route-config.mjs';
 import { builtinFeatureActive } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/runtime-core/builtin-features.mjs';
+import { stripAgentSectionDefaults } from '../engine/node_modules/mixdog/src/runtime/shared/defaults-separation.mjs';
+import { setModuleEnabledInConfig } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/runtime-core/config-helpers.mjs';
+import { canonicalizeModulesStorage } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/config-storage.mjs';
 import { compactionSummaryPlan } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/session/loop/fresh-context.mjs';
 import { BASIC_AGENTS_WEB_EDITS, AGENTS_SETTINGS_BEFORE, withAgentsSettings, withoutAgentsSettings } from '../patches/paseo-agents-settings.mjs';
 
@@ -171,6 +174,22 @@ test('enabled compressor selects its own single route and failure never tries th
     const baseline = compactionSummaryPlan(input);
     assert.equal(baseline.mode, 'self');
     assert.equal((await baseline.steps[0]()).model, 'gpt-6.1-sol');
+});
+
+test('web search keeps explicit enable across saves, reloads and unrelated settings changes', () => {
+    let config = { modules: { tidy: { enabled: false }, git: { enabled: true } } };
+    assert.equal(builtinFeatureActive(config, 'webSearch'), false);
+    for (const enabled of [true, true, false, true, false]) {
+        config = setModuleEnabledInConfig(config, 'webSearch', enabled);
+        for (let save = 0; save < 3; save++) {
+            const saved = JSON.parse(JSON.stringify(stripAgentSectionDefaults({ ...config, outputStyle: 'default' })));
+            assert.equal(saved.modules?.webSearch?.enabled, enabled ? true : undefined);
+            assert.deepEqual(saved.modules.tidy, { enabled: false });
+            assert.equal(saved.modules.git, undefined);
+            config = { ...saved, modules: canonicalizeModulesStorage(saved.modules) || {} };
+            assert.equal(builtinFeatureActive(config, 'webSearch'), enabled);
+        }
+    }
 });
 
 test('web basic-agent grouping matches the app and round-trips with drift and partial-patch rejection', () => {

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { configure } from '../scripts/configure.mjs';
-import { prepareDesktopRuntime, runtimeFiles } from '../scripts/prepare-desktop-runtime.mjs';
+import { copyRuntimeSources, prepareDesktopRuntime, runtimeFiles } from '../scripts/prepare-desktop-runtime.mjs';
 import { engineEnvironment } from '../plugin/server/util.mjs';
 
 const require = createRequire(import.meta.url);
@@ -38,6 +38,34 @@ test('desktop config uses its dedicated listener, Electron Node mode and absolut
 
 test('runtime packager rejects unsupported targets before writing files', async () => {
     await assert.rejects(prepareDesktopRuntime({ platform: 'win32', arch: 'arm64' }), /Unsupported/);
+});
+
+test('runtime packaging preserves source bytes but makes private sources readable after root installation', async t => {
+    const root = mkdtempSync('/data/tmp/ubuntu/paseodog-runtime-modes-');
+    t.after(() => rmSync(root, { recursive: true }));
+    const source = join(root, 'source'), output = join(root, 'output');
+    const directories = ['engine/bin', 'engine/src', 'plugin/server', 'plugin/client', 'plugin/shared'];
+    for (const name of runtimeFiles) {
+        const path = join(source, name);
+        mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+        if (directories.includes(name)) {
+            mkdirSync(path, { mode: 0o700 });
+            writeFileSync(join(path, name === 'engine/bin' ? 'engine.mjs' : 'release.json'), name,
+                { mode: name === 'engine/bin' ? 0o700 : 0o600 });
+        } else {
+            writeFileSync(path, name, { mode: 0o600 });
+        }
+    }
+    await copyRuntimeSources(source, output);
+    for (const name of runtimeFiles.filter(name => name !== 'engine/bin')) {
+        const file = directories.includes(name) ? join(name, 'release.json') : name;
+        assert.equal(readFileSync(join(output, file), 'utf8'), name);
+        assert.equal(statSync(join(output, file)).mode & 0o777, 0o644);
+        assert.equal(statSync(join(source, file)).mode & 0o777, 0o600);
+    }
+    assert.equal(statSync(join(output, 'engine/bin/engine.mjs')).mode & 0o777, 0o755);
+    for (const name of ['', 'engine', 'engine/bin', 'plugin', 'plugin/shared'])
+        assert.equal(statSync(join(output, name)).mode & 0o777, 0o755);
 });
 
 test('packaged patch entry point imports with only the declared runtime scripts and patches', async (t) => {
