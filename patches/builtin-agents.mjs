@@ -67,6 +67,14 @@ export const BUILTIN_AGENT_PATCHES = [
         ]],
     },
     {
+        file: 'src/runtime/shared/defaults-separation.mjs',
+        blob: '189eeace45e19613ae4a660eb037e07987b32542',
+        edits: [[
+            '      const kept = withoutDefaults(entry, MODULE_DEFAULTS);',
+            "      const kept = withoutDefaults(entry, name === 'webSearch' ? { enabled: false } : MODULE_DEFAULTS);",
+        ]],
+    },
+    {
         file: 'src/agents/maintainer/AGENT.md',
         blob: '91dc0f01ee55f56cec05eee1d13d9eb7a2693e28',
         edits: [[

@@ -141,6 +141,49 @@ test('explicit desktop reconciliation preserves the failed receipt and rejects u
     assert.ok(calls.every(row => !row.includes('SIGKILL') && !row.includes('--retry-stage')));
 });
 
+test('interrupted reload reconciliation verifies actual versions and readiness without replaying or rewriting its receipt', async t => {
+    const profile = await fixture(t), commit = 'e'.repeat(40);
+    await mkdir(profile.previousWorkspace);
+    const pluginPath = join(profile.cacheRoot, 'plugin');
+    await mkdir(join(pluginPath, 'shared'), { recursive: true });
+    await writeFile(join(pluginPath, 'shared/release.json'), JSON.stringify({ version: '1.0.0-rc.7', versionCode: 91 }));
+    const statePath = join(profile.previousWorkspace, 'release-state.json');
+    const original = JSON.stringify({ identity: { commit: 'f'.repeat(40),
+        config: { version: '1.0.0-rc.7.91', versionCode: '91' } },
+        stages: { 'plugin-reload': { status: 'running', mutation: true } } });
+    await writeFile(statePath, original);
+    const calls = [];
+    let installed = '1.0.0~rc.7.90', ready = false;
+    const run = async (command, args) => {
+        calls.push([command, ...args]);
+        if (command === 'git') {
+            if (args[0] === 'rev-parse') return '/repo/common';
+            if (args[0] === 'ls-remote') return commit;
+        }
+        if (command === 'dpkg-query') return installed;
+        if (args.includes('daemon')) return `home: ${paseoHome}\ndesktopManaged: false\n`;
+        if (args.includes('plugin')) return JSON.stringify([
+            { id: 'paseodog-provider', enabled: true, status: 'running', path: pluginPath },
+        ]);
+        if (args.includes('diagnostic')) return JSON.stringify({ diagnostic: ready ? 'Provider is available\nReady' : 'Unavailable' });
+        return '';
+    };
+    await assert.rejects(prepareRelease(profile, commit, { run, adopt: true }), /uncertain mutation/);
+    const options = { run, adopt: true, reconcilePluginReload: true };
+    await assert.rejects(prepareRelease(profile, commit, options), /versions differ/);
+    installed = '1.0.0~rc.7.91';
+    await assert.rejects(prepareRelease(profile, commit, options), /readiness/);
+    ready = true;
+    const result = await prepareRelease(profile, commit, options);
+    t.after(() => rm(result.workspace, { recursive: true }));
+    assert.equal(await readFile(statePath, 'utf8'), original);
+    const receipt = JSON.parse(await readFile(join(result.workspace, 'plugin-reload-reconciliation.json'), 'utf8'));
+    assert.equal(receipt.stage, 'plugin-reload');
+    assert.equal(receipt.outcome, 'provider-ready-after-interrupted-reload');
+    assert.equal(receipt.versionCode, 91);
+    assert.ok(calls.every(row => !row.includes('reload') && !row.includes('--retry-stage')));
+});
+
 test('preflight rejects the wrong signing reference before a command or expensive check', async t => {
     const profile = await fixture(t);
     const signingInit = join(profile.cacheRoot, 'init.gradle');
