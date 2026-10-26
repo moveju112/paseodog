@@ -185,6 +185,46 @@ test('interrupted reload reconciliation verifies actual versions and readiness w
     assert.ok(calls.every(row => !row.includes('reload') && !row.includes('--retry-stage')));
 });
 
+// 데몬 업데이트 단계가 불확실하게 끝나면 업데이터를 다시 실행하지 않고 적용 리비전과 준비 상태만 확인해 기록한다.
+test('runtime-update reconciliation observes the applied daemon revision and readiness without rerunning the updater', async t => {
+    const profile = await fixture(t), commit = 'e'.repeat(40), delivered = 'f'.repeat(40);
+    await mkdir(profile.previousWorkspace);
+    const updaterRoot = join(profile.cacheRoot, 'updater');
+    await mkdir(updaterRoot);
+    const statePath = join(profile.previousWorkspace, 'release-state.json');
+    const original = JSON.stringify({ identity: { commit: delivered, config: { updaterRoot } },
+        stages: { 'runtime-update': { status: 'failed', mutation: true } } });
+    await writeFile(statePath, original);
+    let ancestor = false, ready = false;
+    const calls = [];
+    const run = async (command, args) => {
+        calls.push([command, ...args]);
+        if (command === 'git') {
+            if (args[0] === 'rev-parse') return '/repo/common';
+            if (args[0] === 'ls-remote') return commit;
+            if (args[0] === 'merge-base') { if (!ancestor) throw new Error('not ancestor'); return ''; }
+        }
+        if (args.includes('diagnostic')) return JSON.stringify({ diagnostic: ready ? 'Provider is available\nReady' : 'Unavailable' });
+        return '';
+    };
+    const options = { run, adopt: true, reconcileRuntimeUpdate: true };
+    await assert.rejects(prepareRelease(profile, commit, { run, adopt: true }), /uncertain mutation/);
+    await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ revision: delivered, phase: 'preparing' }));
+    await assert.rejects(prepareRelease(profile, commit, options), /has not applied/);
+    await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ revision: commit, phase: 'applied' }));
+    await assert.rejects(prepareRelease(profile, commit, options), /not ancestor/);
+    ancestor = true;
+    await assert.rejects(prepareRelease(profile, commit, options), /readiness/);
+    ready = true;
+    const result = await prepareRelease(profile, commit, options);
+    t.after(() => rm(result.workspace, { recursive: true, force: true }));
+    assert.equal(await readFile(statePath, 'utf8'), original);
+    const receipt = JSON.parse(await readFile(join(result.workspace, 'runtime-update-reconciliation.json'), 'utf8'));
+    assert.equal(receipt.outcome, 'daemon-applied-revision-contains-delivery');
+    assert.equal(receipt.appliedRevision, commit);
+    assert.ok(calls.every(row => !(row[0] === 'systemctl' && row.includes('start')) && !row.includes('--retry-stage')));
+});
+
 test('preflight rejects the wrong signing reference before a command or expensive check', async t => {
     const profile = await fixture(t);
     const signingInit = join(profile.cacheRoot, 'init.gradle');

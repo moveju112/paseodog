@@ -12,7 +12,7 @@ import { deliveryPlan, describePlan, validateTargets } from './release-targets.m
 
 // 준비된 전용 worktree만 전진시킨다. 의존성/Gradle/Metro 복사나 사용자 트리 정리는 하지 않는다.
 export async function prepareRelease(profile, commit, { run = runCommand, adopt = false, start = false, nextVersion = false,
-    reconcileDesktopExit = false, reconcilePluginReload = false, targets = profile.targets } = {}) {
+    reconcileDesktopExit = false, reconcilePluginReload = false, reconcileRuntimeUpdate = false, targets = profile.targets } = {}) {
     const requestStartedAt = new Date().toISOString();
     if (nextVersion && !start) throw new Error('--next-version requires --start');
     if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('An exact pushed commit is required');
@@ -52,7 +52,25 @@ export async function prepareRelease(profile, commit, { run = runCommand, adopt 
             const uncertain = Object.entries(delivery?.stages || {})
                 .filter(([, stage]) => stage.mutation && stage.status !== 'complete');
             if (uncertain.length) {
-                if (reconcilePluginReload && uncertain.length === 1 && uncertain[0][0] === 'plugin-reload'
+                if (reconcileRuntimeUpdate && uncertain.length === 1 && uncertain[0][0] === 'runtime-update'
+                    && ['running', 'failed'].includes(uncertain[0][1].status)) {
+                    // 업데이터를 다시 실행하지 않는다. 실제 적용 리비전과 프로바이더 준비 상태만 관찰해 기록한다.
+                    const updaterRoot = delivery.identity?.config?.updaterRoot;
+                    if (!isAbsolute(updaterRoot || '')) throw new Error('Previous delivery has no daemon updater');
+                    const receipt = JSON.parse(await readFile(join(updaterRoot, 'receipt.json'), 'utf8'));
+                    if (receipt.phase !== 'applied' || !/^[0-9a-f]{40}$/.test(receipt.revision || ''))
+                        throw new Error('Daemon updater has not applied a revision');
+                    await capture(['merge-base', '--is-ancestor', delivery.identity.commit, receipt.revision]);
+                    const wrapper = join(source, 'bin/paseodog.mjs');
+                    const diagnostic = JSON.parse(await run(process.execPath,
+                        [wrapper, 'provider', 'diagnostic', 'paseodog', '--json'], { capture: true }));
+                    if (!diagnostic.diagnostic?.startsWith('Provider is available'))
+                        throw new Error('Daemon provider readiness is not confirmed');
+                    reconciliationFile = 'runtime-update-reconciliation.json';
+                    reconciliation = { previousWorkspace: previous.workspace, previousCommit: delivery.identity.commit,
+                        stage: 'runtime-update', outcome: 'daemon-applied-revision-contains-delivery',
+                        appliedRevision: receipt.revision, observedAt: new Date().toISOString() };
+                } else if (reconcilePluginReload && uncertain.length === 1 && uncertain[0][0] === 'plugin-reload'
                     && ['running', 'failed'].includes(uncertain[0][1].status)) {
                     const wrapper = join(source, 'bin/paseodog.mjs');
                     const daemon = await run(process.execPath, [wrapper, 'daemon', 'status'], { capture: true });
@@ -152,12 +170,14 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         const { values } = parseArgs({ options: { config: { type: 'string' }, commit: { type: 'string' },
             adopt: { type: 'boolean' }, start: { type: 'boolean' }, 'next-version': { type: 'boolean' },
             targets: { type: 'string' },
-            'reconcile-desktop-exit': { type: 'boolean' }, 'reconcile-plugin-reload': { type: 'boolean' } } });
+            'reconcile-desktop-exit': { type: 'boolean' }, 'reconcile-plugin-reload': { type: 'boolean' },
+            'reconcile-runtime-update': { type: 'boolean' } } });
         if (!isAbsolute(values.config || '')) throw new Error('--config requires an absolute host profile');
         const profile = JSON.parse(await readFile(values.config, 'utf8'));
         console.log(JSON.stringify(await prepareRelease(profile, values.commit,
             { adopt: values.adopt, start: values.start, nextVersion: values['next-version'],
                 reconcileDesktopExit: values['reconcile-desktop-exit'], reconcilePluginReload: values['reconcile-plugin-reload'],
+                reconcileRuntimeUpdate: values['reconcile-runtime-update'],
                 // auto(기본)·full 또는 쉼표로 구분한 대상 목록
                 targets: !values.targets || ['auto', 'full'].includes(values.targets) ? values.targets ?? profile.targets
                     : values.targets.split(',') })));
