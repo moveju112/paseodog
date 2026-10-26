@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -209,6 +209,9 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             await waitForIdle(listAgents, sleep ? { sleep } : undefined);
             // 데몬 갱신은 기존 업데이터 경로를 그대로 쓴다. 다른 세션이 이후 커밋을 올렸으면 그 커밋까지 반영될 수 있다.
             if (config.updaterRoot && config.updaterUnit) await stage('runtime-update', async () => {
+                // 이 커밋은 verify를 통과했다. 같은 리비전이면 업데이터가 root 테스트를 다시 돌리지 않는다.
+                await writeFile(join(config.updaterRoot, 'preverified.json'), JSON.stringify({
+                    revision: commit, verifiedAt: new Date().toISOString(), workspace }) + '\n', { mode: 0o600 });
                 await execute('runtime-update', 'systemctl', ['--user', 'start', config.updaterUnit]);
                 const receipt = JSON.parse(await readFile(join(config.updaterRoot, 'receipt.json'), 'utf8'));
                 if (receipt.phase !== 'applied' || !/^[0-9a-f]{40}$/.test(receipt.revision || ''))

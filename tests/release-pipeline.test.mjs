@@ -16,6 +16,8 @@ import { verifyReleaseSource, sourceFingerprint } from '../scripts/release-verif
 import { root } from '../scripts/paths.mjs';
 import { withTestLock } from '../scripts/test.mjs';
 import { carriedAssets, classifyPaths, deliveryPlan, pathTargets, readLedger, recordDeployment, validateTargets } from '../scripts/release-targets.mjs';
+import { runtimeChanges } from '../scripts/runtime-changes.mjs';
+import { execFileSync } from 'node:child_process';
 
 async function temporary(t) {
     const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-release-test-');
@@ -384,7 +386,10 @@ function planFixture(directory, { changed = [], installed = '1.0.0~rc.7.11090', 
 }
 
 test('path classification separates platforms and falls back to every target for unknown paths', () => {
-    assert.deepEqual(pathTargets('android/packages/app/src/components/left-sidebar.tsx'), ['android', 'desktop', 'web']);
+    // 데몬 웹 패치가 앱 소스를 가져다 쓰므로 앱 소스 변경은 런타임에도 포함한다.
+    assert.deepEqual(pathTargets('android/packages/app/src/components/left-sidebar.tsx'), ['android', 'desktop', 'web', 'runtime']);
+    assert.deepEqual(pathTargets('android/packages/server/src/server/conversation-titles.ts'), ['desktop', 'runtime']);
+    assert.deepEqual(pathTargets('android/packages/server/package.json'), ['desktop']);
     assert.deepEqual(pathTargets('android/packages/app/android/app/build.gradle'), ['android']);
     assert.deepEqual(pathTargets('android/packages/desktop/src/main.ts'), ['desktop']);
     assert.deepEqual(pathTargets('plugin/server/connection.mjs'), ['runtime', 'desktop']);
@@ -406,11 +411,11 @@ test('delivery plan selects only changed targets and carries unchanged updater m
     await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'applied', revision: 'c'.repeat(40) }));
     const config = { workspace: directory, cacheRoot, repo: 'moveju112/paseodog', updaterRoot };
     const commit = 'f'.repeat(40);
-    // 앱 UI 변경은 APK·데스크톱·웹만, 데몬은 건너뛴다.
-    let fixture = planFixture(directory, { changed: ['android/packages/app/src/app.tsx', 'docs/a.md'] });
+    // 데스크톱 패키지 변경은 데스크톱만 배포한다.
+    let fixture = planFixture(directory, { changed: ['android/packages/desktop/src/main.ts', 'docs/a.md'] });
     let plan = await deliveryPlan(config, { capture: fixture.capture, commit });
-    assert.deepEqual(plan.targets, { android: true, desktop: true, web: true, runtime: false });
-    assert.deepEqual(plan.carry, { android: null, desktop: null });
+    assert.deepEqual(plan.targets, { android: false, desktop: true, web: false, runtime: false });
+    assert.deepEqual(plan.carry, { android: { version: '1.0.0-rc.7.11090', versionCode: 11090 }, desktop: null });
     // 런타임만 바뀌면 GitHub 릴리즈 없이 데몬만 배포한다.
     fixture = planFixture(directory, { changed: ['patches/paseo-usage-donut.mjs'] });
     plan = await deliveryPlan(config, { capture: fixture.capture, commit });
@@ -557,6 +562,31 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
     assert.deepEqual(plans[0].carry.desktop, { version: '1.0.0-rc.7.11090' });
     assert.equal(calls.filter(row => row[0] === 'gh' && ['create', 'upload', 'edit'].includes(row[2])).length, 3);
     assert.equal(calls.some(row => row[0] === 'sudo' || row.includes('wrangler')), false);
+    // 검증을 마친 리비전을 업데이터에 알려 root 테스트를 중복 실행하지 않게 한다.
+    assert.equal(JSON.parse(await readFile(join(updaterRoot, 'preverified.json'), 'utf8')).revision, commit);
     const updateAt = calls.findIndex(row => row[0] === 'systemctl');
     assert.ok(updateAt > 0 && updateAt < calls.findIndex(row => row.includes('reload')));
+});
+
+// 업데이터는 런타임 변경이 없는 커밋을 재시작 없이 넘기고, 판정 실패는 런타임 변경으로 본다.
+test('runtime change detection skips metadata and app-native commits and fails safe', async t => {
+    assert.deepEqual(runtimeChanges(['plugin/shared/release.json', 'CHANGELOG.md', 'MANIFEST.sha256']),
+        { runtime: false, paths: [], releaseMetadata: true });
+    assert.equal(runtimeChanges(['scripts/release-pipeline.mjs', 'docs/a.md', 'android/packages/app/android/x.gradle']).runtime, false);
+    assert.equal(runtimeChanges(['patches/paseo-usage-donut.mjs']).runtime, true);
+    assert.equal(runtimeChanges(['android/packages/app/src/screens/settings/basic-agent-roles.ts']).runtime, true);
+    const repo = await temporary(t);
+    const git = (...args) => execFileSync('git', ['-C', repo, '-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { encoding: 'utf8' }).trim();
+    git('init', '-q');
+    await mkdir(join(repo, 'docs')); await writeFile(join(repo, 'docs/a.md'), 'one');
+    git('add', '.'); git('commit', '-qm', 'one');
+    const from = git('rev-parse', 'HEAD');
+    await writeFile(join(repo, 'docs/a.md'), 'two'); await mkdir(join(repo, 'plugin/shared'), { recursive: true });
+    await writeFile(join(repo, 'plugin/shared/release.json'), '{}');
+    git('add', '.'); git('commit', '-qm', 'two');
+    const to = git('rev-parse', 'HEAD');
+    const cli = (...args) => JSON.parse(execFileSync(process.execPath, [join(root, 'scripts/runtime-changes.mjs'), ...args], { encoding: 'utf8' }));
+    assert.deepEqual(cli('--repo', repo, '--from', from, '--to', to), { runtime: false, paths: [], releaseMetadata: true });
+    for (const args of [['--repo', repo, '--from', 'bad', '--to', to], ['--repo', repo, '--from', to, '--to', 'f'.repeat(40)]])
+        assert.equal(cli(...args).runtime, true);
 });
