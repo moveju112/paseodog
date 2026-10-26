@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { openReleaseState, insideWorkspace } from '../scripts/release-state.mjs';
-import { validateReleaseConfig, detachedCommand, deliverRelease, unlockStoppedDelivery } from '../scripts/release-pipeline.mjs';
+import { validateReleaseConfig, activeAgents, waitForIdle, detachedCommand, deliverRelease, unlockStoppedDelivery } from '../scripts/release-pipeline.mjs';
 import { verifiedBuildCache } from '../scripts/verified-build-cache.mjs';
 import { measureBuildStep } from '../scripts/build-metrics.mjs';
 import { verifyRemoteAssets, verifyUpdaterManifest } from '../scripts/release-artifacts.mjs';
@@ -86,6 +86,19 @@ test('test harness serializes heavyweight runs and releases the slot after failu
     assert.deepEqual(events, ['first', 'released', 'second', 'third']);
 });
 
+test('idle gate waits for every active turn and times out without mutating anything', async () => {
+    let time = 0;
+    let reads = 0;
+    await waitForIdle(async () => ++reads < 3 ? [{ status: 'running' }] : [], {
+        sleep: async ms => { time += ms; }, now: () => time,
+    });
+    assert.equal(reads, 3);
+    assert.deepEqual(activeAgents([{ status: 'idle' }, { status: 'initializing' }]), [{ status: 'initializing' }]);
+    await assert.rejects(waitForIdle(async () => [{ status: 'running' }], {
+        sleep: async ms => { time += ms; }, now: () => time, timeoutMs: 10000,
+    }), /apply is pending/);
+});
+
 test('source verification hashes directory symlinks and invalidates changed links or tracked bytes', async t => {
     const directory = await temporary(t);
     await mkdir(join(directory, 'first'));
@@ -148,7 +161,7 @@ test('verification retains completed checks across failure and output-workspace 
 });
 
 for (const failure of [null, 'upload', 'export', 'install', 'pages']) {
-test(`integrated delivery allows active turns, overlaps upload/export and resumes safely: ${failure ?? 'success'}`,
+test(`integrated delivery protects active turns, overlaps upload/export and resumes safely: ${failure ?? 'success'}`,
     { timeout: 10000 }, async t => {
     const directory = await temporary(t);
     const key = join(directory, 'approved.keystore'), init = join(directory, 'signing.gradle'), previous = join(directory, 'previous.apk');
@@ -193,7 +206,7 @@ test(`integrated delivery allows active turns, overlaps upload/export and resume
             await mkdir(output); await writeFile(join(output, 'index.html'), 'fixture');
         }
         if (args.includes('ls') && args.includes('--json'))
-            return JSON.stringify([{ status: 'running' }, { status: 'initializing' }]);
+            return JSON.stringify([{ status: 'idle' }]);
         if (command === 'dpkg-query') return '1.0.0~rc.7.11000';
         if (command === 'sudo' && args.includes('dpkg')) {
             installStarted();
@@ -242,6 +255,13 @@ test(`integrated delivery allows active turns, overlaps upload/export and resume
     const browserAt = calls.findIndex(row => row[0] === 'check-browser');
     const reloadAt = calls.findIndex(row => row.includes('reload'));
     assert.ok(verifyAt < publishAt && publishAt < browserAt && browserAt < reloadAt);
+    const idleChecks = calls.flatMap((row, index) => row.includes('ls') && row.includes('--json') ? [index] : []);
+    const installAt = calls.findIndex(row => row[0] === 'sudo' && row.includes('dpkg'));
+    const desktopAt = calls.findIndex(row => row[0] === 'desktop');
+    assert.equal(idleChecks.length, 3);
+    assert.ok(publishAt < idleChecks[0] && idleChecks[0] < installAt);
+    assert.ok(installAt < idleChecks[1] && idleChecks[1] < reloadAt);
+    assert.ok(reloadAt < idleChecks[2] && idleChecks[2] < desktopAt);
     await deliverRelease(config, operations);
     assert.equal(calls.filter(row => row[0] === 'gh' && ['create', 'upload', 'edit'].includes(row[2])).length, 3);
     assert.equal(calls.filter(row => row[0] === 'desktop').length, 1);

@@ -265,13 +265,24 @@ test('reviewed web bundle supports the same A renderer and rejects partial patch
 test('all phase transport patches are exact-blob gated and idempotent', () => {
     for (const spec of ASSISTANT_PHASE_PATCHES) {
         const installed = readFileSync(new URL('../' + spec.root + '/' + spec.file, import.meta.url), 'utf8');
-        // 뒤에 적용되는 릴레이 필드만 되돌린 뒤 기존 단계 패치의 원본 blob을 검증한다.
-        const relay = RELAY_PASSWORD_PATCHES.find((entry) => entry.package === 'protocol');
-        const source = spec.file === relay.file
-            ? [...relay.edits].reverse().reduce((text, [before, after]) => text.replace(after, () => before), installed)
-            : installed;
-        const patched = patchedAssistantPhaseSource(source, spec);
+        const patched = patchedAssistantPhaseSource(installed, spec);
         assert.equal(patchedAssistantPhaseSource(patched, spec), patched);
         assert.throws(() => patchedAssistantPhaseSource(patched + '// drift', spec), /hash mismatch/);
     }
+});
+
+test('phase reapplication preserves relay fields and rejects partial relay patches', async () => {
+    const { withoutAssistantPhase } = await import('../patches/paseo-assistant-phase.mjs');
+    const { withoutRelayPasswordEdits, patchedRelayPasswordSource } = await import('../scripts/patch-paseo-relay-password.mjs');
+    const spec = ASSISTANT_PHASE_PATCHES.find(entry => entry.root === 'tools/node_modules/@getpaseo/protocol');
+    const relay = RELAY_PASSWORD_PATCHES.find(entry => entry.package === 'protocol');
+    const installed = readFileSync(new URL('../' + spec.root + '/' + spec.file, import.meta.url), 'utf8');
+    const original = withoutRelayPasswordEdits(withoutAssistantPhase(installed, spec.edits), relay.edits);
+    const phase = patchedAssistantPhaseSource(original, spec);
+    const combined = patchedRelayPasswordSource(phase, relay);
+    assert.equal(patchedAssistantPhaseSource(combined, spec), combined);
+    assert.equal(patchedAssistantPhaseSource(withoutAssistantPhase(combined, spec.edits), spec), combined);
+    const partial = phase.replace(relay.edits[0][0], () => relay.edits[0][1]);
+    assert.throws(() => patchedAssistantPhaseSource(partial, spec), /Partial Paseo relay password patch/);
+    assert.throws(() => patchedAssistantPhaseSource(combined + '\n// drift', spec), /hash mismatch/);
 });

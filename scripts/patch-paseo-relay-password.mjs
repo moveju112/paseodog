@@ -76,6 +76,11 @@ export function relayPasswordModule() {
     return stripTypeScriptTypes(readFileSync(resolve(sourceRoot, 'server/src/server/relay-password.ts'), 'utf8'));
 }
 
+export function withoutRelayPasswordEdits(source, edits) {
+    for (const [before, after] of [...edits].reverse()) source = source.replace(after, () => before);
+    return source;
+}
+
 // 원본 또는 완성본만 허용하고 다른 버전·부분 적용·임의 변경을 거부한다.
 export function patchedRelayPasswordSource(source, spec) {
     if (spec.source) {
@@ -84,8 +89,7 @@ export function patchedRelayPasswordSource(source, spec) {
             throw new Error(`Paseo relay password hash mismatch: ${spec.file}`);
         return result;
     }
-    let original = source;
-    for (const [before, after] of [...spec.edits].reverse()) original = original.replace(after, () => before);
+    const original = withoutRelayPasswordEdits(source, spec.edits);
     if (gitBlob(original) !== spec.blob) throw new Error(`Paseo relay password hash mismatch: ${spec.file}`);
     let result = original;
     const legacyResults = [];
