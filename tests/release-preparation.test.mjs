@@ -6,6 +6,7 @@ import { prepareRelease } from '../scripts/release-prepare.mjs';
 import { releasePreflight } from '../scripts/release-preflight.mjs';
 import { runCommand } from '../scripts/release-command.mjs';
 import { paseoHome } from '../scripts/paths.mjs';
+import { recordDeployment } from '../scripts/release-targets.mjs';
 
 async function fixture(t) {
     const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-prepare-test-');
@@ -227,4 +228,54 @@ test('parallel syntax checks keep JSON, JavaScript and shell failure reporting',
     const output = await readFile(log, 'utf8');
     assert.ok(output.includes('bad.json') && output.includes('bad.mjs'));
     if (process.platform !== 'win32') assert.ok(output.includes('bad.sh'));
+});
+
+test('preparation stops before versioning when nothing changed and skips versioning for runtime-only delivery', async t => {
+    const profile = await fixture(t);
+    const commit = 'e'.repeat(40), base = 'a'.repeat(40);
+    // 웹·데몬 기준점이 기록된 상태에서 자동 판정한다.
+    await recordDeployment(profile.cacheRoot, 'web', { commit: base });
+    const updaterRoot = join(profile.cacheRoot, 'updater');
+    await mkdir(updaterRoot);
+    await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'applied', revision: base }));
+    const prepare = changed => {
+        const calls = [];
+        const run = async (command, args) => {
+            calls.push([command, ...args]);
+            if (command === 'git') {
+                if (args[0] === 'rev-parse') return '/repo/common\n';
+                if (args[0] === 'ls-remote') return commit + '\trefs/heads/main\n';
+                if (args[0] === 'diff' && args.includes('-z')) return changed.join('\0');
+            }
+            if (command === 'gh' && args[1] === 'view' && args[2] === '--repo')
+                return JSON.stringify({ tagName: 'v1.0.0-rc.7.11090', assets: [] });
+            if (command === 'gh' && args[1] === 'download') {
+                const output = args[args.indexOf('--dir') + 1];
+                await writeFile(join(output, 'paseodog-android-update.json'),
+                    JSON.stringify({ versionCode: 11090, versionName: '1.0.0-rc.7.11090' }));
+                for (const name of ['latest-linux.yml', 'latest.yml']) await writeFile(join(output, name), 'version: 1.0.0-rc.7.11090\n');
+            }
+            if (command === 'gh' && args[1] === 'view') return JSON.stringify({ targetCommitish: base, isDraft: false });
+            if (command === 'dpkg-query') return '1.0.0~rc.7.11090';
+            return '';
+        };
+        const result = prepareRelease({ ...profile, repo: 'moveju112/paseodog', updaterRoot, updaterUnit: 'paseodog-update.service' },
+            commit, { run, adopt: true, start: true, nextVersion: true });
+        return { calls, result };
+    };
+    const versioned = calls => calls.some(row => row[0] === 'git' && ['commit', 'push'].includes(row[1]));
+    let { calls, result } = prepare(['docs/a.md', 'tests/journal.test.mjs']);
+    await assert.rejects(result, /No deployable changes/);
+    assert.equal(versioned(calls), false);
+    assert.ok(calls.every(row => !row.includes('--start')));
+    // 데몬 전용 변경은 앱 버전을 올리지 않고 바로 배포를 시작한다.
+    ({ calls, result } = prepare(['patches/paseo-usage-donut.mjs']));
+    const runtime = await result;
+    t.after(() => rm(runtime.workspace, { recursive: true, force: true }));
+    assert.equal(versioned(calls), false);
+    assert.ok(calls.some(row => row.includes('--start')));
+    // 앱 변경은 GitHub 릴리즈가 필요하므로 버전 준비 단계로 들어간다.
+    ({ calls, result } = prepare(['android/packages/app/src/app.tsx']));
+    await assert.rejects(result, /release\.json|ENOENT/);
+    assert.ok(calls.every(row => !row.includes('--start')));
 });

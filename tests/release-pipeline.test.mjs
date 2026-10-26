@@ -15,6 +15,7 @@ import { buildWeb } from '../scripts/build-web.mjs';
 import { verifyReleaseSource, sourceFingerprint } from '../scripts/release-verification.mjs';
 import { root } from '../scripts/paths.mjs';
 import { withTestLock } from '../scripts/test.mjs';
+import { carriedAssets, classifyPaths, deliveryPlan, pathTargets, readLedger, recordDeployment, validateTargets } from '../scripts/release-targets.mjs';
 
 async function temporary(t) {
     const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-release-test-');
@@ -277,8 +278,12 @@ test('delivery defaults are explicit targets and detached execution is a service
         repo: 'moveju112/paseodog', pagesProject: 'paseodog', webUrl: 'https://paseodog.choondoggy.com/',
     };
     assert.equal(validateReleaseConfig(input).metroWorkers, '2');
+    assert.equal(validateReleaseConfig(input).targets, 'auto');
+    assert.equal(validateReleaseConfig({ ...input, updaterRoot: '/updater', updaterUnit: 'paseodog-update.service' }).updaterUnit,
+        'paseodog-update.service');
     for (const patch of [{ workspace: '/' }, { workspace: input.cacheRoot, cacheRoot: input.cacheRoot },
-        { appTests: ['../../private'] }, { repo: 'another/repo' }])
+        { appTests: ['../../private'] }, { repo: 'another/repo' }, { targets: ['ios'] }, { updaterRoot: '/updater' },
+        { updaterRoot: 'relative', updaterUnit: 'paseodog-update.service' }, { updaterRoot: '/updater', updaterUnit: 'x; rm' }])
         assert.throws(() => validateReleaseConfig({ ...input, ...patch }));
     assert.equal(insideWorkspace('/data/tmp/ubuntu', '/data/tmp/ubuntu-other/path'), false);
     const [command, args] = detachedCommand('/approved/config.json', input.workspace);
@@ -349,4 +354,209 @@ document.querySelector('button').onclick=()=>{const p=document.querySelector('[d
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     t.after(() => new Promise(resolve => server.close(resolve)));
     await verifyReleaseWeb({ url: `http://127.0.0.1:${server.address().port}/`, output });
+});
+
+// 기준점 커밋은 실제 공개 매니페스트·설치 버전·원장·업데이터 receipt에서 읽는다.
+function planFixture(directory, { changed = [], installed = '1.0.0~rc.7.11090', androidVersion = '1.0.0-rc.7.11090',
+    desktopVersion = '1.0.0-rc.7.11090', bases = {}, diffFails = false } = {}) {
+    const calls = [];
+    const capture = async (command, args) => {
+        calls.push([command, ...args]);
+        if (command === 'gh' && args[1] === 'view' && args[2] === '--repo')
+            return JSON.stringify({ tagName: 'v1.0.0-rc.7.11090', assets: [] });
+        if (command === 'gh' && args[1] === 'download') {
+            const output = args[args.indexOf('--dir') + 1];
+            await writeFile(join(output, 'paseodog-android-update.json'), JSON.stringify({
+                versionCode: Number(androidVersion.split('.').at(-1)), versionName: androidVersion }));
+            for (const name of ['latest-linux.yml', 'latest.yml']) await writeFile(join(output, name), `version: ${desktopVersion}\n`);
+            return '';
+        }
+        if (command === 'gh' && args[1] === 'view')
+            return JSON.stringify({ targetCommitish: bases[args[2]] ?? 'a'.repeat(40), isDraft: false });
+        if (command === 'dpkg-query') return installed;
+        if (command === 'git' && args[0] === 'diff') {
+            if (diffFails) throw new Error('unknown revision');
+            return changed.join('\0');
+        }
+        throw new Error(`unexpected ${command}`);
+    };
+    return { calls, capture };
+}
+
+test('path classification separates platforms and falls back to every target for unknown paths', () => {
+    assert.deepEqual(pathTargets('android/packages/app/src/components/left-sidebar.tsx'), ['android', 'desktop', 'web']);
+    assert.deepEqual(pathTargets('android/packages/app/android/app/build.gradle'), ['android']);
+    assert.deepEqual(pathTargets('android/packages/desktop/src/main.ts'), ['desktop']);
+    assert.deepEqual(pathTargets('plugin/server/connection.mjs'), ['runtime', 'desktop']);
+    assert.deepEqual(pathTargets('patches/paseo-usage-donut.mjs'), ['runtime']);
+    for (const path of ['docs/ai-rules/tasks/RELEASE.md', 'tests/journal.test.mjs', 'CHANGELOG.md',
+        'plugin/shared/release.json', 'android/packages/app/src/polyfills/diagnostics-channel.test.ts',
+        'scripts/release-pipeline.mjs'])
+        assert.deepEqual(pathTargets(path), [], path);
+    assert.deepEqual(pathTargets('secrets/unknown.bin'), ['android', 'desktop', 'web', 'runtime']);
+    assert.deepEqual(classifyPaths(['plugin/index.server.ts', 'docs/x.md']).runtime, ['plugin/index.server.ts']);
+});
+
+test('delivery plan selects only changed targets and carries unchanged updater manifests forward', async t => {
+    const directory = await temporary(t);
+    const cacheRoot = join(directory, 'cache');
+    await recordDeployment(cacheRoot, 'web', { commit: 'b'.repeat(40) });
+    const updaterRoot = join(directory, 'updater');
+    await mkdir(updaterRoot);
+    await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'applied', revision: 'c'.repeat(40) }));
+    const config = { workspace: directory, cacheRoot, repo: 'moveju112/paseodog', updaterRoot };
+    const commit = 'f'.repeat(40);
+    // 앱 UI 변경은 APK·데스크톱·웹만, 데몬은 건너뛴다.
+    let fixture = planFixture(directory, { changed: ['android/packages/app/src/app.tsx', 'docs/a.md'] });
+    let plan = await deliveryPlan(config, { capture: fixture.capture, commit });
+    assert.deepEqual(plan.targets, { android: true, desktop: true, web: true, runtime: false });
+    assert.deepEqual(plan.carry, { android: null, desktop: null });
+    // 런타임만 바뀌면 GitHub 릴리즈 없이 데몬만 배포한다.
+    fixture = planFixture(directory, { changed: ['patches/paseo-usage-donut.mjs'] });
+    plan = await deliveryPlan(config, { capture: fixture.capture, commit });
+    assert.deepEqual(plan.targets, { android: false, desktop: false, web: false, runtime: true });
+    assert.deepEqual(plan.carry, { android: null, desktop: null });
+    // APK만 바뀌면 이전 데스크톱 매니페스트와 설치 파일을 이월한다.
+    fixture = planFixture(directory, { changed: ['android/packages/app/android/app/build.gradle'] });
+    plan = await deliveryPlan(config, { capture: fixture.capture, commit });
+    assert.deepEqual(plan.targets, { android: true, desktop: false, web: false, runtime: false });
+    assert.deepEqual(plan.carry.desktop, { version: '1.0.0-rc.7.11090' });
+    assert.deepEqual(carriedAssets(plan.carry), ['PaseoDog-1.0.0-rc.7.11090-amd64.deb',
+        'PaseoDog-1.0.0-rc.7.11090-x86_64.AppImage', 'latest-linux.yml', 'PaseoDog-Setup-1.0.0-rc.7.11090-x64.exe',
+        'PaseoDog-Setup-1.0.0-rc.7.11090-x64.exe.blockmap', 'latest.yml']);
+    // 메타데이터·문서만 바뀌면 배포 대상이 없다.
+    fixture = planFixture(directory, { changed: ['CHANGELOG.md', 'plugin/shared/release.json', 'docs/a.md'] });
+    plan = await deliveryPlan(config, { capture: fixture.capture, commit });
+    assert.equal(Object.values(plan.targets).some(Boolean), false);
+});
+
+test('delivery plan falls back to full delivery when a baseline is unknown and honors explicit targets', async t => {
+    const directory = await temporary(t);
+    const config = { workspace: directory, cacheRoot: join(directory, 'cache'), repo: 'moveju112/paseodog' };
+    const commit = 'f'.repeat(40);
+    // 원장·업데이터 기록이 없으면 웹과 런타임은 전체 배포한다.
+    let fixture = planFixture(directory, { changed: ['android/packages/app/android/x.gradle'] });
+    let plan = await deliveryPlan(config, { capture: fixture.capture, commit });
+    assert.equal(plan.targets.web, true);
+    assert.equal(plan.reasons.runtime, 'baseline unknown');
+    // 기준 커밋을 로컬에서 비교할 수 없으면 해당 대상을 모두 배포한다.
+    fixture = planFixture(directory, { diffFails: true });
+    plan = await deliveryPlan(config, { capture: fixture.capture, commit });
+    assert.deepEqual(plan.targets, { android: true, desktop: true, web: true, runtime: true });
+    // PC 설치본이 뒤처졌으면 그 설치 버전 이후의 변경도 데스크톱 판정에 포함한다.
+    fixture = planFixture(directory, { installed: '1.0.0~rc.7.11080' });
+    plan = await deliveryPlan({ ...config, targets: ['android'] }, { capture: fixture.capture, commit });
+    assert.deepEqual(plan.targets, { android: true, desktop: false, web: false, runtime: false });
+    assert.equal(plan.mode, 'explicit');
+    assert.ok(fixture.calls.some(row => row.includes('v1.0.0-rc.7.11080')));
+    plan = await deliveryPlan({ ...config, targets: 'full' }, { capture: planFixture(directory).capture, commit });
+    assert.deepEqual(plan.targets, { android: true, desktop: true, web: true, runtime: true });
+    assert.throws(() => validateTargets(['ios']), /targets must be/);
+});
+
+test('web-only delivery skips GitHub and PC apply, then records the deployed web commit', { timeout: 10000 }, async t => {
+    const directory = await temporary(t);
+    const key = join(directory, 'approved.keystore'), init = join(directory, 'signing.gradle'), previous = join(directory, 'previous.apk');
+    await writeFile(key, 'fixture'); await writeFile(init, `storeFile = file("${key}")`); await writeFile(previous, 'old');
+    const config = validateReleaseConfig({
+        workspace: directory, cacheRoot: directory + '-cache', signingInit: init, signingKey: key,
+        previousApk: previous, androidTools: '/sdk/tools', metroWorkers: 2, appTests: ['src/fixture.test.ts'],
+        repo: 'moveju112/paseodog', pagesProject: 'paseodog', webUrl: 'https://paseodog.choondoggy.com/',
+        targets: ['web'],
+    });
+    t.after(() => rm(config.cacheRoot, { recursive: true, force: true }));
+    const commit = 'f'.repeat(40);
+    const calls = [];
+    const run = async (command, args) => {
+        calls.push([command, ...args]);
+        if (command === 'git' && args[0] === 'rev-parse') return commit + '\n';
+        if (command === 'git' && args[0] === 'ls-remote') return commit + '\trefs/heads/main\n';
+        if (command === 'systemd-run' && args.includes('expo')) {
+            const output = args[args.indexOf('--output-dir') + 1];
+            await mkdir(output); await writeFile(join(output, 'index.html'), 'fixture');
+        }
+        if (command === 'gh' && args[1] === 'view') throw new Error('no release');
+        return '';
+    };
+    const builds = [];
+    const result = await deliverRelease(config, {
+        run, build: async ({ targets }) => { builds.push(targets); },
+        verifyArtifacts: async () => { throw new Error('GitHub artifacts must not be verified'); },
+        checkWeb: async () => { calls.push(['check-browser']); },
+        launchDesktop: async () => { throw new Error('desktop must not launch'); },
+        installedRelease: async () => { throw new Error('desktop must not be read'); },
+    });
+    assert.equal(result.tag, null);
+    assert.deepEqual(builds, [{ android: false, desktop: false, web: true, runtime: false }]);
+    assert.equal(calls.some(row => row[0] === 'gh' && ['create', 'upload', 'edit'].includes(row[2])), false);
+    assert.equal(calls.some(row => row[0] === 'sudo' || row.includes('reload') || row.includes('ls')), false);
+    assert.ok(calls.some(row => row.includes('wrangler')));
+    assert.equal((await readLedger(config.cacheRoot)).web.commit, commit);
+});
+
+test('APK and runtime delivery carries desktop assets, updates the daemon after idle and never touches the PC app',
+    { timeout: 10000 }, async t => {
+    const directory = await temporary(t);
+    const key = join(directory, 'approved.keystore'), init = join(directory, 'signing.gradle'), previous = join(directory, 'previous.apk');
+    await writeFile(key, 'fixture'); await writeFile(init, `storeFile = file("${key}")`); await writeFile(previous, 'old');
+    const updaterRoot = join(directory, 'updater');
+    await mkdir(updaterRoot);
+    const config = validateReleaseConfig({
+        workspace: join(directory, 'workspace'), cacheRoot: join(directory, 'cache'), signingInit: init, signingKey: key,
+        previousApk: previous, androidTools: '/sdk/tools', metroWorkers: 2, appTests: ['src/fixture.test.ts'],
+        repo: 'moveju112/paseodog', pagesProject: 'paseodog', webUrl: 'https://paseodog.choondoggy.com/',
+        targets: ['android', 'runtime'], updaterRoot, updaterUnit: 'paseodog-update.service',
+    });
+    const commit = 'f'.repeat(40), carried = 'v1.0.0-rc.7.11090';
+    const calls = [];
+    let assets = [], active = [{ status: 'running' }];
+    const run = async (command, args) => {
+        calls.push([command, ...args]);
+        if (command === 'git' && args[0] === 'rev-parse') return commit + '\n';
+        if (command === 'git' && args[0] === 'ls-remote') return commit + '\trefs/heads/main\n';
+        if (command === 'gh' && args[1] === 'view' && args[2] === '--repo') return JSON.stringify({ tagName: carried, assets: [] });
+        if (command === 'gh' && args[1] === 'view' && args[2] === carried) return JSON.stringify({ targetCommitish: 'a'.repeat(40) });
+        if (command === 'gh' && args[1] === 'view') return JSON.stringify({ targetCommitish: commit,
+            assets: assets.map(path => ({ name: path.split('/').at(-1), size: 7 })) });
+        if (command === 'gh' && args[1] === 'download') {
+            const output = args[args.indexOf('--dir') + 1];
+            for (const name of args.filter((_, index) => args[index - 1] === '--pattern'))
+                await writeFile(join(output, name), name.endsWith('.yml') ? 'version: 1.0.0-rc.7.11090\n'
+                    : JSON.stringify({ versionCode: 11090, versionName: '1.0.0-rc.7.11090' }));
+        }
+        if (command === 'python3') await writeFile(join(config.workspace, 'paseodog-android-update.json'), '{}');
+        if (args.includes('ls') && args.includes('--json')) {
+            const rows = active; active = [];
+            return JSON.stringify(rows);
+        }
+        if (command === 'systemctl') {
+            assert.deepEqual(active, [], 'daemon update must wait for idle');
+            await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'applied', revision: commit }));
+        }
+        if (args.includes('diagnostic')) return '{"diagnostic":"Provider is available"}';
+        return '';
+    };
+    const plans = [];
+    await deliverRelease(config, {
+        run, build: async ({ targets }) => { calls.push(['build', targets]); },
+        verifyArtifacts: async (_config, _run, plan) => {
+            plans.push(plan);
+            assets = [];
+            for (const name of ['package.apk', 'carry/latest-linux.yml']) {
+                const path = join(config.workspace, name); await writeFile(path, 'fixture'); assets.push(path);
+            }
+            return assets;
+        },
+        checkWeb: async () => { throw new Error('web must not deploy'); },
+        launchDesktop: async () => { throw new Error('desktop must not launch'); },
+        installedRelease: async () => { throw new Error('desktop must not be read'); },
+        sleep: async () => {},
+    });
+    const download = calls.find(row => row[0] === 'gh' && row[2] === 'download' && row.includes(join(config.workspace, 'carry')));
+    assert.ok(download.includes('PaseoDog-1.0.0-rc.7.11090-amd64.deb') && download.includes('latest.yml'));
+    assert.deepEqual(plans[0].carry.desktop, { version: '1.0.0-rc.7.11090' });
+    assert.equal(calls.filter(row => row[0] === 'gh' && ['create', 'upload', 'edit'].includes(row[2])).length, 3);
+    assert.equal(calls.some(row => row[0] === 'sudo' || row.includes('wrangler')), false);
+    const updateAt = calls.findIndex(row => row[0] === 'systemctl');
+    assert.ok(updateAt > 0 && updateAt < calls.findIndex(row => row.includes('reload')));
 });

@@ -8,6 +8,7 @@ import { buildWeb } from './build-web.mjs';
 import { insideWorkspace, openReleaseState, fileHash } from './release-state.mjs';
 import { runCommand } from './release-command.mjs';
 import { releaseArtifacts, verifyReleaseArtifacts, verifyRemoteAssets } from './release-artifacts.mjs';
+import { carriedAssets, deliveryPlan, describePlan, recordDeployment, validateTargets } from './release-targets.mjs';
 import { verifyReleaseWeb } from './release-web-check.mjs';
 import { root } from './paths.mjs';
 import { restartDesktop } from './release-apply.mjs';
@@ -36,6 +37,12 @@ export function validateReleaseConfig(input) {
     if (!Array.isArray(config.appTests) || !config.appTests.length
         || config.appTests.some(path => !/^src\/[\w./-]+\.(test|spec)\.tsx?$/.test(path) || path.includes('..')))
         throw new Error('appTests must explicitly name affected app tests');
+    config.targets = validateTargets(config.targets);
+    // 데몬 업데이터는 호스트 프로필에 둘 다 있을 때만 배포가 직접 실행한다.
+    if ((config.updaterRoot === undefined) !== (config.updaterUnit === undefined)
+        || (config.updaterRoot !== undefined && (!isAbsolute(config.updaterRoot)
+            || !/^[\w@.-]+\.service$/.test(config.updaterUnit))))
+        throw new Error('updaterRoot and updaterUnit must be set together as an absolute path and a user service');
     if (config.repo !== 'moveju112/paseodog' || config.pagesProject !== 'paseodog'
         || config.webUrl !== 'https://paseodog.choondoggy.com/')
         throw new Error('Release target must be the dedicated PaseoDog repository and Pages project');
@@ -80,7 +87,7 @@ export async function unlockStoppedDelivery(workspace) {
 }
 
 export async function deliverRelease(input, { run = runCommand, retryStage, checkWeb = verifyReleaseWeb,
-    build = buildRelease, verifyArtifacts = verifyReleaseArtifacts, launchDesktop = restartDesktop,
+    build = buildRelease, verifyArtifacts = verifyReleaseArtifacts, launchDesktop = restartDesktop, sleep,
     installedRelease = () => readFile('/opt/PaseoDog/resources/paseodog-runtime/plugin/shared/release.json', 'utf8').then(JSON.parse) } = {}) {
     const config = validateReleaseConfig(input);
     const { workspace, version, versionCode } = config;
@@ -116,57 +123,81 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             await verifyReleaseSource(config, run);
             await assertSource();
         });
+        // 기준점은 실제 공개·설치 기록에서 읽는다. 재개 시에는 저장된 계획을 그대로 쓴다.
+        const plan = await stage('plan', () => deliveryPlan(config, { capture, commit, cwd: root }));
+        const { targets } = plan;
+        console.log(`Delivery plan: ${describePlan(plan)}`);
+        const github = targets.android || targets.desktop;
+        if (!github && !targets.web && !targets.runtime) {
+            console.log('No deployable changes since the deployed baselines.');
+            return { commit, version, tag: null, plan };
+        }
         // buildRelease의 각 단계가 자체 체크포인트·산출물 해시를 갖는다.
-        await build({ ...config, checkpoint: stage });
+        await build({ ...config, targets, checkpoint: stage });
         await assertSource();
-        await stage('android-manifest', () => execute('android-manifest', 'python3', [
+        if (targets.android) await stage('android-manifest', () => execute('android-manifest', 'python3', [
             'scripts/android-update-manifest.py', '--version-code', versionCode, '--version-name', version,
             '--tag', tag, '--target-abi', 'arm64-v8a', '--output', join(workspace, 'paseodog-android-update.json'),
             releaseArtifacts(workspace, version)[0],
         ]), { artifacts: [join(workspace, 'paseodog-android-update.json')] });
-        // 업로드 직전마다 서명·해시를 다시 확인해 재개 사이 산출물 변조를 차단한다.
-        const assets = await verifyArtifacts(config, run);
-        const expected = Object.fromEntries(await Promise.all(assets.map(async path => [basename(path), (await stat(path)).size])));
-        await stage('github-draft', () => execute('github-draft', 'gh', ['release', 'create', tag, '--draft',
-            '--repo', config.repo, '--target', commit, '--title', `PaseoDog ${version}`, '--notes-file', join(root, 'CHANGELOG.md')]),
-        { mutation: true });
+        let expected = {}, uploadAssets = [];
+        if (github) {
+            const carried = carriedAssets(plan.carry);
+            if (carried.length) await stage('github-carry', async () => {
+                await mkdir(join(workspace, 'carry'), { recursive: true, mode: 0o700 });
+                await execute('github-carry', 'gh', ['release', 'download', plan.latestTag, '--repo', config.repo,
+                    '--dir', join(workspace, 'carry'), '--clobber', ...carried.flatMap(name => ['--pattern', name])]);
+            }, { artifacts: carried.map(name => join(workspace, 'carry', name)) });
+            // 업로드 직전마다 서명·해시를 다시 확인해 재개 사이 산출물 변조를 차단한다.
+            uploadAssets = await verifyArtifacts(config, run, plan);
+            expected = Object.fromEntries(await Promise.all(uploadAssets.map(async path => [basename(path), (await stat(path)).size])));
+            await stage('github-draft', () => execute('github-draft', 'gh', ['release', 'create', tag, '--draft',
+                '--repo', config.repo, '--target', commit, '--title', `PaseoDog ${version}`, '--notes-file', join(root, 'CHANGELOG.md')]),
+            { mutation: true });
+        }
         const webOutput = join(workspace, 'web-cloudflare');
-        await mkdir(join(config.cacheRoot, 'web-cloudflare'), { recursive: true });
+        if (targets.web) await mkdir(join(config.cacheRoot, 'web-cloudflare'), { recursive: true });
         // 업로드와 웹 export는 입력을 공유하지 않는다. 둘 다 끝나기 전에는 공개하거나 잠금을 해제하지 않는다.
         const prepared = await Promise.allSettled([
-            stage('github-upload', () => execute('github-upload', 'gh',
-                ['release', 'upload', tag, '--repo', config.repo, ...assets]), { mutation: true }),
-            stage('browser-export', () => buildWeb({
+            github ? stage('github-upload', () => execute('github-upload', 'gh',
+                ['release', 'upload', tag, '--repo', config.repo, ...uploadAssets]), { mutation: true }) : null,
+            targets.web ? stage('browser-export', () => buildWeb({
                 output: webOutput, hosting: 'cloudflare', metroWorkers: String(config.metroWorkers), dependenciesBuilt: true,
             }, (command, args, options) => execute('browser-export', 'systemd-run', [
                 '--user', '--scope', '-q', '-p', 'MemoryHigh=16G', '-p', 'MemorySwapMax=2G', command, ...args,
             ], options.cwd, { ...options.env, TMPDIR: join(config.cacheRoot, 'web-cloudflare') })),
-            { artifacts: [webOutput] }),
-        ]);
+            { artifacts: [webOutput] }) : null,
+        ].filter(Boolean));
         const failures = prepared.filter(result => result.status === 'rejected').map(result => result.reason);
         if (failures.length) throw new AggregateError(failures, failures.map(error => error.message).join('; '));
         await assertSource();
-        const published = JSON.parse(await capture('gh', ['release', 'view', tag, '--repo', config.repo,
-            '--json', 'assets,targetCommitish']));
-        if (published.targetCommitish !== commit) throw new Error('GitHub release target differs from verified commit');
-        verifyRemoteAssets(published.assets, expected);
-        await stage('github-publish', () => execute('github-publish', 'gh',
-            ['release', 'edit', tag, '--repo', config.repo, '--draft=false', '--latest']), { mutation: true });
+        if (github) {
+            const published = JSON.parse(await capture('gh', ['release', 'view', tag, '--repo', config.repo,
+                '--json', 'assets,targetCommitish']));
+            if (published.targetCommitish !== commit) throw new Error('GitHub release target differs from verified commit');
+            verifyRemoteAssets(published.assets, expected);
+            await stage('github-publish', () => execute('github-publish', 'gh',
+                ['release', 'edit', tag, '--repo', config.repo, '--draft=false', '--latest']), { mutation: true });
+        }
         // 공개된 검증 산출물의 PC 설치와 웹 배포는 독립적이다. 둘 다 성공한 뒤에만 재로딩한다.
         const applied = await Promise.allSettled([
             (async () => {
-                await stage('pages-deploy', () => execute('pages-deploy', 'npx', ['--no-install', 'wrangler', 'pages', 'deploy',
-                    webOutput, '--project-name', config.pagesProject, '--branch', 'main'], join(root, 'android/packages/app')),
-                { mutation: true });
-                await checkWeb({ url: config.webUrl, output: webOutput });
-                await stage('web-patch', async () => {
+                if (targets.web) {
+                    await stage('pages-deploy', () => execute('pages-deploy', 'npx', ['--no-install', 'wrangler', 'pages', 'deploy',
+                        webOutput, '--project-name', config.pagesProject, '--branch', 'main'], join(root, 'android/packages/app')),
+                    { mutation: true });
+                    await checkWeb({ url: config.webUrl, output: webOutput });
+                    await recordDeployment(config.cacheRoot, 'web', { commit, version });
+                }
+                if (targets.runtime) await stage('web-patch', async () => {
                     await execute('web-patch', process.execPath, ['scripts/patch-paseo-composer.mjs']);
                     await execute('web-patch-check', process.execPath, ['scripts/patch-paseo-composer.mjs', '--check']);
                 });
             })(),
             (async () => {
+                if (!targets.desktop) return;
                 console.log('Publication complete; waiting for idle before PC/runtime apply.');
-                await waitForIdle(listAgents);
+                await waitForIdle(listAgents, sleep ? { sleep } : undefined);
                 const installed = (await capture('dpkg-query', ['-W', '-f=${Version}', 'paseodog'])).trim();
                 if (installed !== version.replace('-', '~')) await stage('pc-install', () =>
                     execute('pc-install', 'sudo', ['-n', 'dpkg', '-i', releaseArtifacts(workspace, version)[2]]), { mutation: true });
@@ -174,17 +205,31 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
         ]);
         const applyFailures = applied.filter(result => result.status === 'rejected').map(result => result.reason);
         if (applyFailures.length) throw new AggregateError(applyFailures, applyFailures.map(error => error.message).join('; '));
-        await waitForIdle(listAgents);
-        await stage('plugin-reload', () => execute('plugin-reload', process.execPath,
-            [...wrapper, 'plugin', 'reload', 'paseodog-provider']), { mutation: true });
-        const diagnostic = JSON.parse(await capture(process.execPath, [...wrapper, 'provider', 'diagnostic', 'paseodog', '--json']));
-        if (!diagnostic.diagnostic.startsWith('Provider is available')) throw new Error('Provider not ready after reload');
-        await waitForIdle(listAgents);
-        await stage('pc-launch', () => launchDesktop(config, run), { mutation: true });
-        const desktopRelease = await installedRelease();
-        if (desktopRelease.versionCode !== Number(versionCode)) throw new Error('Installed desktop version mismatch');
-        console.log('GitHub, Pages, runtime and desktop startup verified.');
-        return { commit, version, tag };
+        if (targets.runtime) {
+            await waitForIdle(listAgents, sleep ? { sleep } : undefined);
+            // 데몬 갱신은 기존 업데이터 경로를 그대로 쓴다. 다른 세션이 이후 커밋을 올렸으면 그 커밋까지 반영될 수 있다.
+            if (config.updaterRoot && config.updaterUnit) await stage('runtime-update', async () => {
+                await execute('runtime-update', 'systemctl', ['--user', 'start', config.updaterUnit]);
+                const receipt = JSON.parse(await readFile(join(config.updaterRoot, 'receipt.json'), 'utf8'));
+                if (receipt.phase !== 'applied' || !/^[0-9a-f]{40}$/.test(receipt.revision || ''))
+                    throw new Error(`Daemon updater did not apply: ${receipt.phase}`);
+                if (receipt.revision !== commit)
+                    await capture('git', ['merge-base', '--is-ancestor', commit, receipt.revision]);
+                return { revision: receipt.revision };
+            }, { mutation: true });
+            await stage('plugin-reload', () => execute('plugin-reload', process.execPath,
+                [...wrapper, 'plugin', 'reload', 'paseodog-provider']), { mutation: true });
+            const diagnostic = JSON.parse(await capture(process.execPath, [...wrapper, 'provider', 'diagnostic', 'paseodog', '--json']));
+            if (!diagnostic.diagnostic.startsWith('Provider is available')) throw new Error('Provider not ready after reload');
+        }
+        if (targets.desktop) {
+            await waitForIdle(listAgents, sleep ? { sleep } : undefined);
+            await stage('pc-launch', () => launchDesktop(config, run), { mutation: true });
+            const desktopRelease = await installedRelease();
+            if (desktopRelease.versionCode !== Number(versionCode)) throw new Error('Installed desktop version mismatch');
+        }
+        console.log(`Delivery verified: ${describePlan(plan)}`);
+        return { commit, version, tag: github ? tag : null, plan };
     } finally {
         await lock.close();
         await rm(lockPath);

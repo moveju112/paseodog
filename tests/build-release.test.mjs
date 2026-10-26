@@ -144,6 +144,20 @@ test('failed builds drain their siblings and never start dependent stages', asyn
     await assert.rejects(runReleaseBuild(async () => { throw new Error('deps failed'); }), /deps failed/);
 });
 
+// 변경 대상만 빌드한다. 공통 의존성은 클라이언트 대상이 하나라도 있으면 한 번 빌드한다.
+test('release builds run only the selected platform stages', async () => {
+    const order = async targets => {
+        const calls = [];
+        await runReleaseBuild(async name => { calls.push(name); }, targets);
+        return calls;
+    };
+    assert.deepEqual(await order({ android: true, desktop: false, web: false }), ['dependencies', 'android']);
+    assert.deepEqual(await order({ android: false, desktop: false, web: true }), ['dependencies']);
+    assert.deepEqual(await order({ android: false, desktop: false, web: false }), []);
+    assert.deepEqual(await order({ android: false, desktop: true, web: false }),
+        ['dependencies', 'desktop-dependencies', 'web', 'desktop-main', 'linux', 'windows']);
+});
+
 // 입력 검증은 빌드나 디렉터리 생성보다 먼저 실행한다.
 test('release builds require explicit versions and separate absolute output/cache paths', async () => {
     await assert.rejects(buildRelease({ workspace: 'relative' }), /must be absolute/);

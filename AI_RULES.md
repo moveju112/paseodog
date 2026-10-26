@@ -6,7 +6,7 @@ This is the canonical project rule file; `AGENTS.md` and `CLAUDE.md` link here. 
 
 - Answer diagnosis/status questions without edits or waiting for unrelated implementation to finish. Implement only the requested outcome; a newly found improvement is not another task.
 - Code and project-rule changes include verification and selective commit/push of this task's changes. A review-only or no-commit request overrides this default. Preserve other work.
-- No build, publication, install or reload for an ordinary edit. An explicit build/release request retains the full-delivery default: APK, Linux deb/AppImage, Windows installer, existing approved signing, GitHub, dedicated web and this PC. An explicitly narrower request wins; never silently expand it.
+- No build, publication, install or reload for an ordinary edit. An explicit build/release request delivers only the targets (APK, desktop deb/AppImage/Windows, dedicated web, this PC's daemon) changed since each target's actually deployed baseline, including other sessions' pushed commits; unknown baselines or paths fall back to that target's full delivery. An explicit "전체"/full or narrower target request wins; never silently expand it.
 - Stop when the requested outcome and its required checks are complete. Report observed results and blockers; source, published artifacts and running installations are separate states.
 
 ## Execution

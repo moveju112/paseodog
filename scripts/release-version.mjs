@@ -33,7 +33,7 @@ export async function advanceReleaseVersion(source, repo, run = runCommand, {
     if (headings.length !== 1) throw new Error('Expected one product changelog heading');
     const updated = [
         JSON.stringify({ ...release, versionCode }, null, 2) + '\n',
-        changelog.replace(headings[0], `${headings[0]}\n\n- ${versionCode}: 최신 게시 소스의 검증·전체 플랫폼 릴리즈·서버 반영을 실행한다.`),
+        changelog.replace(headings[0], `${headings[0]}\n\n- ${versionCode}: 최신 게시 소스를 검증하고 기준점 이후 변경된 대상만 배포한다.`),
     ];
     let hashes = manifest;
     for (let index = 0; index < updated.length; index++) {

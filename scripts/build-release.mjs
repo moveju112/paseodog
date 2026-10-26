@@ -16,28 +16,29 @@ async function settleBuilds(builds) {
 }
 
 // 공통 의존성은 한 번만 빌드하고 웹이 준비되는 즉시 PC 패키징을 시작한다.
-export async function runReleaseBuild(run) {
+// 변경 대상만 빌드한다. 웹(Pages) 단독 배포도 공통 의존성은 필요하다.
+export async function runReleaseBuild(run, { android = true, desktop = true, web = true } = {}) {
+    if (!android && !desktop && !web) return;
     await run('dependencies');
-    const android = run('android');
+    const androidBuild = android ? run('android') : null;
     await settleBuilds([
-        android,
-        (async () => {
+        androidBuild,
+        desktop ? (async () => {
             await run('desktop-dependencies');
             await run('web');
             await run('desktop-main');
             const linux = run('linux');
             // APK 또는 Linux가 끝나 빈 자리가 생기면 Windows를 시작한다. 최대 두 작업은 유지한다.
             const windows = (async () => {
-                await Promise.race([android, linux]);
+                if (androidBuild) await Promise.race([androidBuild, linux]);
                 await run('windows');
             })();
             await settleBuilds([linux, windows]);
-        })(),
-    ]);
+        })() : null,
+    ].filter(Boolean));
 }
-
 // 고유 산출물 폴더와 재사용 캐시를 분리하고 플랫폼별 Metro 임시 경로를 고정한다.
-export async function buildRelease({ workspace, cacheRoot, signingInit, versionCode, version, metroWorkers, checkpoint }) {
+export async function buildRelease({ workspace, cacheRoot, signingInit, versionCode, version, metroWorkers, checkpoint, targets }) {
     for (const value of [workspace, cacheRoot, signingInit]) {
         if (!value || !isAbsolute(value)) throw new Error('workspace, cache-root and signing-init must be absolute');
     }
@@ -119,7 +120,7 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
     };
     await runReleaseBuild(name => checkpoint
         ? checkpoint(`build-${name}`, () => execute(name), { artifacts: artifacts[name] })
-        : execute(name));
+        : execute(name), targets);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

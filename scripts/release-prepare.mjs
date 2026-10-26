@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { delimiter, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -8,13 +8,15 @@ import { runCommand } from './release-command.mjs';
 import { withTestLock } from './test.mjs';
 import { advanceReleaseVersion } from './release-version.mjs';
 import { desktopRootPids } from './release-apply.mjs';
+import { deliveryPlan, describePlan, validateTargets } from './release-targets.mjs';
 
 // 준비된 전용 worktree만 전진시킨다. 의존성/Gradle/Metro 복사나 사용자 트리 정리는 하지 않는다.
 export async function prepareRelease(profile, commit, { run = runCommand, adopt = false, start = false, nextVersion = false,
-    reconcileDesktopExit = false, reconcilePluginReload = false } = {}) {
+    reconcileDesktopExit = false, reconcilePluginReload = false, targets = profile.targets } = {}) {
     const requestStartedAt = new Date().toISOString();
     if (nextVersion && !start) throw new Error('--next-version requires --start');
     if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('An exact pushed commit is required');
+    targets = validateTargets(targets);
     if (!isAbsolute(profile.sourceRoot || '') || !isAbsolute(profile.cacheRoot || ''))
         throw new Error('sourceRoot and cacheRoot must be absolute');
     const source = await realpath(profile.sourceRoot);
@@ -106,7 +108,22 @@ export async function prepareRelease(profile, commit, { run = runCommand, adopt 
         // 갱신한 소스의 버전·blob 게이트로 native 패치를 적용한 뒤에만 검증·배포를 시작한다.
         await run(process.execPath, [join(source, 'scripts/patch-mixdog.mjs')], { cwd: source });
         await run(process.execPath, [join(source, 'android/scripts/patch-metro-image-size.mjs')], { cwd: source });
-        if (nextVersion) ({ commit } = await advanceReleaseVersion(source, profile.repo, run));
+        const workspace = await mkdtemp('/data/tmp/ubuntu/paseodog-release-');
+        try {
+            // 버전을 올리기 전에 배포 대상을 판정한다. 다른 세션의 이전 커밋도 기준점 이후 변경에 포함된다.
+            const plan = await deliveryPlan({ ...profile, workspace, targets },
+                { capture: (command, args, cwd) => run(command, args, { cwd, capture: true }), commit, cwd: source });
+            console.log(`Delivery plan: ${describePlan(plan)}`);
+            if (!Object.values(plan.targets).some(Boolean))
+                throw new Error('No deployable changes since the deployed baselines');
+            // GitHub 릴리즈가 없는 웹·런타임 배포는 앱 버전 번호를 올리지 않는다.
+            if (nextVersion && (plan.targets.android || plan.targets.desktop))
+                ({ commit } = await advanceReleaseVersion(source, profile.repo, run));
+        } catch (error) {
+            // 배포를 시작하지 않은 이번 호출의 빈 workspace만 정리한다.
+            await rm(workspace, { recursive: true, force: true });
+            throw error;
+        }
         const env = { ...process.env,
             ...(profile.androidHome ? { ANDROID_HOME: profile.androidHome } : {}),
             ...(profile.wineBin ? { PATH: profile.wineBin + delimiter + process.env.PATH } : {}) };
@@ -117,10 +134,9 @@ export async function prepareRelease(profile, commit, { run = runCommand, adopt 
         if (nativeChanged.trim()) await run('npx', ['--no-install', 'expo', 'prebuild',
             '--platform', 'android', '--no-install'], { cwd: join(source, 'android/packages/app'),
             env: { ...env, CI: '1', APP_VARIANT: 'production' } });
-        const workspace = await mkdtemp('/data/tmp/ubuntu/paseodog-release-');
         if (reconciliation) await writeFile(join(workspace, reconciliationFile),
             JSON.stringify(reconciliation, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
-        const config = { ...profile, workspace, requestStartedAt };
+        const config = { ...profile, workspace, requestStartedAt, targets };
         const path = join(workspace, 'config.json');
         await writeFile(path, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
         await writeFile(marker, JSON.stringify({ source, common, workspace }), { mode: 0o600 });
@@ -135,11 +151,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     try {
         const { values } = parseArgs({ options: { config: { type: 'string' }, commit: { type: 'string' },
             adopt: { type: 'boolean' }, start: { type: 'boolean' }, 'next-version': { type: 'boolean' },
+            targets: { type: 'string' },
             'reconcile-desktop-exit': { type: 'boolean' }, 'reconcile-plugin-reload': { type: 'boolean' } } });
         if (!isAbsolute(values.config || '')) throw new Error('--config requires an absolute host profile');
         const profile = JSON.parse(await readFile(values.config, 'utf8'));
         console.log(JSON.stringify(await prepareRelease(profile, values.commit,
             { adopt: values.adopt, start: values.start, nextVersion: values['next-version'],
-                reconcileDesktopExit: values['reconcile-desktop-exit'], reconcilePluginReload: values['reconcile-plugin-reload'] })));
+                reconcileDesktopExit: values['reconcile-desktop-exit'], reconcilePluginReload: values['reconcile-plugin-reload'],
+                // auto(기본)·full 또는 쉼표로 구분한 대상 목록
+                targets: !values.targets || ['auto', 'full'].includes(values.targets) ? values.targets ?? profile.targets
+                    : values.targets.split(',') })));
     } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
