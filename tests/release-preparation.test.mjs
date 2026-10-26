@@ -39,6 +39,33 @@ test('prepared worktree preserves dependency bytes, reuses its registration and 
     assert.ok(calls.some(row => row.includes('--verify-only')));
     assert.ok(calls.some(row => row.includes('--start')));
     assert.ok(calls.every(row => !['cp', 'npm', 'rsync'].includes(row[0])));
+    const patches = calls.map((row, index) => row[1] === join(profile.sourceRoot, 'scripts/patch-mixdog.mjs') ? index : -1)
+        .filter(index => index >= 0);
+    assert.equal(patches.length, 2);
+    assert.ok(calls.findIndex(row => row.includes('--ff-only')) < patches[0]);
+    assert.ok(patches[0] < calls.findIndex(row => row.includes('--verify-only')));
+    assert.ok(patches[1] < calls.findIndex(row => row.includes('--start')));
+});
+
+test('native patch rejection stops preparation before versioning or starting delivery', async t => {
+    const profile = await fixture(t);
+    const commit = 'd'.repeat(40);
+    const calls = [];
+    const run = async (command, args) => {
+        calls.push([command, ...args]);
+        if (command === 'git') {
+            if (args[0] === 'rev-parse') return '/repo/common\n';
+            if (args[0] === 'ls-remote') return commit + '\trefs/heads/main\n';
+        }
+        if (args[0] === join(profile.sourceRoot, 'scripts/patch-mixdog.mjs'))
+            throw new Error('Native patch hash mismatch');
+        return '';
+    };
+    await assert.rejects(prepareRelease(profile, commit, { run, adopt: true, start: true, nextVersion: true }),
+        /Native patch hash mismatch/);
+    assert.ok(calls.some(row => row.includes('--ff-only')));
+    assert.ok(calls.every(row => !row.includes('commit') && !row.includes('push') && !row.includes('--start')
+        && !row.includes('--verify-only') && row[0] !== 'gh'));
 });
 
 test('preparation rejects active delivery, dirty sources and uncertain mutation without advancing source', async t => {
