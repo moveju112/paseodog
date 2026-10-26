@@ -14,6 +14,9 @@ const fdroidModuleOverrides = {
 const wsOutboundAotModuleSuffix = path.join("generated", "validation", "ws-outbound.aot.js");
 const protocolValidationRoot = path.join("packages", "protocol", "dist", "validation") + path.sep;
 const hermesWsOutboundOverride = path.resolve(appSrcRoot, "hermes/ws-outbound-aot.ts");
+// Node 전용 diagnostics_channel 대체 모듈 (lru-cache 11.3+를 내장한 xterm 애드온용)
+const diagnosticsChannelModules = new Set(["diagnostics_channel", "node:diagnostics_channel"]);
+const diagnosticsChannelShim = path.resolve(appSrcRoot, "polyfills/diagnostics-channel.ts");
 const customWebPlatform = (process.env.PASEO_WEB_PLATFORM ?? "")
   .trim()
   .replace(/^\./, "")
@@ -87,6 +90,9 @@ function isProtocolWsOutboundAotImport(context, moduleName) {
 }
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (diagnosticsChannelModules.has(moduleName)) {
+    return { type: "sourceFile", filePath: diagnosticsChannelShim };
+  }
   if (platform !== "web" && isProtocolWsOutboundAotImport(context, moduleName)) {
     return resolveWithCustomWebOverlay(context, hermesWsOutboundOverride, platform);
   }
