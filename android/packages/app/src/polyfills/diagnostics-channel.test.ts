@@ -16,7 +16,8 @@ describe("diagnostics_channel shim", () => {
         ).toEqual({ type: "sourceFile", filePath: shimPath });
       }
     }
-  });
+    // expo/metro-config 첫 로드가 릴리즈 병렬 검증에서 5초를 넘는다.
+  }, 30_000);
 
   it("acts as channels without subscribers", async () => {
     const metrics = channel("lru-cache:metrics");

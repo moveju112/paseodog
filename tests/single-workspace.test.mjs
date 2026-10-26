@@ -66,6 +66,7 @@ function headerHarness(platform) {
             View: 'view', Text: 'text', Tooltip: 'tooltip', TooltipTrigger: 'trigger',
             TooltipContent: 'content', IconTooltipContent: 'icon',
             SidebarDisplayPreferencesMenu: 'display-menu',
+            SidebarWorkspaceFolderCreateButton: 'folder-create',
         };
     } else {
         styles = new Function('e', `return {
