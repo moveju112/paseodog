@@ -537,7 +537,9 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
         }
         if (command === 'systemctl') {
             assert.deepEqual(active, [], 'daemon update must wait for idle');
-            await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'applied', revision: commit }));
+            // 업데이터는 전환 직후 종료하고, 검증 서비스가 잠시 뒤 applied로 바꾼다.
+            await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'awaiting-verification', revision: commit }));
+            setTimeout(() => void writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'applied', revision: commit })), 20);
         }
         if (args.includes('diagnostic')) return '{"diagnostic":"Provider is available"}';
         return '';
@@ -556,7 +558,7 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
         checkWeb: async () => { throw new Error('web must not deploy'); },
         launchDesktop: async () => { throw new Error('desktop must not launch'); },
         installedRelease: async () => { throw new Error('desktop must not be read'); },
-        sleep: async () => {},
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, Math.min(ms, 10))),
     });
     const download = calls.find(row => row[0] === 'gh' && row[2] === 'download' && row.includes(join(config.workspace, 'carry')));
     assert.ok(download.includes('PaseoDog-1.0.0-rc.7.11090-amd64.deb') && download.includes('latest.yml'));
