@@ -171,6 +171,11 @@ export default {
       ...buildProfile.notificationPlugins,
       "expo-audio",
       [
+        // 터미널 셀 폭을 고정하기 위해 실제 고정폭 폰트를 번들한다. 기기 글꼴 설정이 monospace를 덮어쓸 수 있다.
+        "expo-font",
+        { android: { fonts: ["./assets/fonts/JetBrainsMono.ttf"] } },
+      ],
+      [
         "expo-gradle-jvmargs",
         {
           xmx: "4096m",

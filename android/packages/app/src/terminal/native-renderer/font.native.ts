@@ -8,6 +8,11 @@ const ANDROID_LOADED_MONO_FAMILIES: ReadonlySet<string> = new Set([
   "sans-serif-monospace",
 ]);
 
+// Bundled by the expo-font config plugin as assets/fonts/JetBrainsMono.ttf. Device font
+// styles can replace the system monospace face with a proportional one, which breaks the
+// cell grid, so the default stack's first family must resolve to this real monospace file.
+const ANDROID_MONO_ALIASES = new Map<string, string>([["jetbrains mono", "JetBrainsMono"]]);
+
 const IOS_MONO_ALIASES = new Map<string, string>([
   ["sf mono", "Menlo"],
   ["sfmono-regular", "Menlo"],
@@ -43,6 +48,8 @@ function loadedNativeFontFamily(family: string): string | null {
     return IOS_LOADED_MONO_FAMILIES.has(normalized) ? family : null;
   }
   if (Platform.OS === "android") {
+    const alias = ANDROID_MONO_ALIASES.get(normalized);
+    if (alias) return alias;
     return ANDROID_LOADED_MONO_FAMILIES.has(normalized) ? family : null;
   }
   return normalized === "monospace" ? family : null;
