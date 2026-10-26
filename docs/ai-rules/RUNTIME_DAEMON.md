@@ -10,6 +10,10 @@ Source changes do not authorize runtime apply. Apply only under an explicit rele
 - Keep the previous executable/data recoverable during cutover. A failed readiness check is incomplete apply, not success; do not keep restarting an unverified candidate.
 - Never use `scripts/install.sh` / `scripts/install.mjs` as a diagnostic. New public listeners, account/chat deletion and signing-key replacement require separate authorization.
 
+## Interrupted turns
+
+- A turn left running by a dead daemon process is never replayed. After startup the provider plugin sends each such agent one new continuation instruction (check state, do not repeat finished work) through `paseodog agent send --no-wait`; `auto-resume.json` in the journal root records the attempt so it is sent at most once. Sessions owned by a live process, archived or internal agents are skipped. Set `PASEODOG_AUTO_RESUME=false` in the daemon environment to disable it.
+
 ## Read-only diagnosis
 
 Choose the command matching the missing evidence, not the whole list:

@@ -179,3 +179,5 @@ export class MemoryJournalStore {
     list() { return [...this.values.values()].map((value) => structuredClone(value)); }
     listSummaries() { return [...this.values.values()].map(sessionSummary).filter(Boolean); }
 }
+// 세션 잠금 소유자가 살아 있는지(다른 모듈의 중단 턴 판정용).
+export { alive as lockOwnerAlive };
