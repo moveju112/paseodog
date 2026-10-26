@@ -14,7 +14,7 @@ type Metric = { turns?: number; tokens?: number; input?: number; output?: number
 type Metrics = {
     efforts?: (Metric & { provider: string; model: string; agent: string | null; effort: string | null; fast?: boolean | null })[];
     range: { fromMs: number; toMs: number }; totals: Metric; quotaError?: string;
-    providers: (Metric & { provider: string; providerKind: string; models: (Metric & { model: string })[] })[];
+    providers: (Metric & { provider: string; providerKind: string; label?: string; models: (Metric & { model: string })[] })[];
     series: (Metric & { label: string | number })[];
     quotas: { id: string; label: string; authenticated: boolean; updatedAt: number | null;
         windows: { label: string; usedPct: number | null; resetAt: number | null }[];
@@ -111,12 +111,14 @@ function SectionTitle({ colors, title, hint }: { colors: Colors; title: string; 
 }
 
 // 기간별 토큰 원장과 OAuth 할당량을 기존 Mixdog API로 조회한다.
-export function UsageMonitor({ theme }: PluginSurfaceProps) {
+export function UsageMonitor({ theme, layout }: PluginSurfaceProps) {
     const invoke = useRpc(engineMetrics);
     const latest = useRef(invoke);
     latest.current = invoke;
     const [view, setView] = useState<typeof periods[number][0]>('hour');
     const [details, setDetails] = useState(false);
+    // 좁은 화면은 제공자 탭으로 나눠 한 번에 하나만 보여준다.
+    const [providerTab, setProviderTab] = useState<string | null>(null);
     const [startDay, setStartDay] = useState('');
     const [endDay, setEndDay] = useState('');
     const [revision, setRevision] = useState(0);
@@ -166,6 +168,19 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
         { label: '캐시 쓰기', value: totals.cacheWrite || 0, color: colors.foregroundMuted },
     ] : [];
     const breakdownSum = breakdown.reduce((sum, item) => sum + item.value, 0);
+    const narrow = layout?.compact === true;
+    // 제공자 탭 목록 (Codex -> Claude -> 그 외, 사용 기록이 없어도 연결된 OAuth 계정은 포함)
+    const providerOrder = ['openai-oauth', 'anthropic-oauth'];
+    const providerTabs = data ? [...new Map([
+        ...data.quotas.map((row) => [row.id, row.label] as const),
+        ...(data.efforts || []).map((row) => [row.provider, row.provider] as const),
+        ...data.providers.map((row) => [row.provider, row.label || row.provider] as const),
+    ]).entries()].sort(([a], [b]) => (providerOrder.indexOf(a) + 1 || 99) - (providerOrder.indexOf(b) + 1 || 99)) : [];
+    const selectedProvider = providerTabs.some(([id]) => id === providerTab) ? providerTab : providerTabs[0]?.[0] ?? null;
+    const shown = (id: string) => !narrow || selectedProvider === null || id === selectedProvider;
+    const shownProviders = data?.providers.filter((row) => shown(row.provider)) || [];
+    const shownQuotas = data?.quotas.filter((row) => shown(row.id)) || [];
+    const shownEfforts = (data?.efforts || []).filter((row) => shown(row.provider));
     const inputStyle = { ...text, minWidth: 150, flexGrow: 1, flexBasis: 150, paddingHorizontal: 12, paddingVertical: 8,
         borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surface0 };
     return <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
@@ -180,6 +195,16 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
                     color: details === value ? colors.foreground : colors.foregroundMuted }}>{value ? '자세히' : '요약'}</Text>
             </Pressable>)}
         </View>
+        {narrow && providerTabs.length > 1 && <View accessibilityRole="tablist" accessibilityLabel="제공자"
+            style={{ flexDirection: 'row', padding: 3, borderRadius: 9, backgroundColor: colors.surface2 }}>
+            {providerTabs.map(([id, label]) => <Pressable key={id} accessibilityRole="tab" accessibilityLabel={`${label} 사용량`}
+                accessibilityState={{ selected: selectedProvider === id }} onPress={() => setProviderTab(id)}
+                style={{ flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 7,
+                    backgroundColor: selectedProvider === id ? colors.surface0 : 'transparent' }}>
+                <Text style={{ ...text, fontWeight: selectedProvider === id ? '600' : '400',
+                    color: selectedProvider === id ? colors.foreground : colors.foregroundMuted }}>{label}</Text>
+            </Pressable>)}
+        </View>}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <View accessibilityRole="tablist" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 2, padding: 3, borderRadius: 9,
                 backgroundColor: colors.surface2, flexShrink: 1 }}>
@@ -212,23 +237,28 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
             <Text accessibilityLiveRegion="polite" style={{ ...text, color: colors.statusDanger }}>{error}</Text></View>}
         {data && totals && <>
             <Text style={muted}>{new Date(data.range.fromMs).toLocaleString()} ~ {new Date(data.range.toMs).toLocaleString()} · 2분마다 자동 갱신</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                <StatTile colors={colors} label="평균 응답 속도" value={`${speed(totals.outputTokensPerSecond)} tok/s`}
-                    hint="측정된 출력 토큰 / 응답 시간 · 대기·추론 포함" />
-                <StatTile colors={colors} label="토큰" value={number(totals.tokens)} />
-                <StatTile colors={colors} label="호출" value={number(totals.turns)} />
-                {details && <>
-                    <StatTile colors={colors} label="환산액" value={money(totals.costUsd)} hint="구독 환산 · 청구액 아님" />
-                    <StatTile colors={colors} label="API 비용" value={money(totals.costBilled)} />
-                    <StatTile colors={colors} label="캐시 적중" value={percent(totals.cacheHitRate)} />
-                </>}
-            </View>
+            {/* 요약 지표는 합산하지 않고 Codex·Claude 등 제공자별로 나눠 보여준다 */}
+            {shownProviders.map((row) => <View key={row.provider} accessibilityLabel={`${row.label || row.provider} 요약`} style={{ gap: 6 }}>
+                {!narrow && <Text selectable style={{ ...text, fontWeight: '600' }}>{row.label || row.provider}</Text>}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                    <StatTile colors={colors} label="평균 응답 속도" value={`${speed(row.outputTokensPerSecond)} tok/s`} />
+                    <StatTile colors={colors} label="토큰" value={number(row.tokens)} />
+                    <StatTile colors={colors} label="호출" value={number(row.turns)} />
+                    {details && <>
+                        <StatTile colors={colors} label="환산액" value={money(row.costUsd)} hint="구독 환산 · 청구액 아님" />
+                        <StatTile colors={colors} label="API 비용" value={money(row.costBilled)} />
+                        <StatTile colors={colors} label="캐시 적중" value={percent(row.cacheHitRate)} />
+                    </>}
+                </View>
+            </View>)}
+            {shownProviders.length ? <Text style={{ ...muted, fontSize: 11 }}>평균 응답 속도: 측정된 출력 토큰 / 응답 시간 · 대기·추론 포함</Text>
+                : <Text style={muted}>해당 기간 기록 없음</Text>}
             {!!totals.costUnpricedTurns && <View style={{ padding: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.statusWarning }}>
                 <Text style={{ ...text, fontSize: 13, color: colors.statusWarning }}>
                     가격 미확인 호출 {number(totals.costUnpricedTurns)}건은 비용 합계에서 누락될 수 있어요.</Text></View>}
             <SectionTitle colors={colors} title="OAuth 한도" />
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                {data.quotas.map((row) => <Card key={row.id} colors={colors} style={{ flexGrow: 1, flexBasis: 280, minWidth: 240 }}>
+                {shownQuotas.map((row) => <Card key={row.id} colors={colors} style={{ flexGrow: 1, flexBasis: 280, minWidth: 240 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <Text selectable style={{ ...text, fontSize: 15, fontWeight: '600', flexShrink: 1 }}>{row.label}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 3,
@@ -261,14 +291,14 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
                 </Card>)}
                 {!!data.quotaError && <Text accessibilityLiveRegion="polite" style={{ ...text, fontSize: 13, color: colors.statusWarning }}>
                     {data.quotaError}</Text>}
-                {!data.quotas.length && !data.quotaError && <Text style={muted}>연결된 OAuth 계정 없음</Text>}
+                {!shownQuotas.length && !data.quotaError && <Text style={muted}>연결된 OAuth 계정 없음</Text>}
             </View>
             {details && <>
             <SectionTitle colors={colors} title="토큰" />
             <Card colors={colors}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
                     <Text style={{ ...text, fontWeight: '600' }}>추이</Text>
-                    <Text style={muted}>구간 최대 {number(maxTokens)} 토큰</Text>
+                    <Text style={muted}>{narrow ? '모든 제공자 합계 · ' : ''}구간 최대 {number(maxTokens)} 토큰</Text>
                 </View>
                 {series.length ? <View style={{ flexDirection: 'row', gap: 8 }}>
                     <View style={{ width: 44, height: chartHeight, justifyContent: 'space-between', alignItems: 'flex-end' }}>
@@ -308,9 +338,9 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
                     </View>
                 </View>
             </Card>
-            <SectionTitle colors={colors} title="제공자·모델" hint={`${data.providers.length}개 제공자`} />
-            {!data.providers.length && <Text style={muted}>해당 기간 기록 없음</Text>}
-            {data.providers.map((row) => <Card key={row.provider} colors={colors}>
+            <SectionTitle colors={colors} title="제공자·모델" hint={`${shownProviders.length}개 제공자`} />
+            {!shownProviders.length && <Text style={muted}>해당 기간 기록 없음</Text>}
+            {shownProviders.map((row) => <Card key={row.provider} colors={colors}>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
                         <Text selectable style={{ ...text, fontSize: 15, fontWeight: '600' }}>{row.provider}</Text>
@@ -329,7 +359,7 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
                         number((model.cacheRead || 0) + (model.cacheWrite || 0)), percent(model.cacheHitRate), money(model.costUsd)] }))} />
             </Card>)}
             <SectionTitle colors={colors} title="에이전트·Effort·Fast" hint="모델·요청 effort·Fast 설정별 속도 비교" />
-            {groupEfforts(data.efforts || []).map((group) => {
+            {groupEfforts(shownEfforts).map((group) => {
                 const agentLabel = group.agent || '에이전트 미기록';
                 return <Card key={JSON.stringify(group.agent)} colors={colors}>
                     <Text selectable style={{ ...text, fontSize: 15, fontWeight: '600' }}>{agentLabel}</Text>
@@ -342,7 +372,7 @@ export function UsageMonitor({ theme }: PluginSurfaceProps) {
                                 number(item.tokens), item.costUnpricedTurns === item.turns ? '미확인' : money(item.costUsd)] })))} />
                 </Card>;
             })}
-            {!data.efforts?.length && <Text style={muted}>선택한 기간에 Effort·Fast별 상세 기록이 없습니다.</Text>}
+            {!shownEfforts.length && <Text style={muted}>선택한 기간에 Effort·Fast별 상세 기록이 없습니다.</Text>}
             <Text style={{ ...muted, fontSize: 11 }}>과거 기록은 추정하지 않고 미기록으로 표시하며, 상세 기록이 없는 합계는 이 분류에 포함되지 않을 수 있어요.</Text>
             </>}
         </>}

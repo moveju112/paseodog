@@ -12,7 +12,7 @@ const React = require('react');
 const { create, act } = require('react-test-renderer');
 
 // 테스트 호스트 모듈로 클라이언트 번들 생성 (실제 RPC 정의 -> rpc 이름별 테스트 응답)
-async function loadClient(t) {
+async function loadClient(t, { compact = true } = {}) {
     const directory = mkdtempSync(join(tmpdir(), 'paseodog-client-test-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const output = join(directory, 'client.cjs');
@@ -64,7 +64,7 @@ async function loadClient(t) {
         await act(async () => {
             tree = create(React.createElement(screen.Component, {
                 theme: { colors: { foreground: '#ffffff' } }, host: { id: 'test', label: 'test' },
-                layout: { compact: true, platform: 'android' },
+                layout: { compact, platform: compact ? 'android' : 'web' },
             }));
         });
         mounted.push(tree);
@@ -84,12 +84,13 @@ test('summary prioritizes measured tok/s and details separate Fast without refet
     globalThis.__paseodogTestRpc = async () => {
         calls++;
         return {
-            range: { fromMs: 1, toMs: 2 }, totals: { outputTokensPerSecond: 38.2, turns: 3, tokens: 1000 },
-            providers: [], series: [], quotas: [],
+            range: { fromMs: 1, toMs: 2 }, totals: { outputTokensPerSecond: 99.9, turns: 3, tokens: 1000 },
+            providers: [{ provider: 'openai-oauth', providerKind: 'oauth', label: 'Codex',
+                outputTokensPerSecond: 38.2, turns: 3, tokens: 1000, models: [] }], series: [], quotas: [],
             efforts: [
-                { provider: 'openai', model: 'test', agent: 'worker', effort: 'high', fast: true, outputTokensPerSecond: 40, turns: 1 },
-                { provider: 'openai', model: 'test', agent: 'worker', effort: 'high', fast: false, outputTokensPerSecond: 20, turns: 1 },
-                { provider: 'openai', model: 'test', agent: 'worker', effort: 'high', fast: null, outputTokensPerSecond: null, turns: 1 },
+                { provider: 'openai-oauth', model: 'test', agent: 'worker', effort: 'high', fast: true, outputTokensPerSecond: 40, turns: 1 },
+                { provider: 'openai-oauth', model: 'test', agent: 'worker', effort: 'high', fast: false, outputTokensPerSecond: 20, turns: 1 },
+                { provider: 'openai-oauth', model: 'test', agent: 'worker', effort: 'high', fast: null, outputTokensPerSecond: null, turns: 1 },
             ],
         };
     };
@@ -98,13 +99,14 @@ test('summary prioritizes measured tok/s and details separate Fast without refet
     const content = () => tree.root.findAllByType('text').map(node => node.children.join('')).join('\n');
     await act(async () => button('AI 사용량·에이전트 분석').props.onPress());
     assert.equal(button('사용량 요약').props.accessibilityState.selected, true);
-    assert.ok(content().includes('38.2 tok/s'));
+    // 합계가 아니라 제공자별 측정값을 보여준다.
+    assert.ok(content().includes('38.2 tok/s') && !content().includes('99.9 tok/s'));
     assert.ok(!content().includes('환산액') && !content().includes('추이') && !content().includes('Effort'));
     await showUsageDetails(tree);
     assert.equal(button('사용량 자세히').props.accessibilityState.selected, true);
     for (const [fast, value] of [['켜짐', '40.0'], ['꺼짐', '20.0'], ['미기록', '—']]) {
         const row = tree.root.findAllByType('view')
-            .find(node => node.props.accessibilityLabel === `worker openai test high Fast ${fast} 사용량`);
+            .find(node => node.props.accessibilityLabel === `worker openai-oauth test high Fast ${fast} 사용량`);
         assert.ok(row.findAllByType('text').some(node => node.children.join('') === value));
     }
     await act(async () => button('사용량 요약').props.onPress());
@@ -168,7 +170,7 @@ test('usage shows independent agent/effort rows even without provider model summ
 
 // 같은 에이전트·모델의 effort는 한 묶음에 모으고, 제공자·모델·에이전트·미기록 값은 따로 유지한다.
 test('usage groups effort rows by agent then provider model without repeating headings', async (t) => {
-    const { footer, renderScreen } = await loadClient(t);
+    const { footer, renderScreen } = await loadClient(t, { compact: false });
     globalThis.__paseodogTestRpc = async () => ({
         range: { fromMs: 1, toMs: 2 }, totals: {}, providers: [], series: [], quotas: [],
         efforts: [
@@ -223,7 +225,7 @@ test('effort section remains visible with missing or empty historical detail', a
 });
 
 test('usage dashboard preserves metrics, quota percentages and period refresh controls', async (t) => {
-    const { footer, renderScreen } = await loadClient(t);
+    const { footer, renderScreen } = await loadClient(t, { compact: false });
     const calls = [];
     globalThis.__paseodogTestRpc = async (input, name) => {
         calls.push({ input, name });
@@ -232,7 +234,8 @@ test('usage dashboard preserves metrics, quota percentages and period refresh co
             totals: { costUsd: 14.55, costBilled: 0, tokens: 1000, turns: 12, cacheHitRate: 0.9,
                 input: 50, output: 50, cacheRead: 900, cacheWrite: 0 },
             series: [{ label: '10:00', tokens: 1000 }, { label: '11:00', tokens: 0 }],
-            providers: [{ provider: 'openai-oauth', providerKind: 'oauth', share: 1, costUsd: 14.55,
+            providers: [{ provider: 'openai-oauth', providerKind: 'oauth', label: 'Codex', share: 1, costUsd: 14.55,
+                costBilled: 0, cacheHitRate: 0.9, tokens: 1000, turns: 12,
                 models: [{ model: 'test-model', tokens: 1000, turns: 12, outputTokensPerSecond: 40,
                     input: 50, output: 50, cacheRead: 900, cacheWrite: 0, cacheHitRate: 0.9, costUsd: 14.55 }] }],
             quotas: [
@@ -274,7 +277,7 @@ test('usage dashboard preserves metrics, quota percentages and period refresh co
 
 // 모델·제공자가 달라도 같은 지표 열의 너비와 값 표시를 유지한다.
 test('model usage metrics share columns across models and providers without wrapping', async (t) => {
-    const { footer, renderScreen } = await loadClient(t);
+    const { footer, renderScreen } = await loadClient(t, { compact: false });
     globalThis.__paseodogTestRpc = async () => ({
         range: { fromMs: 1, toMs: 2 }, totals: {}, series: [], quotas: [],
         providers: [
@@ -495,4 +498,48 @@ test('native config viewer selects Claude/Codex sources, refreshes read-only and
     assert.equal(calls.length, 3);
     assert.ok(calls.every((call) => call.name === 'native-config-view' && Object.keys(call.input).join() === 'source'));
     assert.equal(tree.root.findAllByType('input').length, 0);
+});
+
+// 휴대폰 레이아웃은 Codex·Claude 탭으로 요약·한도·상세 표를 제공자별로 나눠 보여준다.
+test('compact usage switches Codex and Claude with provider tabs', async (t) => {
+    const { footer, renderScreen } = await loadClient(t);
+    globalThis.__paseodogTestRpc = async () => ({
+        range: { fromMs: 1, toMs: 2 }, totals: { tokens: 300, turns: 3 }, series: [],
+        providers: [
+            { provider: 'anthropic-oauth', providerKind: 'oauth', label: 'Claude', tokens: 200, turns: 1, outputTokensPerSecond: 61.5,
+                models: [{ model: 'claude-model', tokens: 200, turns: 1 }] },
+            { provider: 'openai-oauth', providerKind: 'oauth', label: 'Codex', tokens: 100, turns: 2, outputTokensPerSecond: 12.5,
+                models: [{ model: 'codex-model', tokens: 100, turns: 2 }] },
+        ],
+        quotas: [
+            { id: 'openai-oauth', label: 'Codex', authenticated: true, updatedAt: 1, windows: [{ label: '7D', usedPct: 41, resetAt: 2 }], resetCredits: null },
+            { id: 'anthropic-oauth', label: 'Claude', authenticated: true, updatedAt: 1, windows: [{ label: '5H', usedPct: 77, resetAt: 2 }], resetCredits: null },
+        ],
+        efforts: [{ provider: 'anthropic-oauth', model: 'claude-model', agent: 'worker', effort: 'low', turns: 1, tokens: 200 }],
+    });
+    const { tree } = await renderScreen(footer);
+    const button = (label) => tree.root.findAllByType('pressable').find((node) => node.props.accessibilityLabel === label);
+    const content = () => tree.root.findAllByType('text').map((node) => node.children.join('')).join('\n');
+    await act(async () => button('AI 사용량·에이전트 분석').props.onPress());
+    // Codex가 먼저 선택되고 Claude 지표는 숨긴다.
+    assert.equal(button('Codex 사용량').props.accessibilityState.selected, true);
+    assert.ok(content().includes('12.5 tok/s') && content().includes('41%'));
+    assert.ok(!content().includes('61.5 tok/s') && !content().includes('77%'));
+    await act(async () => button('Claude 사용량').props.onPress());
+    assert.ok(content().includes('61.5 tok/s') && content().includes('77%') && !content().includes('12.5 tok/s'));
+    await showUsageDetails(tree);
+    assert.ok(content().includes('claude-model') && !content().includes('codex-model'));
+    assert.ok(content().includes('모든 제공자 합계'));
+});
+
+// 분석 모달은 다른 모달처럼 바깥 영역을 누르면 닫힌다.
+test('analysis modal closes when the backdrop is pressed', async (t) => {
+    const { footer, renderScreen } = await loadClient(t);
+    globalThis.__paseodogTestRpc = async () => ({ range: { fromMs: 1, toMs: 2 }, totals: {}, series: [], providers: [], quotas: [] });
+    const { tree } = await renderScreen(footer);
+    const button = (label) => tree.root.findAllByType('pressable').find((node) => node.props.accessibilityLabel === label);
+    await act(async () => button('AI 사용량·에이전트 분석').props.onPress());
+    assert.equal(tree.root.findByType('modal').props.visible, true);
+    await act(async () => button('분석 모달 바깥 닫기').props.onPress());
+    assert.equal(tree.root.findByType('modal').props.visible, false);
 });

@@ -145,3 +145,21 @@ test('metrics project effort groups without private native metadata', async () =
     assert.deepEqual(result.efforts, [{ provider: 'openai', model: 'test', agent: 'worker', effort: 'low', fast: null, turns: 1, tokens: 10 }]);
     assert.doesNotMatch(JSON.stringify(result), /private/);
 });
+
+// 요약 탭의 제공자별 지표는 해당 제공자의 측정 출력·시간만으로 속도를 계산하고 표시 이름을 붙인다.
+test('metrics split response speed per provider with Codex and Claude labels', async () => {
+    const result = await readUsageMetrics({
+        getUsageStats: async () => ({ range: { fromMs: 1, toMs: 2 }, totals: { tokens: 30 }, daily: [],
+            providers: [{ provider: 'openai-oauth', providerKind: 'oauth', tokens: 10, models: [] },
+                { provider: 'anthropic-oauth', providerKind: 'oauth', tokens: 20, models: [] },
+                { provider: 'gemini', providerKind: 'api', tokens: 0, models: [] }] }),
+        getUsageDashboard: async () => ({ rows: [] }),
+        getEffortUsageStats: async () => [
+            { provider: 'openai-oauth', model: 'sol', speedOutput: 100, speedMs: 1000 },
+            { provider: 'anthropic-oauth', model: 'haiku', speedOutput: 300, speedMs: 1000 },
+        ],
+    });
+    assert.deepEqual(result.providers.map(({ provider, label, outputTokensPerSecond }) => [provider, label, outputTokensPerSecond]),
+        [['openai-oauth', 'Codex', 100], ['anthropic-oauth', 'Claude', 300], ['gemini', 'gemini', null]]);
+    assert.equal(result.totals.outputTokensPerSecond, 200);
+});

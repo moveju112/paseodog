@@ -17,7 +17,10 @@ export function AnalysisFooter(props: PluginSurfaceProps) {
             <Icon name="Activity" size={compact ? 20 : 16} color={colors.foregroundMuted ?? colors.foreground} />
         </Pressable>
         <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-            {open && <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
+            {open && <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                {/* 다른 모달과 같이 바깥 영역을 누르면 닫는다. 내용 영역은 뒤에 그려져 터치를 먼저 받는다. */}
+                <Pressable accessibilityRole="button" accessibilityLabel="분석 모달 바깥 닫기" onPress={() => setOpen(false)}
+                    style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.55)' }} />
                 <View accessibilityViewIsModal style={{ width: '94%', maxWidth: 960, height: '88%',
                     backgroundColor: colors.surface0, borderRadius: 14, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,

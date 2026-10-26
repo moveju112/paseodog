@@ -85,21 +85,25 @@ export async function readUsageMetrics(runtime, request = {}) {
         fromMs: stats.range.fromMs, toMs: stats.range.toMs,
     }) || [];
     // 요청별 속도의 단순 평균 대신 측정된 출력과 시간을 합산한다.
-    const speedOutput = efforts.reduce((sum, row) => sum + (row.speedOutput || 0), 0);
-    const speedMs = efforts.reduce((sum, row) => sum + (row.speedMs || 0), 0);
+    const speedOf = (rows) => {
+        const output = rows.reduce((sum, row) => sum + (row.speedOutput || 0), 0);
+        const ms = rows.reduce((sum, row) => sum + (row.speedMs || 0), 0);
+        return ms > 0 ? Math.round(output * 10000 / ms) / 10 : null;
+    };
     return {
         generatedAt: stats.generatedAt,
         ...(quotaError ? { quotaError } : {}),
         range: { fromMs: stats.range.fromMs, toMs: stats.range.toMs },
-        totals: { ...metricProjection(stats.totals),
-            outputTokensPerSecond: speedMs > 0 ? Math.round(speedOutput * 10000 / speedMs) / 10 : null },
+        totals: { ...metricProjection(stats.totals), outputTokensPerSecond: speedOf(efforts) },
         efforts: efforts.map((row) => ({
             provider: row.provider, model: row.model,
             agent: row.agent || null, effort: row.effort || null,
             fast: typeof row.fast === 'boolean' ? row.fast : null, ...metricProjection(row),
         })),
         providers: stats.providers.map((row) => ({
-            provider: row.provider, providerKind: row.providerKind, ...metricProjection(row),
+            provider: row.provider, providerKind: row.providerKind,
+            label: visibleOAuthProviders[row.provider] || row.provider, ...metricProjection(row),
+            outputTokensPerSecond: speedOf(efforts.filter((effort) => effort.provider === row.provider)),
             models: row.models.map((model) => ({ model: model.model, ...metricProjection(model) })),
         })),
         series: (stats.hourly || stats.daily).map((row) => ({

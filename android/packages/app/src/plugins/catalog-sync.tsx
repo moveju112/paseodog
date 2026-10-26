@@ -1,6 +1,6 @@
 import { useVoiceAudioEngineOptional } from "@/contexts/voice-context";
 import { pluginSettingsKey } from "./settings/use-settings";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { useHostFeature } from "@/runtime/host-features";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
@@ -16,6 +16,8 @@ export function PluginCatalogSync({
   const audio = useVoiceAudioEngineOptional();
   const connected = useHostRuntimeIsConnected(serverId);
   const supported = useHostFeature(serverId, "plugins");
+  // 설치에 사용한 클라이언트. 같은 클라이언트의 재연결은 기존 설치를 재사용한다.
+  const installedClient = useRef<DaemonClient | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -24,10 +26,12 @@ export function PluginCatalogSync({
       pluginRegistry.removeHost(serverId);
       return;
     }
-    if (!connected) {
+    // 앱 백그라운드 등 일시적인 연결 끊김에는 설치된 플러그인 화면을 유지한다.
+    // 재연결 후 카탈로그가 같으면 번들을 다시 평가하지 않아 버튼이 늦게 나타나지 않는다.
+    if (!connected) return;
+    if (installedClient.current && installedClient.current !== client)
       pluginRegistry.removeHost(serverId);
-      return;
-    }
+    installedClient.current = client;
     const refresh = (replacePluginId?: string) => {
       refreshQueue = refreshQueue.then(() =>
         client
