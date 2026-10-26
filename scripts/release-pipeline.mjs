@@ -226,8 +226,9 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
                     await capture('git', ['merge-base', '--is-ancestor', commit, receipt.revision]);
                 return { revision: receipt.revision };
             }, { mutation: true });
-            await stage('plugin-reload', () => execute('plugin-reload', process.execPath,
-                [...wrapper, 'plugin', 'reload', 'paseodog-provider']), { mutation: true });
+            // 업데이터가 플러그인 설치·재로딩과 사후 검증을 맡는다. 여기서 다시 로드하면 그 검증과 경합한다.
+            if (!(config.updaterRoot && config.updaterUnit)) await stage('plugin-reload', () => execute('plugin-reload',
+                process.execPath, [...wrapper, 'plugin', 'reload', 'paseodog-provider']), { mutation: true });
             const diagnostic = JSON.parse(await capture(process.execPath, [...wrapper, 'provider', 'diagnostic', 'paseodog', '--json']));
             if (!diagnostic.diagnostic.startsWith('Provider is available')) throw new Error('Provider not ready after reload');
         }

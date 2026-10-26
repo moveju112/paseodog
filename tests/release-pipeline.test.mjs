@@ -568,7 +568,10 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
     // 검증을 마친 리비전을 업데이터에 알려 root 테스트를 중복 실행하지 않게 한다.
     assert.equal(JSON.parse(await readFile(join(updaterRoot, 'preverified.json'), 'utf8')).revision, commit);
     const updateAt = calls.findIndex(row => row[0] === 'systemctl');
-    assert.ok(updateAt > 0 && updateAt < calls.findIndex(row => row.includes('reload')));
+    assert.ok(updateAt > 0);
+    // 업데이터가 플러그인과 사후 검증을 맡으므로 배포가 다시 로드하지 않는다.
+    assert.equal(calls.some(row => row.includes('reload')), false);
+    assert.ok(calls.findIndex(row => row.includes('diagnostic')) > updateAt);
 });
 
 // 업데이터는 런타임 변경이 없는 커밋을 재시작 없이 넘기고, 판정 실패는 런타임 변경으로 본다.
