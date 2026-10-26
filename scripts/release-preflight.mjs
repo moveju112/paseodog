@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { root } from './paths.mjs';
 import { runCommand } from './release-command.mjs';
 import { AGENT_MESSAGE_PATCHES, patchedAgentMessageSource } from './patch-paseo-agent-messages.mjs';
+import { patchMetroImageSize } from '../android/scripts/patch-metro-image-size.mjs';
 
 // 실제 배포 입력을 사용한다. 키·패치 오류를 수분짜리 검증 전에 읽기 전용으로 거절한다.
 export async function releasePreflight(config, run = runCommand, sourceRoot = root) {
@@ -26,6 +27,7 @@ export async function releasePreflight(config, run = runCommand, sourceRoot = ro
     const server = join(sourceRoot, 'tools/node_modules/@getpaseo/server');
     for (const spec of AGENT_MESSAGE_PATCHES)
         patchedAgentMessageSource(await readFile(join(server, spec.file), 'utf8'), spec);
+    patchMetroImageSize(join(sourceRoot, 'android/node_modules/metro'), { check: true });
     await run(join(config.androidTools, 'apksigner'), ['verify', config.previousApk], { capture: true });
-    console.log('Release preflight: signing inputs, installed locks and agent-message hash gates passed');
+    console.log('Release preflight: signing inputs, installed locks, agent-message and Metro hash gates passed');
 }

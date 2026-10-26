@@ -75,6 +75,7 @@ export async function prepareRelease(profile, commit, { run = runCommand, adopt 
         await capture(['merge', '--ff-only', commit]);
         // 갱신한 소스의 버전·blob 게이트로 native 패치를 적용한 뒤에만 검증·배포를 시작한다.
         await run(process.execPath, [join(source, 'scripts/patch-mixdog.mjs')], { cwd: source });
+        await run(process.execPath, [join(source, 'android/scripts/patch-metro-image-size.mjs')], { cwd: source });
         if (nextVersion) ({ commit } = await advanceReleaseVersion(source, profile.repo, run));
         const env = { ...process.env,
             ...(profile.androidHome ? { ANDROID_HOME: profile.androidHome } : {}),
