@@ -35,6 +35,8 @@ export async function verifyReleaseWeb({ url, output }, playwright) {
         const refreshed = await page.reload({ waitUntil: 'networkidle', timeout: 60000 });
         assert.equal(refreshed.status(), 200);
         await page.getByTestId('startup-splash').waitFor({ state: 'hidden', timeout: 30000 });
+        // 앱은 로컬 데몬 연결 시도가 끝날 때까지 빈 화면일 수 있다. 본문 텍스트 대신 실제 화면이 그려질 때까지 기다린다.
+        await page.getByTestId('welcome-screen').waitFor({ state: 'visible', timeout: 60000 });
         const body = await page.locator('body').innerText();
         assert.ok(body.trim());
         assert.doesNotMatch(body, /Unmatched Route|404 Not Found/);

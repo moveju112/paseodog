@@ -346,9 +346,10 @@ test('real browser release check accepts omitted text type and verifies deep-lin
     const output = await temporary(t);
     const html = '<!doctype html><script defer src="/index-fixture.js"></script>';
     await writeFile(join(output, 'index.html'), html);
-    const script = `document.body.innerHTML='<button data-testid="welcome-direct-connection">Connect</button>';
+    // 실제 앱처럼 로컬 데몬 연결 시도가 끝날 때까지 잠시 빈 화면을 유지한 뒤 환영 화면을 그린다.
+    const script = `setTimeout(()=>{document.body.innerHTML='<div data-testid="welcome-screen"><button data-testid="welcome-direct-connection">Connect</button></div>';
 document.querySelector('button').onclick=()=>{document.body.innerHTML='<input data-testid="direct-host-input"><input data-testid="direct-port-input"><input type="password" data-testid="direct-password-input"><button data-testid="direct-password-visibility-toggle">Show</button>';
-document.querySelector('button').onclick=()=>{const p=document.querySelector('[data-testid="direct-password-input"]');if(p.type==='password')p.removeAttribute('type');else p.type='password'};};`;
+document.querySelector('button').onclick=()=>{const p=document.querySelector('[data-testid="direct-password-input"]');if(p.type==='password')p.removeAttribute('type');else p.type='password'};};},1500);`;
     const server = createServer((request, response) => {
         response.setHeader('Content-Type', request.url === '/index-fixture.js' ? 'application/javascript' : 'text/html');
         response.end(request.url === '/index-fixture.js' ? script : html);
