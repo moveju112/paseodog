@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createFastControl, getFastControl } from '../android/packages/app/src/utils/paseodog-fast-control.mjs';
+import { createFastControl as previousFastControl, fastToggle as previousFastToggle } from './paseo-fast-v5.mjs';
 // 호스트별 실제 RPC 상태를 공유하고 실패한 저장 요청은 재전송하지 않는다.
 export function createCollaborationState(client) {
     let snapshot = { mode: null, busy: false, error: '' };
@@ -195,6 +196,9 @@ export function fastToggle({ client, provider, agentId = null, modelId = null, d
     const snapshot = React.useSyncExternalStore(control?.subscribe || emptySubscribe, control?.getSnapshot || emptySnapshot);
     const [connected, setConnected] = React.useState(client?.isConnected === true);
     const { theme } = useTheme();
+    const EnabledIcon = React.useMemo(() => function FilledFastIcon(props) {
+        return jsx(Icon, { ...props, fill: props.color });
+    }, [Icon, jsx]);
     React.useEffect(() => {
         if (!control) return;
         const unsubscribe = client.subscribeConnectionStatus((state) => {
@@ -206,18 +210,18 @@ export function fastToggle({ client, provider, agentId = null, modelId = null, d
         return () => { unsubscribe(); globalThis.removeEventListener?.('focus', refresh); };
     }, [control, client, modelId]);
     if (!control) return null;
-    const enabled = snapshot.enabled === true && !snapshot.error;
+    const enabled = snapshot.enabled === true;
     const disabled = inputDisabled || !connected || snapshot.busy || !snapshot.error && !snapshot.available;
     const status = snapshot.error ? '확인 필요' : snapshot.busy ? '확인 중'
         : !snapshot.available ? '지원하지 않는 모델' : enabled ? '켜짐' : '꺼짐';
     return jsxs(React.Fragment, { children: [
         jsx(Trigger, {
-            icon: Icon, iconColor: snapshot.error ? theme.colors.destructive : enabled ? theme.colors.accent : theme.colors.foregroundMuted,
+            icon: enabled ? EnabledIcon : Icon, iconColor: snapshot.error ? theme.colors.destructive : enabled ? theme.colors.accent : theme.colors.foregroundMuted,
             surface: 'toolbar', label: 'Fast', showToolbarLabel: false, showCaret: false, open: enabled,
             accessibilityRole: 'switch', accessibilityLabel: `Fast mode: ${status}`,
             accessibilityHint: snapshot.error || (agentId ? '이 세션의 다음 요청부터 적용 · 추가 요금이 발생할 수 있어요'
                 : '새 세션의 기본값 · 추가 요금이 발생할 수 있어요'),
-            accessibilityState: { checked: enabled, disabled, busy: snapshot.busy },
+            accessibilityState: { checked: snapshot.error ? 'mixed' : enabled, disabled, busy: snapshot.busy },
             disabled, testID: 'paseodog-fast-toggle',
             onPress: () => { if (!disabled) void control.toggle(); },
         }),
@@ -236,6 +240,13 @@ function PaseodogFastControls(props){return (0,J.jsx)(ve,{...props,features:"pas
 function PaseodogCollaboration(props){return (0,J.jsx)(fastToggle,{...props,React:s,jsx:J.jsx,jsxs:J.jsxs,Text:t.Text,Trigger:K.AgentControlTrigger,Icon:b.Zap,useTheme:f.useUnistyles})}
 function PaseodogDraftCollaboration({serverId,provider,modelId,disabled}){const client=(0,O.useSessionStore)(e=>serverId?e.sessions[serverId]?.client??null:null);return (0,J.jsx)(PaseodogCollaboration,{client,provider,modelId,disabled})}
 ${COLLABORATION_SOURCE_ANCHOR}`;
+const previousFastSource = COLLABORATION_SOURCE
+    .replace(createFastControl.toString(), previousFastControl.toString())
+    .replace(fastToggle.toString(), previousFastToggle.toString());
+export const PREVIOUS_FAST_SOURCES = [
+    previousFastSource,
+    previousFastSource.replace('Boolean(value.route.model?.trim()) && ', ''),
+];
 export const FAST_RENDER = COLLABORATION_RENDER.replace('client:b,provider:h.provider', 'client:b,provider:h.provider,agentId:t,modelId:ho,disabled:mo');
 export const FAST_DRAFT_RENDER = COLLABORATION_DRAFT_RENDER.replace('serverId:L,provider:n', 'serverId:L,provider:n,modelId:h,disabled:F');
 const FAST_FEATURE_ANCHOR = 'jsx:J.jsx,Controls:ve})}';
@@ -247,18 +258,17 @@ export function withoutCollaboration(source) {
     const hasRender = source.includes(render);
     const draftRender = source.includes(FAST_DRAFT_RENDER) ? FAST_DRAFT_RENDER : COLLABORATION_DRAFT_RENDER;
     const hasDraft = source.includes(draftRender);
-    const previousFastSource = COLLABORATION_SOURCE.replace('Boolean(value.route.model?.trim()) && ', '');
     const found = [
-        { version: 5, source: COLLABORATION_SOURCE, draft: true },
-        { version: 5, source: previousFastSource, draft: true },
+        { version: 6, source: COLLABORATION_SOURCE, draft: true },
+        ...PREVIOUS_FAST_SOURCES.map((source) => ({ version: 5, source, draft: true })),
         ...LEGACY_COLLABORATION_SOURCES,
     ]
         .filter((entry) => source.includes(entry.source));
     if (!found.length && !hasRender && !hasDraft) return source;
     if (found.length !== 1 || !hasRender || found[0].draft !== hasDraft) throw new Error('Partial Paseo collaboration patch');
-    if (found[0].version === 5 && (render !== FAST_RENDER || draftRender !== FAST_DRAFT_RENDER))
+    if (found[0].version >= 5 && (render !== FAST_RENDER || draftRender !== FAST_DRAFT_RENDER))
         throw new Error('Partial Paseo collaboration patch');
-    if (found[0].version === 5 && !source.includes(FAST_FEATURE_RENDER))
+    if (found[0].version >= 5 && !source.includes(FAST_FEATURE_RENDER))
         throw new Error('Partial Paseo collaboration patch');
     return source.replace(found[0].source, COLLABORATION_SOURCE_ANCHOR)
         .replace(FAST_FEATURE_RENDER, FAST_FEATURE_ANCHOR)

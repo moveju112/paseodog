@@ -46,7 +46,11 @@ vi.mock("react-native-unistyles", () => {
       ),
   };
 });
-vi.mock("lucide-react-native", () => ({ Zap: () => <svg data-testid="fast-icon" /> }));
+vi.mock("lucide-react-native", () => ({
+  Zap: ({ color, fill }: { color?: string; fill?: string }) => (
+    <svg data-testid="fast-icon" color={color} fill={fill} />
+  ),
+}));
 vi.mock("@/components/ui/combobox-trigger", () => ({
   // 모드·추론과 같은 실제 AgentControlTrigger가 넘기는 접근성·중복 제출 계약을 DOM으로 노출한다.
   ComboboxTrigger: ({
@@ -61,7 +65,7 @@ vi.mock("@/components/ui/combobox-trigger", () => ({
     disabled: boolean;
     accessibilityRole: string;
     accessibilityLabel: string;
-    accessibilityState: { expanded?: boolean; checked?: boolean };
+    accessibilityState: { expanded?: boolean; checked?: boolean | "mixed" };
   }>) => (
     <button
       type="button"
@@ -462,6 +466,10 @@ describe("native Fast lightning toggle", () => {
     expect(triggers[0].textContent).toBe("");
     expect(triggers[1].textContent).toBe("Fast꺼짐");
     expect(screen.getAllByTestId("fast-icon")).toHaveLength(2);
+    expect(screen.getAllByTestId("fast-icon").map((icon) => icon.getAttribute("fill"))).toEqual([
+      null,
+      null,
+    ]);
     expect(screen.queryByText("OCHE")).toBeNull();
     expect(runtime.client.invokePluginRpc).toHaveBeenCalledTimes(1);
     const pending = deferred<ReturnType<typeof fastSnapshot>>();
@@ -476,11 +484,19 @@ describe("native Fast lightning toggle", () => {
     await act(async () => pending.resolve(fastSnapshot(true)));
     expect(triggers.map((toggle) => toggle.getAttribute("aria-checked"))).toEqual(["true", "true"]);
     expect(triggers[1].textContent).toBe("Fast켜짐");
+    expect(screen.getAllByTestId("fast-icon").map((icon) => icon.getAttribute("fill"))).toEqual([
+      "#0a0",
+      "#0a0",
+    ]);
     expect(triggers[0].textContent).toBe("");
     runtime.client.invokePluginRpc.mockResolvedValue(fastSnapshot());
     fireEvent.click(triggers[1]);
     await waitFor(() => expect(triggers[0].getAttribute("aria-checked")).toBe("false"));
     expect(triggers[1].textContent).toBe("Fast꺼짐");
+    expect(screen.getAllByTestId("fast-icon").map((icon) => icon.getAttribute("fill"))).toEqual([
+      null,
+      null,
+    ]);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(runtime.client.invokePluginRpc.mock.calls.map((call) => call[2])).toEqual([
       { action: "read" },
@@ -525,6 +541,30 @@ describe("native Fast lightning toggle", () => {
     expect(runtime.client.invokePluginRpc.mock.calls.map((call) => call[2])).toEqual([
       { action: "read" },
     ]);
+  });
+
+  it("keeps the filled last-confirmed icon and marks a rejected change as unknown rather than off", async () => {
+    runtime.client.fetchAgent.mockResolvedValue({
+      agent: { features: [{ id: "fast", type: "toggle", value: true }] },
+    });
+    render(
+      <PaseodogFastScope.Provider value={firstFastScope}>
+        <PaseodogCollaboration provider="paseodog" serverId="host" />
+      </PaseodogFastScope.Provider>,
+    );
+    const trigger = screen.getByRole("switch", { name: /^Fast mode/ });
+    await waitFor(() => expect(trigger.getAttribute("aria-checked")).toBe("true"));
+    const message =
+      "응답 중에는 모델·추론 수준·설정을 바꿀 수 없어요. 응답이 끝날 때까지 기다리거나 응답을 중지한 뒤 다시 선택해 주세요.";
+    runtime.client.setAgentFeature.mockRejectedValueOnce(new Error(message));
+    fireEvent.click(trigger);
+    await waitFor(() => expect(trigger.getAttribute("aria-checked")).toBe("mixed"));
+    expect(screen.getByTestId("fast-icon").getAttribute("fill")).toBe("#a00");
+    expect(screen.getByText(`${message} 다시 누르면 현재 상태만 확인해요.`)).toBeTruthy();
+    fireEvent.click(trigger);
+    await waitFor(() => expect(trigger.getAttribute("aria-checked")).toBe("true"));
+    expect(screen.getByTestId("fast-icon").getAttribute("fill")).toBe("#0a0");
+    expect(runtime.client.setAgentFeature).toHaveBeenCalledExactlyOnceWith("one", "fast", false);
   });
 
   it("shows the unsupported-model status in the sheet and disables the toggle", async () => {
