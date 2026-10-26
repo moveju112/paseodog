@@ -31,47 +31,50 @@ vi.mock("@/panels/panel-registry", () => ({
 }));
 
 describe("workspace import launcher", () => {
-  it("opens the existing import sheet next to the agent action and tracks availability", () => {
-    const open = vi.fn();
-    const launch = vi.fn();
-    let launcher: NewTabLauncher = {
-      showChanges: false,
-      showPullRequest: false,
-      showBrowser: false,
-      terminalDisabled: false,
-      importSession: { disabled: false, open },
-      launch,
-    };
-    const { result, rerender } = renderHook(
-      () =>
-        useWorkspaceTabLaunchCatalog({
-          serverId: "host",
-          purpose: "primary",
-          host: "main",
-          surface: "menu",
-        }),
-      {
-        wrapper: launcherWrapper(() => launcher),
-      },
-    );
-    const items = () => result.current.flatMap((group) => group.items);
-    expect(
-      items()
-        .slice(0, 2)
-        .map((item) => item.id),
-    ).toEqual(["agent", "import-session"]);
-    expect(items()[1].disabled).toBe(false);
-    items()[1].launch({ kind: "open", paneId: "primary" });
-    expect(open).toHaveBeenCalledOnce();
-    expect(launch).not.toHaveBeenCalled();
-    launcher = { ...launcher, importSession: { disabled: true, open } };
-    rerender();
-    expect(items()[1].disabled).toBe(true);
-  });
+  it.each(["menu" as const, "panel" as const])(
+    "opens the existing import sheet next to the agent action on the main $0 and tracks availability",
+    (surface) => {
+      const open = vi.fn();
+      const launch = vi.fn();
+      let launcher: NewTabLauncher = {
+        showChanges: false,
+        showPullRequest: false,
+        showBrowser: false,
+        terminalDisabled: false,
+        importSession: { disabled: false, open },
+        launch,
+      };
+      const { result, rerender } = renderHook(
+        () =>
+          useWorkspaceTabLaunchCatalog({
+            serverId: "host",
+            purpose: "primary",
+            host: "main",
+            surface,
+          }),
+        {
+          wrapper: launcherWrapper(() => launcher),
+        },
+      );
+      const items = () => result.current.flatMap((group) => group.items);
+      expect(
+        items()
+          .slice(0, 2)
+          .map((item) => item.id),
+      ).toEqual(["agent", "import-session"]);
+      expect(items()[1].disabled).toBe(false);
+      items()[1].launch({ kind: "open", paneId: "primary" });
+      expect(open).toHaveBeenCalledOnce();
+      expect(launch).not.toHaveBeenCalled();
+      launcher = { ...launcher, importSession: { disabled: true, open } };
+      rerender();
+      expect(items()[1].disabled).toBe(true);
+    },
+  );
 
   it.each([
     { host: "explorer" as const, surface: "menu" as const },
-    { host: "main" as const, surface: "panel" as const },
+    { host: "explorer" as const, surface: "panel" as const },
   ])("keeps import out of $host $surface launches", ({ host, surface }) => {
     const launcher: NewTabLauncher = {
       showChanges: false,

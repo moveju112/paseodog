@@ -198,7 +198,7 @@ export function useWorkspaceTabLaunchCatalog(input: {
       const item = builtIns[id];
       return item.hidden || !panelSupportsHost(item.panelKind, host) ? [] : [item];
     });
-    if (surface === "menu" && host === "main" && launcher.importSession) {
+    if (host === "main" && launcher.importSession) {
       tabItems.splice(tabItems.findIndex((item) => item.id === "agent") + 1, 0, {
         id: "import-session",
         label: t("workspace.header.actions.importSession"),
