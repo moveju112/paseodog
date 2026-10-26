@@ -12,6 +12,17 @@ interface PublishedRelease {
   versionCode: number;
   versionName: string;
 }
+interface UpdateStatus {
+  available: boolean;
+  versionCode?: number;
+  reason?: string | null;
+  request: { phase: string; versionCode: number; message: string } | null;
+}
+interface LoadedRelease {
+  client: Client;
+  versionCode: number | null;
+  version: string | null;
+}
 interface Dependencies {
   React: typeof ReactTypes;
   useHosts: () => readonly Host[];
@@ -33,20 +44,79 @@ export function createDaemonUpdateCallouts(deps: Dependencies) {
   const releaseURL = "https://api.github.com/repos/moveju112/paseodog/releases/latest";
   const releasesURL = "https://github.com/moveju112/paseodog/releases/latest";
 
+  function updateView(
+    latest: PublishedRelease | null,
+    status: LoadedRelease,
+    update: UpdateStatus | null,
+  ) {
+    const target =
+      latest ??
+      (update?.request
+        ? {
+            versionCode: update.request.versionCode,
+            versionName: `빌드 ${update.request.versionCode}`,
+          }
+        : null);
+    if (!target) return null;
+    let request = update?.request ?? null;
+    const terminal = ["complete", "failed", "rolled-back", "rollback-failed"];
+    if (request && request.versionCode !== target.versionCode && terminal.includes(request.phase)) {
+      request = null;
+    }
+    if (status.versionCode !== null && status.versionCode >= target.versionCode && !request) {
+      return null;
+    }
+    return { target, request, unknown: status.versionCode === null };
+  }
+
+  function updateText(
+    hostLabel: string,
+    status: LoadedRelease,
+    view: NonNullable<ReturnType<typeof updateView>>,
+    update: UpdateStatus | null,
+    confirmation: boolean,
+    requestError: string | null,
+  ) {
+    const { target, request, unknown } = view;
+    let title = unknown ? "데몬 업데이트 확인 필요" : "데몬 업데이트 사용 가능";
+    if (request) {
+      title = request.phase === "complete" ? "데몬 업데이트 완료" : "데몬 업데이트 상태";
+    }
+    let description: string;
+    if (requestError) {
+      description = requestError;
+    } else if (request) {
+      description = `${hostLabel}: ${request.message}`;
+    } else if (confirmation) {
+      description = `${hostLabel}의 데몬을 ${target.versionName}으로 업데이트할까요?\n작업 종료 후 적용하며 잠시 연결이 끊길 수 있습니다. 실패하면 호스트에 준비된 이전 버전으로 복구합니다.`;
+    } else if (unknown) {
+      description = `${hostLabel}: 데몬 버전을 확인하지 못했습니다. 최신 ${target.versionName}과 비교하려면 호스트의 PaseoDog 버전을 확인하세요.`;
+    } else {
+      description = `${hostLabel}: ${status.version}.${status.versionCode} → ${target.versionName}\n이 앱을 업데이트해도 연결된 데몬은 업데이트되지 않습니다. ${update?.reason ?? "호스트에서 업데이트·재시작하면 실행 중인 작업이 중지될 수 있습니다."}`;
+    }
+    return { title, description };
+  }
+
   function HostUpdate({ host, latest }: { host: Host; latest: PublishedRelease | null }) {
     const client = useClient(host.serverId);
     const connected = useConnected(host.serverId);
     const { entries } = useProvidersSnapshot(host.serverId);
     const isPaseodog = entries?.some((entry) => entry.provider === "paseodog") === true;
     const callouts = useCallouts();
-    const [status, setStatus] = React.useState<{
-      client: Client;
-      versionCode: number | null;
-      version: string | null;
-    } | null>(null);
+    const [status, setStatus] = React.useState<LoadedRelease | null>(null);
+    const [update, setUpdate] = React.useState<UpdateStatus | null>(null);
+    const [confirmation, setConfirmation] = React.useState(false);
+    const [requesting, setRequesting] = React.useState(false);
+    const [requestError, setRequestError] = React.useState<string | null>(null);
+    const pending = React.useRef(false);
+    const generation = React.useRef(0);
 
     React.useEffect(() => {
       setStatus(null);
+      setUpdate(null);
+      setConfirmation(false);
+      setRequestError(null);
+      const currentGeneration = ++generation.current;
       if (!connected || !client || !isPaseodog) return;
       let cancelled = false;
       let checking = false;
@@ -72,6 +142,18 @@ export function createDaemonUpdateCallouts(deps: Dependencies) {
               version: release.version,
             });
           }
+          try {
+            const snapshot = await client!.invokePluginRpc("paseodog-provider", "daemon-update", {
+              action: "status",
+            });
+            if (!cancelled) {
+              setUpdate(snapshot as UpdateStatus);
+              if ((snapshot as UpdateStatus)?.request) setRequestError(null);
+            }
+          } catch {
+            // 구형 호스트에서는 안내만 제공한다.
+            if (!cancelled) setUpdate(null);
+          }
         } catch {
           // 구형 RPC·통신 실패를 '업데이트 있음'이나 '최신'으로 단정하지 않는다.
           if (!cancelled) setStatus({ client: client!, versionCode: null, version: null });
@@ -80,37 +162,105 @@ export function createDaemonUpdateCallouts(deps: Dependencies) {
         }
       }
       void check();
-      const timer = setInterval(() => void check(), intervalMs);
+      const timer = setInterval(() => void check(), 10000);
       return () => {
         cancelled = true;
+        generation.current = currentGeneration + 1;
         clearInterval(timer);
       };
     }, [client, connected, isPaseodog]);
 
     React.useEffect(() => {
-      if (!connected || !isPaseodog || !latest || !status || status.client !== client) return;
-      if (status.versionCode !== null && status.versionCode >= latest.versionCode) return;
-      const unknown = status.versionCode === null;
+      if (!connected || !isPaseodog || !status || status.client !== client) return;
+      const view = updateView(latest, status, update);
+      if (!view) return;
+      const { target, request, unknown } = view;
+      const activeGeneration = generation.current;
+      const canRequest =
+        !!latest &&
+        !unknown &&
+        update?.available === true &&
+        update.versionCode === target.versionCode &&
+        !request;
+      const text = updateText(host.label, status, view, update, confirmation, requestError);
+      const actions: NonNullable<SidebarCalloutOptions["actions"]>[number][] = [];
+      if (canRequest) {
+        const readyLabel = confirmation ? "업데이트 확인" : "데몬 업데이트";
+        actions.push({
+          label: requesting ? "요청 중…" : readyLabel,
+          variant: "primary",
+          disabled: requesting,
+          onPress: () => {
+            if (activeGeneration !== generation.current) return;
+            if (!confirmation) {
+              setConfirmation(true);
+              return;
+            }
+            if (pending.current || !client || !connected) return;
+            pending.current = true;
+            setRequesting(true);
+            setRequestError(null);
+            const current = generation.current;
+            void client
+              .invokePluginRpc("paseodog-provider", "daemon-update", {
+                action: "request",
+                versionCode: target.versionCode,
+                confirmed: true,
+              })
+              .then((value) => {
+                if (current === generation.current) setUpdate(value as UpdateStatus);
+                return null;
+              })
+              .catch(() => {
+                if (current === generation.current) {
+                  setRequestError(
+                    "업데이트 요청 결과를 확인하지 못했습니다. 자동 재시도하지 않으며 호스트 상태를 다시 확인합니다.",
+                  );
+                }
+              })
+              .finally(() => {
+                pending.current = false;
+                setRequesting(false);
+                if (current === generation.current) setConfirmation(false);
+              });
+          },
+        });
+        if (confirmation) {
+          actions.push({
+            label: "취소",
+            disabled: requesting,
+            onPress: () => setConfirmation(false),
+          });
+        }
+      }
+      actions.push({
+        label: "업데이트 안내",
+        onPress: () => {
+          void deps.openURL(releasesURL);
+        },
+      });
       return callouts.show({
         id: `paseodog-daemon-update:${host.serverId}`,
-        dismissalKey: `paseodog-daemon-update:${host.serverId}:${latest.versionCode}:${unknown ? "unknown" : status.versionCode}`,
+        dismissalKey: `paseodog-daemon-update:${host.serverId}:${target.versionCode}:${unknown ? "unknown" : status.versionCode}:${request?.phase ?? "available"}`,
         priority: 40,
-        title: unknown ? "데몬 업데이트 확인 필요" : "데몬 업데이트 사용 가능",
-        description: unknown
-          ? `${host.label}: 데몬 버전을 확인하지 못했습니다. 최신 ${latest.versionName}과 비교하려면 호스트의 PaseoDog 버전을 확인하세요.`
-          : `${host.label}: ${status.version}.${status.versionCode} → ${latest.versionName}\n이 앱을 업데이트해도 연결된 데몬은 업데이트되지 않습니다. 호스트에서 업데이트·재시작하면 실행 중인 작업이 중지될 수 있습니다.`,
-        actions: [
-          {
-            label: "업데이트 안내",
-            variant: "primary",
-            onPress: () => {
-              void deps.openURL(releasesURL);
-            },
-          },
-        ],
+        ...text,
+        actions,
         testID: `paseodog-daemon-update:${host.serverId}`,
       });
-    }, [callouts, client, connected, host.label, host.serverId, isPaseodog, latest, status]);
+    }, [
+      callouts,
+      client,
+      connected,
+      host.label,
+      host.serverId,
+      isPaseodog,
+      latest,
+      status,
+      update,
+      confirmation,
+      requesting,
+      requestError,
+    ]);
     return null;
   }
 
