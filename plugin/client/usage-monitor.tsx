@@ -65,7 +65,8 @@ function Card({ colors, children, style }: { colors: Colors; children: React.Rea
 
 // 요약 지표 타일 (라벨 -> 큰 값 -> 보조 설명)
 function StatTile({ colors, label, value, hint }: { colors: Colors; label: string; value: string; hint?: string }) {
-    return <Card colors={colors} style={{ flexGrow: 1, flexBasis: 150, minWidth: 140, gap: 4 }}>
+    // 내용 폭을 기준으로 남는 폭을 나눠, 넓은 화면에서는 지표가 한 줄에 들어가고 좁으면 줄바꿈한다.
+    return <Card colors={colors} style={{ flexGrow: 1, flexBasis: 'auto', minWidth: 110, gap: 4 }}>
         <Text style={{ color: colors.foregroundMuted, fontSize: 12 }}>{label}</Text>
         <Text selectable style={{ color: colors.foreground, fontSize: 22, fontWeight: '600' }}>{value}</Text>
         {!!hint && <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>{hint}</Text>}
