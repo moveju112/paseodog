@@ -82,6 +82,18 @@ test('install steps keep the patch order and skip only POSIX root tests on Windo
     assert.deepEqual(windows, linux.filter((step) => step !== 'test'));
 });
 
+test('install scope drops only the root regression tests and keeps the default full recipe', () => {
+    for (const platform of ['linux', 'win32']) {
+        const full = installSteps(platform);
+        assert.deepEqual(installSteps(platform, { scope: 'full' }), full);
+        assert.deepEqual(installSteps(platform, {}), full);
+        const install = installSteps(platform, { scope: 'install' });
+        assert.deepEqual(install, full.filter(({ command, args }) => !(command === 'npm' && args.join(' ') === 'test')));
+    }
+    assert.equal(installSteps('linux').length - installSteps('linux', { scope: 'install' }).length, 1);
+    assert.throws(() => installSteps('linux', { scope: 'release' }), /Unknown install scope: release/);
+});
+
 test('engine installation completes every pinned child hook before the pruning hook', () => {
     const steps = engineInstallSteps();
     assert.deepEqual(steps[0], { command: 'npm',
