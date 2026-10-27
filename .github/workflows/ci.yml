@@ -37,6 +37,9 @@ jobs:
             node "scripts/patch-${patch}.mjs"
             node "scripts/patch-${patch}.mjs" --check
           done
+      # scripts/test.mjs keeps its lock and scratch files under the release host's scratch root.
+      - name: Create the test scratch root
+        run: sudo install -d -o "$USER" /data/tmp/ubuntu
       - run: npm test
       - run: python3 scripts/package.py
       - name: Verify release ZIP really includes pinned lockfiles
