@@ -1,6 +1,8 @@
 name: PaseoDog checks
 on:
+  # 릴리즈 tag push는 같은 커밋의 main push와 중복 실행되므로 브랜치 push만 검사한다.
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 permissions:

@@ -142,6 +142,13 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
         const tag = `v${version}`;
         const wrapper = [join(root, 'bin/paseodog.mjs')];
         const listAgents = async () => JSON.parse(await capture(process.execPath, [...wrapper, 'agent', 'ls', '--json']));
+        // 모든 PC/runtime 적용 경로가 같은 문구로 idle 대기를 알린다. 요청 턴은 이 문구를 보고 종료해야 적용이 진행된다.
+        let idleAnnounced = false;
+        const waitForApply = () => {
+            if (!idleAnnounced) console.log('Publication complete; waiting for idle before PC/runtime apply.');
+            idleAnnounced = true;
+            return waitForIdle(listAgents, sleep ? { sleep } : undefined);
+        };
         const assertSource = async () => {
             if ((await capture('git', ['rev-parse', 'HEAD'])).trim() !== commit
                 || (await capture('git', ['status', '--porcelain'])).trim())
@@ -232,8 +239,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             })(),
             (async () => {
                 if (!targets.desktop) return;
-                console.log('Publication complete; waiting for idle before PC/runtime apply.');
-                await waitForIdle(listAgents, sleep ? { sleep } : undefined);
+                await waitForApply();
                 const installed = (await capture('dpkg-query', ['-W', '-f=${Version}', 'paseodog'])).trim();
                 if (installed !== version.replace('-', '~')) await stage('pc-install', () =>
                     execute('pc-install', 'sudo', ['-n', 'dpkg', '-i', releaseArtifacts(workspace, version)[2]]), { mutation: true });
@@ -242,7 +248,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
         const applyFailures = applied.filter(result => result.status === 'rejected').map(result => result.reason);
         if (applyFailures.length) throw new AggregateError(applyFailures, applyFailures.map(error => error.message).join('; '));
         if (targets.runtime) {
-            await waitForIdle(listAgents, sleep ? { sleep } : undefined);
+            await waitForApply();
             // 데몬 갱신은 기존 업데이터 경로를 그대로 쓴다. 다른 세션이 이후 커밋을 올렸으면 그 커밋까지 반영될 수 있다.
             if (config.updaterRoot && config.updaterUnit) await stage('runtime-update', async () => {
                 const readReceipt = async () => JSON.parse(await readFile(join(config.updaterRoot, 'receipt.json'), 'utf8'));
@@ -271,7 +277,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             if (!diagnostic.diagnostic.startsWith('Provider is available')) throw new Error('Provider not ready after reload');
         }
         if (targets.desktop) {
-            await waitForIdle(listAgents, sleep ? { sleep } : undefined);
+            await waitForApply();
             await stage('pc-launch', () => launchDesktop(config, run), { mutation: true });
             const desktopRelease = await installedRelease();
             if (desktopRelease.versionCode !== Number(versionCode)) throw new Error('Installed desktop version mismatch');
