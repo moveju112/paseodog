@@ -52,7 +52,10 @@ const previousRollupSource = readEffortUsage.toString()
     .replace('row.agent, row.effort, row.fast]', 'row.agent, row.effort]')
     .replace('effort: row.effort,\n                fast: row.fast == null ? null : row.fast === 1, speedOutput: 0, speedMs: 0 };', 'effort: row.effort };')
     .replace('        bucket.speedOutput += row.speed_output;\n        bucket.speedMs += row.speed_ms;\n', '');
-const spec = (file, blob, edits, previousEditCount = 0) => ({ file: 'src/' + file, blob, edits, previousEditCount });
+const spec = (file, blob, edits, previousEditCount = 0) => ({ file: 'src/' + file, blob, edits,
+    previousEditCounts: [].concat(previousEditCount) });
+// 세션 없이 도는 백그라운드 호출은 기록용 이름을 넘겨 에이전트 미기록으로 남지 않게 한다.
+const usageAgent = (file, blob, anchor, name) => spec(file, blob, [[anchor, `${anchor}\n        usageAgent: '${name}',`]]);
 export const EFFORT_USAGE_PATCHES = [
     spec('runtime/shared/llm/usage-context.mjs', 'bdadfb0afa7548fd590256c51f6991afb7004ef9', [[
         'export const currentUsageContext = () => context.getStore();',
@@ -94,7 +97,21 @@ export function noteRequestEffort(value) {
     ], [
         '      agent: opts.session?.agent,',
         '      agent: opts.session?.agent,\n      fast: opts.fast === true,',
-    ]], 4),
+    ], [
+        // 웹 검색 보조 호출은 세션 대신 role을, 백그라운드 호출은 usageAgent를 넘긴다.
+        '      agent: opts.session?.agent,\n      fast:',
+        '      agent: opts.session?.agent || opts.usageAgent || opts.role,\n      fast:',
+    ]], [4, 5]),
+    usageAgent('runtime/agent/orchestrator/agent-runtime/title-completion.mjs', '1f7fcb10f2fa5f1f7f35fc375ed498204679c4f6',
+        '        maxOutputTokens: 128,', 'title-generator'),
+    usageAgent('runtime/agent/orchestrator/agent-runtime/heartbeat-completion.mjs', 'c4a83c2f776b5e4ea597ec4736334d432d28ccdf',
+        '        maxOutputTokens,', 'heartbeat'),
+    usageAgent('runtime/agent/orchestrator/agent-runtime/room-supervisor-completion.mjs', '584de15de59328c4eebd91f97ad4681520d81ce7',
+        '        maxOutputTokens: 400,', 'room-supervisor'),
+    spec('session-runtime/services/provider-admin.mjs', '8ce26d0a5cc5636d0772aa8398b225743a20f346', [[
+        '{ signal, maxTokens: 16 }',
+        "{ signal, maxTokens: 16, usageAgent: 'provider-check' }",
+    ]]),
     spec('runtime/shared/llm/usage-ledger.mjs', 'e7ce7a96316d3b06c02e34ae9d74fb69c3b2a860', [[
         '  readSessionUsage,\n',
         '  readSessionUsage,\n  readEffortUsage,\n',

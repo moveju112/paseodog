@@ -133,6 +133,33 @@ test('real accounting and worker reads retain effort and agent without prompts',
     }
 });
 
+// 세션이 없는 웹 검색·백그라운드 호출도 호출 종류를 에이전트로 남기고, 세션 에이전트가 우선한다.
+test('sessionless sends record their role or usage agent instead of an unknown agent', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'paseodog-effort-'));
+    const before = process.env.MIXDOG_USAGE_LEDGER_PATH;
+    const path = join(directory, 'ledger.sqlite');
+    process.env.MIXDOG_USAGE_LEDGER_PATH = path;
+    try {
+        const send = (id, opts) => accountProviderSend('openai', {}, async () => ({
+            model: 'test', responseId: id, usage: { inputTokens: 5, outputTokens: 3 },
+        }), 'test', { effort: 'low', ...opts });
+        await send('search', { role: 'web-search', sessionId: 'lead:native-web-search:1', sourceType: 'native-web-search' });
+        await send('title', { usageAgent: 'title-generator' });
+        await send('worker', { usageAgent: 'title-generator', role: 'web-search', session: { id: 'child', agent: 'worker' } });
+        const ledger = new UsageLedger(path);
+        try {
+            const groups = await ledger.effortUsageAsync({ fromMs: 0, toMs: Date.now() });
+            assert.deepEqual(groups.map(row => [row.agent, row.fast, row.turns]).sort(),
+                [['title-generator', false, 1], ['web-search', false, 1], ['worker', false, 1]]);
+        } finally { ledger.close(); }
+    } finally {
+        closeUsageLedgers();
+        if (before === undefined) delete process.env.MIXDOG_USAGE_LEDGER_PATH;
+        else process.env.MIXDOG_USAGE_LEDGER_PATH = before;
+        await rm(directory, { recursive: true, force: true });
+    }
+});
+
 test('metrics project effort groups without private native metadata', async () => {
     const result = await readUsageMetrics({
         getUsageStats: async () => ({ range: { fromMs: 1, toMs: 2 }, totals: {}, providers: [], daily: [] }),
