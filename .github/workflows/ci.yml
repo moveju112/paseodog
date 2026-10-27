@@ -29,10 +29,16 @@ jobs:
       - name: Apply and verify pinned runtime patches
         run: |
           for patch in mixdog paseo-usage paseo-steer paseo-agent-messages paseo-assistant-phase \
-              paseo-workspace-name paseo-session-titles paseo-local-stt paseo-relay-password paseo-composer; do
+              paseo-workspace-name paseo-session-titles paseo-local-stt paseo-relay-password; do
             node "scripts/patch-${patch}.mjs"
             node "scripts/patch-${patch}.mjs" --check
           done
+      # 루트 회귀 검사가 공유 UI의 실제 모듈과 Chromium 레이아웃을 실행한다.
+      - name: Build shared UI test dependencies
+        run: npm --prefix android run build:app-deps
+      - name: Prepare Chromium for shared browser regressions
+        working-directory: android
+        run: npx playwright install --with-deps chromium
       - run: npm test
       - run: python3 scripts/package.py
       - name: Verify release ZIP really includes pinned lockfiles
