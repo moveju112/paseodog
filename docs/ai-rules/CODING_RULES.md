@@ -7,6 +7,7 @@
 - Importable CLI modules must guard their entry point and return a failing exit status on errors. `plugin/server/*.mjs` accepts only built-ins and local modules because the engine imports it directly.
 - Upstream modifications use `scripts/patch-*.mjs` plus `patches/*.mjs`: exact version/blob verification, idempotent apply, read-only `--check`, rejection of drift/partial patches.
 - A composer patch needs apply and unwrap integration, including affected reversal tests. Do not change a hash just to accept unexpected bytes.
+- The composer's unpatched web-ui input comes from `scripts/paseo-web-ui-base.json` (tag, URL, archive and per-file SHA-256), installed by `scripts/prepare-paseo-web-ui.mjs` in both install and CI. Never replace an existing asset; publish changed contents under the next `0.11.4-web-ui-base.N` tag with `--latest=false`.
 - A shared UI change must have matching semantics in `android/packages/app/src` and the applicable web patch. Test the behavior on both paths; explicitly identify genuine platform exceptions.
 - An approved upstream upgrade updates pins, lockfiles, `PIN`, `paseodogUpstream`, release metadata and affected patch fixtures together.
 

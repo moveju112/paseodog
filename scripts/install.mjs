@@ -31,6 +31,8 @@ export function installSteps(platform = process.platform) {
     const npm = (...args) => ({ command: 'npm', args });
     return [
         npm('--prefix', 'tools', 'ci'),
+        // composer 패치의 검토 입력은 npm tarball이 아닌 고정 web-ui 묶음이다.
+        node('scripts/prepare-paseo-web-ui.mjs'),
         ...engineInstallSteps(),
         npm('--prefix', 'plugin', 'ci'),
         ...PATCHES.flatMap((name) => [node(`scripts/patch-${name}.mjs`), node(`scripts/patch-${name}.mjs`, '--check')]),

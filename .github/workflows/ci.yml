@@ -19,11 +19,15 @@ jobs:
       - name: Install root test dependencies from committed lockfiles
         run: |
           npm --prefix tools ci
+          # 설치 스크립트와 같은 준비 로직으로 composer 패치의 검토된 web-ui 입력을 고정한다.
+          node scripts/prepare-paseo-web-ui.mjs
           npm --prefix engine ci --install-strategy=nested
           npm --prefix plugin ci
           # Root tests also import Expo/desktop source and installed Android packages.
           # Never run Android workspace install hooks in this read-only CI setup.
           npm --prefix android ci --ignore-scripts
+          # Root tests import the built protocol package, as the daemon updater prepares it.
+          npm --prefix android run build:protocol
       - name: Verify controls EPIPE regression before web bundle integration tests
         run: node --test --test-name-pattern="control daemon stdin failures" tests/engine-controls.test.mjs
       - name: Apply and verify pinned runtime patches
