@@ -565,6 +565,7 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
         return '';
     };
     const plans = [];
+    const logs = t.mock.method(console, 'log', () => {});
     await deliverRelease(config, {
         run, build: async ({ targets }) => { calls.push(['build', targets]); },
         verifyArtifacts: async (_config, _run, plan) => {
@@ -590,6 +591,8 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
     const updateAt = calls.findIndex(row => row[0] === 'systemctl');
     assert.ok(updateAt > 0);
     assert.equal(updaterStarts, 2);
+    // 데스크톱 없는 runtime 적용도 요청 턴이 종료 시점으로 삼는 idle 대기 문구를 남긴다.
+    assert.equal(logs.mock.calls.filter(call => String(call.arguments[0]).includes('waiting for idle')).length, 1);
     // 업데이터가 플러그인과 사후 검증을 맡으므로 배포가 다시 로드하지 않는다.
     assert.equal(calls.some(row => row.includes('reload')), false);
     assert.ok(calls.findIndex(row => row.includes('diagnostic')) > updateAt);
