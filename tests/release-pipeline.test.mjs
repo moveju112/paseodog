@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile, mkdir, symlink } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile, mkdir, symlink } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { openReleaseState, insideWorkspace } from '../scripts/release-state.mjs';
-import { validateReleaseConfig, activeAgents, waitForIdle, detachedCommand, deliverRelease, unlockStoppedDelivery } from '../scripts/release-pipeline.mjs';
+import { validateReleaseConfig, activeAgents, waitForIdle, detachedCommand, deliverRelease, unlockStoppedDelivery, pruneReleaseWorkspaces } from '../scripts/release-pipeline.mjs';
 import { verifiedBuildCache } from '../scripts/verified-build-cache.mjs';
 import { measureBuildStep } from '../scripts/build-metrics.mjs';
 import { verifyRemoteAssets, verifyUpdaterManifest } from '../scripts/release-artifacts.mjs';
@@ -580,6 +580,50 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
     // 업데이터가 플러그인과 사후 검증을 맡으므로 배포가 다시 로드하지 않는다.
     assert.equal(calls.some(row => row.includes('reload')), false);
     assert.ok(calls.findIndex(row => row.includes('diagnostic')) > updateAt);
+});
+
+// 완료된 이전 배포 workspace만 지우고, 실행 중·미조정 변경·보호 경로·다른 소유 workspace는 남긴다.
+test('release workspace pruning removes only finished deliveries owned by the same cache root', async t => {
+    const directory = await temporary(t);
+    const cacheRoot = join(directory, 'cache');
+    const make = async (name, { owner = cacheRoot, stages, files = {} } = {}) => {
+        const workspace = join(directory, `paseodog-release-${name}`);
+        await mkdir(workspace);
+        if (owner) await writeFile(join(workspace, 'config.json'), JSON.stringify({ workspace, cacheRoot: owner }));
+        if (stages) await writeFile(join(workspace, 'release-state.json'), JSON.stringify({ stages }));
+        for (const [file, text] of Object.entries(files)) {
+            await mkdir(join(workspace, file, '..'), { recursive: true });
+            await writeFile(join(workspace, file), text);
+        }
+        return workspace;
+    };
+    const done = { verify: { status: 'complete', mutation: false }, 'github-publish': { status: 'complete', mutation: true } };
+    const uncertain = { ...done, 'runtime-update': { status: 'failed', mutation: true } };
+    const reconciledPrevious = await make('reconciled', { stages: uncertain });
+    const current = await make('current', { stages: done, files: { 'runtime-update-reconciliation.json':
+        JSON.stringify({ previousWorkspace: reconciledPrevious }) } });
+    const kept = [
+        current,
+        await make('uncertain', { stages: uncertain }),
+        await make('locked', { stages: done, files: { 'delivery.lock': '1' } }),
+        await make('source', { files: { 'source/.git': 'gitdir: x', 'previous.apk': 'apk' } }),
+        await make('foreign', { owner: join(directory, 'other-cache'), stages: done }),
+        await make('manual', { owner: null }),
+        await make('unowned', { owner: null, stages: done }),
+    ];
+    const removed = [
+        reconciledPrevious,
+        await make('done', { stages: done }),
+        await make('never-started'),
+        await make('verify-failed', { stages: { verify: { status: 'failed', mutation: false } } }),
+    ];
+    await writeFile(join(directory, 'paseodog-release-file'), 'not a directory');
+    const pruned = await pruneReleaseWorkspaces({ workspace: current, cacheRoot,
+        sourceRoot: join(directory, 'paseodog-release-source/source'),
+        previousApk: join(directory, 'paseodog-release-source/previous.apk') });
+    assert.deepEqual(pruned.sort(), removed.map(path => path.split('/').at(-1)).sort());
+    for (const path of kept) assert.ok((await stat(path)).isDirectory(), path);
+    for (const path of removed) assert.equal(await stat(path).catch(error => error.code), 'ENOENT', path);
 });
 
 // 업데이터는 런타임 변경이 없는 커밋을 재시작 없이 넘기고, 판정 실패는 런타임 변경으로 본다.

@@ -1,5 +1,5 @@
-import { mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, isAbsolute, join, resolve } from 'node:path';
+import { mkdir, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createHash } from 'node:crypto';
@@ -84,6 +84,39 @@ export async function unlockStoppedDelivery(workspace) {
         return;
     }
     throw new Error('Delivery process is still alive; lock was not removed');
+}
+
+// 배포가 끝난 뒤 같은 cacheRoot로 준비된 이전 workspace를 지운다. 실행 중(잠금)이거나 조정되지 않은
+// 불확실 변경이 남은 workspace, 소스 worktree·이전 APK·서명 파일을 담은 workspace, 다른 프로필·수동 workspace는 남긴다.
+export async function pruneReleaseWorkspaces(config) {
+    const parent = dirname(config.workspace);
+    const protectedPaths = [config.workspace, config.sourceRoot, config.previousWorkspace, config.previousApk,
+        config.signingInit, config.signingKey].filter(Boolean).map(path => resolve(path));
+    const owned = [];
+    for (const entry of await readdir(parent, { withFileTypes: true })) {
+        if (!entry.isDirectory() || !entry.name.startsWith('paseodog-release-')) continue;
+        const workspace = join(parent, entry.name);
+        const owner = await readFile(join(workspace, 'config.json'), 'utf8').then(JSON.parse, () => null);
+        if (owner?.workspace !== workspace || owner.cacheRoot !== config.cacheRoot) continue;
+        owned.push({ workspace, files: await readdir(workspace) });
+    }
+    const reconciled = new Set();
+    for (const { workspace, files } of owned)
+        for (const name of files.filter(name => name.endsWith('-reconciliation.json')))
+            reconciled.add(JSON.parse(await readFile(join(workspace, name), 'utf8')).previousWorkspace);
+    const removed = [];
+    for (const { workspace, files } of owned) {
+        if (protectedPaths.some(path => path === workspace || path.startsWith(workspace + sep))) continue;
+        if (files.includes('delivery.lock')) continue;
+        const state = files.includes('release-state.json')
+            ? JSON.parse(await readFile(join(workspace, 'release-state.json'), 'utf8')) : null;
+        const uncertain = Object.values(state?.stages || {}).some(stage => stage.mutation && stage.status !== 'complete');
+        if (uncertain && !reconciled.has(workspace)) continue;
+        await rm(workspace, { recursive: true, force: true });
+        removed.push(basename(workspace));
+    }
+    if (removed.length) console.log(`Pruned release workspaces: ${removed.join(', ')}`);
+    return removed;
 }
 
 export async function deliverRelease(input, { run = runCommand, retryStage, checkWeb = verifyReleaseWeb,
@@ -244,6 +277,8 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             if (desktopRelease.versionCode !== Number(versionCode)) throw new Error('Installed desktop version mismatch');
         }
         console.log(`Delivery verified: ${describePlan(plan)}`);
+        // 정리 실패는 이미 검증된 배포를 실패로 바꾸지 않고 로그에 남긴다.
+        await pruneReleaseWorkspaces(config).catch(error => console.error(`Release workspace pruning failed: ${error.message}`));
         return { commit, version, tag: github ? tag : null, plan };
     } finally {
         await lock.close();
