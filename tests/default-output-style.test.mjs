@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { scratchPath } from '../scripts/paths.mjs';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,7 +22,7 @@ const precedence = 'The section below governs how you write user-facing text; it
 
 // 격리된 설정·사용자 스타일만 만들고 종료 시 삭제한다(잔여물은 /data/tmp의 3일 정책 적용).
 async function styleFixture(t, initial = {}) {
-    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-output-style-');
+    const directory = await mkdtemp(scratchPath('paseodog-output-style-'));
     t.after(() => rm(directory, { recursive: true }));
     const configPath = join(directory, 'mixdog-config.json');
     await writeFile(configPath, JSON.stringify(initial));

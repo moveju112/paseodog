@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { scratchPath } from '../scripts/paths.mjs';
 import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { readTurnMinutes, writeTurnMinutes } from '../plugin/server/turn-duration.mjs';
@@ -8,7 +9,7 @@ import { createEngineControls } from '../plugin/server/controls.mjs';
 import { fixture } from './helpers.mjs';
 
 function profile(t) {
-    const root = mkdtempSync('/data/tmp/ubuntu/paseodog-turn-duration-');
+    const root = mkdtempSync(scratchPath('paseodog-turn-duration-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     return { MIXDOG_DATA_DIR: root };
 }

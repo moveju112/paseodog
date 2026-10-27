@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { scratchPath } from '../scripts/paths.mjs';
 import { join } from 'node:path';
 import { runTestFiles } from '../scripts/test-files.mjs';
 
 test('test receipts reuse successes, rerun failures and invalidate changed inputs', async t => {
-    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-test-receipt-');
+    const directory = await mkdtemp(scratchPath('paseodog-test-receipt-'));
     t.after(() => rm(directory, { recursive: true, force: true }));
     const files = ['first', 'second'].map(name => join(directory, name));
     await Promise.all(files.map(path => writeFile(path, 'fixture')));
@@ -27,7 +28,7 @@ test('test receipts reuse successes, rerun failures and invalidate changed input
 });
 
 test('changed source never produces reusable test receipts', async t => {
-    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-test-drift-');
+    const directory = await mkdtemp(scratchPath('paseodog-test-drift-'));
     t.after(() => rm(directory, { recursive: true, force: true }));
     const file = join(directory, 'input'); await writeFile(file, 'fixture');
     let calls = 0;

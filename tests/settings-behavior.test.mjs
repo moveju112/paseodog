@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { scratchPath } from '../scripts/paths.mjs';
 import { join } from 'node:path';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { MAX_TURN_MINUTES } from '../plugin/shared/turn-duration.mjs';
@@ -135,7 +136,7 @@ test('a legitimate no-change compact result permits switching; replacing the ses
 });
 
 function hookFixture(t) {
-    const directory = mkdtempSync('/data/tmp/ubuntu/paseodog-hook-settings-');
+    const directory = mkdtempSync(scratchPath('paseodog-hook-settings-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const bus = createStandaloneHookBus({ dataDir: directory });
     const status = { rulesPath: join(directory, 'hooks.json') };

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { scratchPath } from '../scripts/paths.mjs';
 import * as fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
@@ -20,7 +21,7 @@ const patched = patchedAgentMessageSource(installed, spec);
 const shared = readFileSync(new URL('../android/packages/server/src/server/agent/tools/paseo-tools.ts', import.meta.url), 'utf8');
 
 async function fixture(t) {
-    const home = await fs.mkdtemp('/data/tmp/ubuntu/paseodog-message-policy-test-');
+    const home = await fs.mkdtemp(scratchPath('paseodog-message-policy-test-'));
     t.after(() => fs.rm(home, { recursive: true, force: true }));
     const policy = createAgentMessagePolicy({ fs, join, isAbsolute, home });
     const agents = {

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { scratchPath } from '../scripts/paths.mjs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
@@ -26,7 +27,7 @@ const bootstrap = patched('/bootstrap.js');
 const runtimeConfig = await import(`data:text/javascript;base64,${Buffer.from(patched('/runtime-mcp-config.js')).toString('base64')}`);
 
 async function temporary(t) {
-    const directory = await fs.mkdtemp('/data/tmp/ubuntu/paseodog-message-boundary-');
+    const directory = await fs.mkdtemp(scratchPath('paseodog-message-boundary-'));
     t.after(() => fs.rm(directory, { recursive: true, force: true }));
     return directory;
 }

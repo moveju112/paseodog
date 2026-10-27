@@ -1,5 +1,6 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
+import { scratchPath } from '../scripts/paths.mjs';
 import { cp, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +10,7 @@ import { patchedAgentSource } from '../scripts/patch-mixdog.mjs';
 import { readUsageMetrics } from '../engine/src/usage.mjs';
 
 // 설치된 엔진을 건드리지 않고 동일한 의존성의 격리 복사본에 검토된 패치만 적용한다.
-const candidate = await mkdtemp('/data/tmp/ubuntu/paseodog-usage-test-');
+const candidate = await mkdtemp(scratchPath('paseodog-usage-test-'));
 after(() => rm(candidate, { recursive: true, force: true }));
 const upstream = fileURLToPath(new URL('../engine/node_modules/mixdog/', import.meta.url));
 await cp(join(upstream, 'src'), join(candidate, 'src'), { recursive: true });

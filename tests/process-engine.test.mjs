@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
+import { scratchPath } from '../scripts/paths.mjs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -117,7 +118,7 @@ test('engine stops once its parent process changes and ignores an unchanged pare
 // 실제 엔진 프로세스: 표준입력 연결이 끝나지 않아도(다른 프로세스가 쥔 경우) 부모가 종료되면 스스로 종료한다.
 test('real engine worker exits after its parent dies even while its stdin never reaches EOF', { skip: process.platform === 'win32', timeout: 30000 }, async (t) => {
     const engine = fileURLToPath(new URL('../engine/bin/paseodog-engine.mjs', import.meta.url));
-    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-parent-watch-test-');
+    const directory = await mkdtemp(scratchPath('paseodog-parent-watch-test-'));
     t.after(() => rm(directory, { recursive: true, force: true }));
     const fifo = join(directory, 'stdin');
     execFileSync('mkfifo', [fifo]);

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, readFile, mkdir, writeFile } from 'node:fs/promises';
+import { scratchPath } from '../scripts/paths.mjs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -87,7 +88,7 @@ test('missing auth, failed quota and stale successful quota remain distinguishab
 });
 
 test('Codex source uses dedicated runtime auth despite an expired standalone CLI store', async (t) => {
-    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-codex-quota-');
+    const directory = await mkdtemp(scratchPath('paseodog-codex-quota-'));
     t.after(() => rm(directory, { recursive: true, force: true }));
     const authPath = join(directory, 'auth.json');
     const before = '{"tokens":{"access_token":"fixture-expired"}}\n';

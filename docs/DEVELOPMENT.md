@@ -7,11 +7,13 @@ CI의 `unit` 작업(`.github/workflows/ci.yml`)이 이 절차의 기준입니다
 ## 요구 사항
 
 - Linux, Node 24 LTS(또는 22.19+), npm, git, python3, `flock`
-- 테스트·릴리즈 스크래치 루트 `/data/tmp/ubuntu`: 현재 테스트 하네스와 일부 테스트가 이 경로를 고정으로 사용합니다.
+- 테스트·릴리즈 스크래치 루트(`scripts/paths.mjs`의 `scratchRoot`): `PASEODOG_TMP`를 지정하면 그 경로, 없으면 `/data/tmp/ubuntu`가 있을 때 그 경로, 둘 다 없으면 OS 임시 폴더를 씁니다.
+  `/tmp`가 작은 디스크라면 큰 디스크의 폴더를 `PASEODOG_TMP`로 지정하거나 `sudo install -d -o "$USER" /data/tmp/ubuntu`로 공용 경로를 만듭니다.
 
-```bash
-sudo install -d -o "$USER" /data/tmp/ubuntu
-```
+## 변경 반영 방식
+
+작업 브랜치에 커밋하고 push한 뒤 `main`으로 pull request를 엽니다(`gh pr create`). `main`에 직접 push하지 않습니다.
+릴리즈 실행기의 메타데이터 커밋만 예외이며, 릴리즈는 `origin/main`의 커밋으로만 진행합니다.
 
 ## Windows에서 clone할 때
 

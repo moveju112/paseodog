@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { scratchPath } from '../scripts/paths.mjs';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { copyFile, cp, mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
@@ -32,7 +33,7 @@ async function corpusDigest(root, files) {
 async function runWorker() {
     const setupStarted = performance.now();
     const { JournalStore } = await import(pathToFileURL(join(values.root, 'plugin/server/journal.mjs')));
-    const output = await mkdtemp('/data/tmp/ubuntu/paseodog-journal-save-run-');
+    const output = await mkdtemp(scratchPath('paseodog-journal-save-run-'));
     try {
         // 기존 파일을 덮어쓰는 실제 저장 경로를 사용하되 운영 데이터는 절대 수정하지 않는다.
         await cp(values.corpus, output, { recursive: true });
@@ -84,7 +85,7 @@ async function runComparison() {
     const journals = resolve(values.journals);
     const baseline = resolve(values.baseline);
     const setupStarted = performance.now();
-    const snapshot = await mkdtemp('/data/tmp/ubuntu/paseodog-journal-save-corpus-');
+    const snapshot = await mkdtemp(scratchPath('paseodog-journal-save-corpus-'));
     try {
         const files = (await readdir(journals, { withFileTypes: true }))
             .filter((entry) => entry.isFile() && /^[a-zA-Z0-9_-]+\.json$/.test(entry.name))
