@@ -14,7 +14,7 @@ PaseoDog = Paseo (daemon, desktop/mobile/web/SSH clients) + Mixdog (inference, n
 | `tools/` | pinned `@getpaseo/cli` install; tests read its real bundles |
 | `android/` | vendored Paseo monorepo source. Shared app source for Android APK, Linux .deb and web bundle (`packages/app`), desktop (`packages/desktop`), server, protocol |
 | `tests/` | root `node --test` tests, `tests/fixtures/`, `tests/contracts/`, `*-smoke.mjs` (device/billable smokes) |
-| `config/` | `model-routes.example.json`, Git-ignored `rules.local.md` |
+| `config/` | `model-routes.example.json`, Git-ignored `rules.local.md` (template `local-rules.example.md`) |
 
 ## Version sources
 
