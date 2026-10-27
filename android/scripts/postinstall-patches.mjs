@@ -88,7 +88,8 @@ for (const [cwd, files] of patchFilesByCwd) {
 
   let result;
   try {
-    result = spawnSync(cmd, ["--patch-dir", relative(cwd, tempPatchDir)], {
+    // patch-package exits 0 on a failed patch outside CI; unknown dependency sources must fail.
+    result = spawnSync(cmd, ["--error-on-fail", "--patch-dir", relative(cwd, tempPatchDir)], {
       cwd,
       shell: isWindows,
       stdio: "inherit",

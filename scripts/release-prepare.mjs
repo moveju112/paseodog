@@ -125,7 +125,9 @@ export async function prepareRelease(profile, commit, { run = runCommand, adopt 
         await capture(['merge', '--ff-only', commit]);
         // 갱신한 소스의 버전·blob 게이트로 native 패치를 적용한 뒤에만 검증·배포를 시작한다.
         await run(process.execPath, [join(source, 'scripts/patch-mixdog.mjs')], { cwd: source });
-        await run(process.execPath, [join(source, 'android/scripts/patch-metro-image-size.mjs')], { cwd: source });
+        // 재사용 worktree는 npm 설치를 다시 하지 않으므로 Android 의존성 패치(Metro·patch-package·query-string)를 직접 확인·적용한다.
+        await run(process.execPath, [join(source, 'android/scripts/postinstall-patches.mjs')], { cwd: join(source, 'android'),
+            env: { ...process.env, PATH: join(source, 'android/node_modules/.bin') + delimiter + process.env.PATH } });
         const workspace = await mkdtemp('/data/tmp/ubuntu/paseodog-release-');
         try {
             // 버전을 올리기 전에 배포 대상을 판정한다. 다른 세션의 이전 커밋도 기준점 이후 변경에 포함된다.
