@@ -129,6 +129,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
     const lockPath = join(workspace, 'delivery.lock');
     const lock = await open(lockPath, 'wx', 0o600);
     await lock.writeFile(String(process.pid));
+    let browserExport;
     try {
         const capture = (command, args, cwd = root) => run(command, args, { cwd, capture: true });
         const commit = (await capture('git', ['rev-parse', 'HEAD'])).trim();
@@ -175,8 +176,23 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             console.log('No deployable changes since the deployed baselines.');
             return { commit, version, tag: null, plan };
         }
+        const webOutput = join(workspace, 'web-cloudflare');
+        const startBrowserExport = () => {
+            if (!targets.web || browserExport) return;
+            // 실패도 즉시 관찰하되 공개 전 합류에서 전파한다. 조기 실패가 업로드와 경합해 유실되지 않는다.
+            browserExport = Promise.allSettled([(async () => {
+                await mkdir(join(config.cacheRoot, 'web-cloudflare'), { recursive: true });
+                await stage('browser-export', () => buildWeb({
+                    output: webOutput, hosting: 'cloudflare', metroWorkers: String(config.metroWorkers), dependenciesBuilt: true,
+                }, (command, args, options) => execute('browser-export', 'systemd-run', [
+                    '--user', '--scope', '-q', '-p', 'MemoryHigh=16G', '-p', 'MemorySwapMax=2G', command, ...args,
+                ], options.cwd, { ...options.env, TMPDIR: join(config.cacheRoot, 'web-cloudflare') })),
+                { artifacts: [webOutput] });
+            })()]);
+        };
         // buildRelease의 각 단계가 자체 체크포인트·산출물 해시를 갖는다.
-        await build({ ...config, targets, checkpoint: stage });
+        await build({ ...config, targets, checkpoint: stage, onBrowserReady: startBrowserExport });
+        startBrowserExport();
         await assertSource();
         if (targets.android) await stage('android-manifest', () => execute('android-manifest', 'python3', [
             'scripts/android-update-manifest.py', '--version-code', versionCode, '--version-name', version,
@@ -198,19 +214,12 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
                 '--repo', config.repo, '--target', commit, '--title', `PaseoDog ${version}`, '--notes-file', join(root, 'CHANGELOG.md')]),
             { mutation: true });
         }
-        const webOutput = join(workspace, 'web-cloudflare');
-        if (targets.web) await mkdir(join(config.cacheRoot, 'web-cloudflare'), { recursive: true });
-        // 업로드와 웹 export는 입력을 공유하지 않는다. 둘 다 끝나기 전에는 공개하거나 잠금을 해제하지 않는다.
+        // export를 기다리지 않고 산출물 확인·업로드를 진행하되 둘 다 성공해야 공개한다.
         const prepared = await Promise.allSettled([
             github ? stage('github-upload', () => execute('github-upload', 'gh',
                 ['release', 'upload', tag, '--repo', config.repo, ...uploadAssets]), { mutation: true }) : null,
-            targets.web ? stage('browser-export', () => buildWeb({
-                output: webOutput, hosting: 'cloudflare', metroWorkers: String(config.metroWorkers), dependenciesBuilt: true,
-            }, (command, args, options) => execute('browser-export', 'systemd-run', [
-                '--user', '--scope', '-q', '-p', 'MemoryHigh=16G', '-p', 'MemorySwapMax=2G', command, ...args,
-            ], options.cwd, { ...options.env, TMPDIR: join(config.cacheRoot, 'web-cloudflare') })),
-            { artifacts: [webOutput] }) : null,
         ].filter(Boolean));
+        prepared.push(...(await browserExport ?? []));
         const failures = prepared.filter(result => result.status === 'rejected').map(result => result.reason);
         if (failures.length) throw new AggregateError(failures, failures.map(error => error.message).join('; '));
         await assertSource();
@@ -287,6 +296,8 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
         await pruneReleaseWorkspaces(config).catch(error => console.error(`Release workspace pruning failed: ${error.message}`));
         return { commit, version, tag: github ? tag : null, plan };
     } finally {
+        // 빌드·산출물 확인·draft 생성 실패도 이미 시작한 export가 종료되기 전에는 잠금을 풀지 않는다.
+        await browserExport;
         await lock.close();
         await rm(lockPath);
     }

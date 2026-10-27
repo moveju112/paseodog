@@ -128,6 +128,75 @@ test('Windows uses the free Android slot without waiting for an independent Linu
     assert.equal(calls.filter(name => name === 'dependencies').length, 1);
 });
 
+for (const first of ['android', 'linux']) {
+test(`browser export uses at most two heavy slots when ${first} finishes first`, { timeout: 10000 }, async t => {
+    const gates = Object.fromEntries(['android', 'linux', 'windows', 'export'].map(name => [name, Promise.withResolvers()]));
+    const started = Object.fromEntries(['linux', 'windows', 'export'].map(name => [name, Promise.withResolvers()]));
+    const active = new Set();
+    let peak = 0, exports = 0;
+    const enter = name => { active.add(name); peak = Math.max(peak, active.size); };
+    const exported = gates.export.promise.then(() => active.delete('export'));
+    const build = runReleaseBuild(async name => {
+        enter(name);
+        started[name]?.resolve();
+        if (gates[name]) await gates[name].promise;
+        active.delete(name);
+    }, undefined, () => {
+        exports++;
+        enter('export');
+        started.export.resolve();
+    });
+    t.after(async () => {
+        for (const gate of Object.values(gates)) gate.resolve();
+        await Promise.allSettled([build, exported]);
+    });
+    await started.linux.promise;
+    gates[first].resolve();
+    await started.windows.promise;
+    assert.equal(exports, 0);
+    gates[first === 'android' ? 'linux' : 'android'].resolve();
+    await started.export.promise;
+    assert.deepEqual([...active].sort(), ['export', 'windows']);
+    assert.equal(peak, 2);
+    gates.windows.resolve();
+    await build;
+    assert.deepEqual([...active], ['export'], 'packaging must finish without waiting for export');
+    gates.export.resolve();
+    await exported;
+    assert.equal(exports, 1);
+    assert.equal(active.size, 0);
+});
+}
+
+test('browser export readiness follows selected build dependencies, including web-only and partial builds', async () => {
+    for (const targets of [
+        { android: false, desktop: false, web: true },
+        { android: true, desktop: false, web: true },
+        { android: false, desktop: true, web: true },
+        { android: true, desktop: false, web: false },
+        { android: false, desktop: true, web: false },
+        { android: false, desktop: false, web: false },
+    ]) {
+        const calls = [];
+        const active = new Set();
+        await runReleaseBuild(async name => {
+            calls.push(name);
+            active.add(name);
+            await new Promise(resolve => setImmediate(resolve));
+            active.delete(name);
+        }, targets, () => {
+            assert.ok(calls.includes('dependencies'));
+            if (targets.android) assert.ok(calls.includes('android'));
+            if (targets.desktop) assert.ok(calls.includes('linux'));
+            assert.equal(active.has('android'), false);
+            assert.equal(active.has('linux'), false);
+            assert.ok(active.size <= 1);
+            calls.push('browser-export');
+        });
+        assert.equal(calls.filter(name => name === 'browser-export').length, Number(targets.web));
+    }
+});
+
 test('failed builds drain their siblings and never start dependent stages', async () => {
     let androidCompleted = false;
     const calls = [];
