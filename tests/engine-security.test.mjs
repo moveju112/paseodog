@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { scratchPath } from '../scripts/paths.mjs';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -17,7 +18,7 @@ const webSearchUrl = new URL('../engine/node_modules/mixdog/src/runtime/web-sear
 
 // 취약 입력은 시간 제한이 있는 자식 프로세스에서만 검사하고 실제 프로필·외부 서버를 쓰지 않는다.
 function probe(source) {
-    const home = mkdtempSync('/data/tmp/ubuntu/paseodog-security-probe-');
+    const home = mkdtempSync(scratchPath('paseodog-security-probe-'));
     try {
         return JSON.parse(execFileSync(process.execPath, ['--input-type=module', '--eval', source], {
             env: { ...process.env, MIXDOG_HOME: home, MIXDOG_DATA_DIR: join(home, 'data') },

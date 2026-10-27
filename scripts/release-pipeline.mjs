@@ -10,7 +10,7 @@ import { runCommand } from './release-command.mjs';
 import { releaseArtifacts, verifyReleaseArtifacts, verifyRemoteAssets } from './release-artifacts.mjs';
 import { carriedAssets, deliveryPlan, describePlan, recordDeployment, validateTargets } from './release-targets.mjs';
 import { verifyReleaseWeb } from './release-web-check.mjs';
-import { root } from './paths.mjs';
+import { root, scratchRoot } from './paths.mjs';
 import { restartDesktop } from './release-apply.mjs';
 import { verifyReleaseSource } from './release-verification.mjs';
 import { releasePreflight } from './release-preflight.mjs';
@@ -29,9 +29,9 @@ export function validateReleaseConfig(input) {
             throw new Error(`${key} must be an explicit absolute non-root path`);
         config[key] = resolve(config[key]);
     }
-    if (!insideWorkspace('/data/tmp/ubuntu', config.workspace)
+    if (!insideWorkspace(scratchRoot, config.workspace)
         || config.workspace === config.cacheRoot || insideWorkspace(config.workspace, config.cacheRoot))
-        throw new Error('Use a unique workspace under /data/tmp/ubuntu, separate from reusable caches');
+        throw new Error(`Use a unique workspace under ${scratchRoot}, separate from reusable caches`);
     if (!/^[1-9]\d*$/.test(String(config.metroWorkers))) throw new Error('metroWorkers must be positive');
     config.metroWorkers = String(config.metroWorkers);
     if (!Array.isArray(config.appTests) || !config.appTests.length

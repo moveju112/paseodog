@@ -5,11 +5,11 @@ import { join } from 'node:path';
 import { prepareRelease } from '../scripts/release-prepare.mjs';
 import { releasePreflight } from '../scripts/release-preflight.mjs';
 import { runCommand } from '../scripts/release-command.mjs';
-import { paseoHome } from '../scripts/paths.mjs';
+import { paseoHome, scratchPath } from '../scripts/paths.mjs';
 import { recordDeployment } from '../scripts/release-targets.mjs';
 
 async function fixture(t) {
-    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-prepare-test-');
+    const directory = await mkdtemp(scratchPath('paseodog-prepare-test-'));
     t.after(() => rm(directory, { recursive: true, force: true }));
     const sourceRoot = join(directory, 'source'), cacheRoot = join(directory, 'cache');
     await mkdir(sourceRoot); await mkdir(cacheRoot);

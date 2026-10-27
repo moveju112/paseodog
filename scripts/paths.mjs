@@ -1,8 +1,13 @@
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, resolve, join, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// 테스트·릴리즈 스크래치 루트: PASEODOG_TMP, 없으면 기존 공용 경로가 준비된 기기에서는 그 경로, 그 외에는 OS 임시 폴더.
+const sharedScratch = '/data/tmp/ubuntu';
+export const scratchRoot = resolve(process.env.PASEODOG_TMP
+    || (existsSync(sharedScratch) ? sharedScratch : tmpdir()));
+export const scratchPath = (name) => join(scratchRoot, name);
 const defaultStateRoot = process.platform === 'win32'
     ? join(process.env.LOCALAPPDATA, 'paseodog')
     : join(homedir(), '.local', 'share', 'paseodog');

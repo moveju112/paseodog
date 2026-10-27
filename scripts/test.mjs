@@ -7,6 +7,7 @@ import { parseArgs } from 'node:util';
 import { COMPOSER_FILE, patchedComposerSource } from './patch-paseo-composer.mjs';
 import { runTestFiles } from './test-files.mjs';
 import { sourceFingerprint } from './release-verification.mjs';
+import { scratchPath } from './paths.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -27,7 +28,7 @@ export async function withTestLock(run, identity = 'paseodog-heavy-tests') {
         return run();
     }
     const id = createHash('sha256').update(identity).digest('hex').slice(0, 16);
-    const lock = await open(`/data/tmp/ubuntu/paseodog-test-${id}.lock`, 'a', 0o600);
+    const lock = await open(scratchPath(`paseodog-test-${id}.lock`), 'a', 0o600);
     const waiting = performance.now();
     try {
         console.log('Test harness: waiting for repository test slot');
@@ -45,7 +46,7 @@ export async function withTestLock(run, identity = 'paseodog-heavy-tests') {
 }
 
 export async function runTests(args = [], selectedFiles) {
-    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-tests-');
+    const directory = await mkdtemp(scratchPath('paseodog-tests-'));
     try {
         const files = selectedFiles ?? (await readdir(join(root, 'tests'))).filter(name => name.endsWith('.test.mjs'))
             .sort().map(name => join(root, 'tests', name));

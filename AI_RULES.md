@@ -5,7 +5,7 @@ This is the canonical project rule file; `AGENTS.md` and `CLAUDE.md` link here. 
 ## Scope and completion
 
 - Answer diagnosis/status questions without edits or waiting for unrelated implementation to finish. Implement only the requested outcome; a newly found improvement is not another task.
-- Code and project-rule changes include verification and selective commit/push of this task's changes. A review-only or no-commit request overrides this default. Preserve other work.
+- Code and project-rule changes include verification, a selective commit of this task's changes on a task branch, a push of that branch and a pull request to `main` (`gh pr create`). Never push directly to `main` or merge a pull request without an explicit request; an explicit release request that includes unmerged work covers merging its pull request, and the release executor's own metadata commit is the only direct `main` push. A review-only or no-commit request overrides this default. Preserve other work.
 - No build, publication, install or reload for an ordinary edit. An explicit build/release request delivers only the targets (APK, desktop deb/AppImage/Windows, dedicated web, this PC's daemon) changed since each target's actually deployed baseline, including other sessions' pushed commits; unknown baselines or paths fall back to that target's full delivery. An explicit "전체"/full or narrower target request wins; never silently expand it.
 - Stop when the requested outcome and its required checks are complete. Report observed results and blockers; source, published artifacts and running installations are separate states.
 
@@ -19,7 +19,7 @@ This is the canonical project rule file; `AGENTS.md` and `CLAUDE.md` link here. 
 - On interruption/resume, inspect the recorded task/service outcome before deciding whether to wait or recover; never blindly repeat a mutation. Do not claim automatic AI analysis or repairs unless they are implemented.
 - Keep concurrent code work in separate worktrees before edits overlap. Do not temporarily remove another session's lines to stage your own. An existing shared tree is not permission to reset, stash or migrate other work.
 - Commit only the completed scope. Do not repair unrelated failures or wait for unrelated feature work; report any integration coverage still blocked.
-- Use unique temporary directories under `/data/tmp/ubuntu`. Read ignored `config/rules.local.md` (template: `config/local-rules.example.md`) for machine-specific execution settings; never copy its private values into tracked files.
+- Use unique temporary directories under the scratch root (`scratchRoot` in `scripts/paths.mjs`: `PASEODOG_TMP`, else `/data/tmp/ubuntu` when it exists, else the OS temp directory). Read ignored `config/rules.local.md` (template: `config/local-rules.example.md`) for machine-specific execution settings; never copy its private values into tracked files.
 
 ## Safety invariants
 

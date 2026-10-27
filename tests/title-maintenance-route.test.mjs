@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { scratchPath } from '../scripts/paths.mjs';
 import { join, dirname } from 'node:path';
 import vm from 'node:vm';
 import { basicAgentIds, isBasicAgent } from '../android/packages/app/src/screens/settings/basic-agent-roles.ts';
@@ -213,7 +214,7 @@ test('web basic-agent grouping matches the app and round-trips with drift and pa
 });
 
 test('added default definitions are version-gated, idempotent and validated before any writes', (t) => {
-    const root = mkdtempSync('/data/tmp/ubuntu/paseodog-builtin-agents-');
+    const root = mkdtempSync(scratchPath('paseodog-builtin-agents-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const write = (file, text) => {
         const target = join(root, file);

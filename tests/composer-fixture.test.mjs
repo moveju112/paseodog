@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { scratchPath } from '../scripts/paths.mjs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -10,7 +11,7 @@ test('shared fixture verifies bytes and sends unknown inputs to the real hash ga
     const source = installedComposerFixture();
     assert.equal(composerFixture(source), source);
     assert.throws(() => composerFixture(source + '// drift'), /hash mismatch/);
-    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-fixture-test-');
+    const directory = await mkdtemp(scratchPath('paseodog-fixture-test-'));
     t.after(() => rm(directory, { recursive: true, force: true }));
     const previous = process.env.PASEODOG_TEST_COMPOSER_FIXTURE;
     try {

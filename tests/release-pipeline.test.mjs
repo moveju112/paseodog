@@ -14,14 +14,14 @@ import { verifyReleaseWeb } from '../scripts/release-web-check.mjs';
 import { buildWeb } from '../scripts/build-web.mjs';
 import { runReleaseBuild } from '../scripts/build-release.mjs';
 import { verifyReleaseSource, sourceFingerprint } from '../scripts/release-verification.mjs';
-import { root } from '../scripts/paths.mjs';
+import { root, scratchPath } from '../scripts/paths.mjs';
 import { withTestLock } from '../scripts/test.mjs';
 import { carriedAssets, classifyPaths, deliveryPlan, pathTargets, readLedger, recordDeployment, validateTargets } from '../scripts/release-targets.mjs';
 import { runtimeChanges } from '../scripts/runtime-changes.mjs';
 import { execFileSync } from 'node:child_process';
 
 async function temporary(t) {
-    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-release-test-');
+    const directory = await mkdtemp(scratchPath('paseodog-release-test-'));
     t.after(() => rm(directory, { recursive: true, force: true }));
     return directory;
 }
@@ -388,7 +388,7 @@ test(`early browser export drains under the delivery lock and resumes without du
 
 test('delivery defaults are explicit targets and detached execution is a service, not a caller-owned scope', () => {
     const input = {
-        workspace: '/data/tmp/ubuntu/paseodog-release-example', cacheRoot: '/data/tmp/ubuntu/cache',
+        workspace: scratchPath('paseodog-release-example'), cacheRoot: scratchPath('cache'),
         signingInit: '/approved/init.gradle', signingKey: '/approved/key', previousApk: '/approved/previous.apk',
         androidTools: '/sdk/tools', metroWorkers: 2, appTests: ['src/settings.test.ts'],
         repo: 'moveju112/paseodog', pagesProject: 'paseodog', webUrl: 'https://paseodog.choondoggy.com/',

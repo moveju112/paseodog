@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { scratchPath } from '../scripts/paths.mjs';
 import { execFile } from 'node:child_process';
 import { copyFile, mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -96,7 +97,7 @@ async function runComparison() {
     const baseline = resolve(values.baseline);
     const journals = resolve(values.journals);
     const setupStarted = performance.now();
-    const snapshot = await mkdtemp('/data/tmp/ubuntu/paseodog-list-corpus-');
+    const snapshot = await mkdtemp(scratchPath('paseodog-list-corpus-'));
     try {
         const files = (await readdir(journals, { withFileTypes: true }))
             .filter((entry) => entry.isFile() && /^[a-zA-Z0-9_-]+\.json$/.test(entry.name))
