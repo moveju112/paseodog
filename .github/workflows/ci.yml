@@ -28,6 +28,8 @@ jobs:
           npm --prefix android ci --ignore-scripts
           # Root tests import the built protocol package, as the daemon updater prepares it.
           npm --prefix android run build:protocol
+          # The release web check launches the lockfile's Playwright headless Chromium.
+          android/node_modules/.bin/playwright install --with-deps --only-shell chromium
       - name: Verify controls EPIPE regression before web bundle integration tests
         run: node --test --test-name-pattern="control daemon stdin failures" tests/engine-controls.test.mjs
       - name: Apply and verify pinned runtime patches
