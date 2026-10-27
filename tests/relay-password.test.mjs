@@ -8,8 +8,7 @@ import { pathToFileURL } from 'node:url';
 import {
     RELAY_PASSWORD_PATCHES, patchedRelayPasswordSource, relayPasswordModule, patchPaseoRelayPassword,
 } from '../scripts/patch-paseo-relay-password.mjs';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { composerFixture } from './composer-fixture.mjs';
+import { runSharedAppTests } from './shared-app-tests.mjs';
 import { RELAY_PASSWORD_WEB_EDITS, withoutRelayPassword } from '../patches/paseo-relay-password.mjs';
 import { en } from '../android/packages/app/src/i18n/resources/en.ts';
 import { pluginSettings } from '../android/packages/app/src/i18n/resources/plugin-settings.ts';
@@ -233,17 +232,8 @@ test('relay reset replaces the password, rotates the link key, recovers corrupt 
     assert.equal(readFileSync(join(home, 'relay-password'), 'utf8'), hashBeforeHub);
 });
 
-test('web issuance and address/password entry remain hash gated and reversible', () => {
-    const source = readFileSync(new URL(`server/${COMPOSER_FILE}`, packageRoot), 'utf8');
-    const patched = composerFixture(source);
-    assert.equal(composerFixture(patched), patched);
-    assert.equal(patchedComposerSource(withoutRelayPassword(patched)), patched);
-    assert.throws(() => patchedComposerSource(source + '// drift'), /hash mismatch/);
-    // 재설정 화면·한국어 문구·재설정 요청 전달이 들어가고, 주소 입력창의 무조건 차단은 빠진다.
-    for (const marker of ['pair-device-reset-toggle', 'reset:reset', '...(e?.reset?{reset:!0}:{})', 'resetToggle:"\\ube44']) assert.ok(patched.includes(marker), marker);
-    assert.ok(!patched.includes('try{if(!O){U(R("pairing.hostPassword.label"));return}'));
-    assert.ok(patched.includes('const e=await z.submit(n,O||void 0)'));
-});
+test('shared address/password credentials preserve local and relay admission', () =>
+    runSharedAppTests(['src/components/pair-link-credentials.test.ts']));
 
 test('pairing UI looks up links and explains stable links and password resets on desktop and mobile', () => {
     const koSource = stripTypeScriptTypes(readFileSync(new URL('../android/packages/app/src/i18n/resources/ko.ts', import.meta.url), 'utf8'))

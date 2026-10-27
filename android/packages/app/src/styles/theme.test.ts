@@ -96,6 +96,32 @@ describe("White2 theme", () => {
 });
 
 describe("Soft light themes", () => {
+  it("keeps small text at WCAG AA contrast on each approved chat surface", () => {
+    // sRGB를 선형 휘도로 변환해 팔레트 변경이 가독성을 떨어뜨리지 않는지 검사한다.
+    const luminance = (hex: string) =>
+      (hex.slice(1).match(/../g) ?? [])
+        .map((channel) => parseInt(channel, 16) / 255)
+        .map((value) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4))
+        .reduce((total, value, index) => total + value * [0.2126, 0.7152, 0.0722][index]!, 0);
+    for (const theme of [lightNeutralPearlTheme, lightSoftLinenTheme]) {
+      const colors = theme.colors;
+      for (const [text, surface] of [
+        [colors.foreground, colors.surface0],
+        [colors.foreground, colors.userMessageBackground],
+        [colors.foregroundMuted, colors.surface2],
+        [colors.foregroundMuted, colors.composerBackground],
+        [colors.accent, "#FFFFFF"],
+      ]) {
+        // 선택적 팔레트 값이 사라져도 대비 검사를 건너뛰지 않고 명시적으로 실패한다.
+        if (typeof text !== "string" || typeof surface !== "string") {
+          throw new Error("Approved chat surface is missing a contrast color");
+        }
+        const a = luminance(text);
+        const b = luminance(surface);
+        expect((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
   it.each([
     [
       "neutralPearl",

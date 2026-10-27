@@ -1,23 +1,10 @@
 import test from 'node:test';
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
-import { LEGACY_MARKDOWN_TABLE_EDITS, MARKDOWN_TABLE_EDITS, withMarkdownTable, withoutMarkdownTable } from '../patches/paseo-markdown-table.mjs';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { composerFixture } from './composer-fixture.mjs';
+import { runSharedAppTests } from './shared-app-tests.mjs';
 
-test('content-sized tables upgrade the pinned web bundle with reversible, complete, hash-gated edits', () => {
-    const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const result = composerFixture(installed);
-    new vm.Script(result);
-    assert.equal(composerFixture(result), result);
-    assert.equal(withMarkdownTable(withoutMarkdownTable(result)), result);
-    const [before, after] = MARKDOWN_TABLE_EDITS[1];
-    assert.throws(() => patchedComposerSource(result.replace(after, () => before)), /Partial/);
-    assert.throws(() => patchedComposerSource(result + '\n'), /hash mismatch/);
-    const current = MARKDOWN_TABLE_EDITS[0][1];
-    for (const [[, legacy]] of LEGACY_MARKDOWN_TABLE_EDITS) {
-        assert.notEqual(legacy, current);
-        assert.equal(patchedComposerSource(result.replace(current, () => legacy)), result);
-    }
-});
+// 압축 문자열 패치 대신 실제 레이아웃 계산과 Chromium의 너비·행 정렬·
+// 긴 텍스트 보존·창 크기 및 글꼴 변경 후 재측정을 검사한다.
+test('shared markdown tables preserve content sizing and browser row alignment', () =>
+    runSharedAppTests([
+        'src/components/markdown/table-layout.test.ts',
+        'src/components/markdown/table.browser.test.tsx',
+    ]));

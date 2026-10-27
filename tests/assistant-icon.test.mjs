@@ -5,16 +5,12 @@ import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import { ASSISTANT_ICONS } from '../android/packages/app/src/hooks/use-settings/assistant-icons.ts';
 import { createAssistantProfileSettings } from '../android/packages/app/src/screens/settings/chat/assistant-profile-settings.ts';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { ASSISTANT_ICON_EDITS, withAssistantIcon, withoutAssistantIcon } from '../patches/paseo-assistant-icon.mjs';
 
 const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
-const patched = composerFixture(read('tools/node_modules/@getpaseo/server/' + COMPOSER_FILE));
-import { composerFixture } from './composer-fixture.mjs';
 const ts = createRequire(new URL('../android/package.json', import.meta.url))('typescript');
 
-// 공유 화면과 실제 웹 Metro 모듈에 같은 설정 저장 대역을 주입한다.
-function chatSections(stub, environment = {}) {
+// 앱과 서버 웹이 함께 빌드하는 화면에 설정 저장 대역을 주입한다.
+function chatSections(stub) {
     const native = { exports: {} };
     const code = ts.transpileModule(read('android/packages/app/src/screens/settings/chat/chat-section.tsx'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, jsxFactory: 'element' },
@@ -23,16 +19,7 @@ function chatSections(stub, environment = {}) {
         type, props: { ...props, ...(children.length ? { children: children.length === 1 ? children[0] : children } : {}) },
     });
     runInNewContext(code, { exports: native.exports, require: () => stub, element });
-    const position = patched.indexOf('e.ChatSection=function');
-    const start = patched.lastIndexOf('\n__d(', position);
-    const end = patched.indexOf('\n__d(', position);
-    const text = patched.slice(start + '\n__d('.length, end);
-    const tail = /\},(\d+),\[([\d,]*)\]\);\s*$/.exec(text);
-    assert.ok(tail);
-    const factory = runInNewContext('(' + text.slice(0, tail.index + 1) + ')', environment);
-    const web = { exports: {} };
-    factory(globalThis, () => stub, null, null, web, web.exports, tail[2].split(',').map(Number));
-    return [native.exports.ChatSection, web.exports.ChatSection];
+    return [native.exports.ChatSection];
 }
 
 test('shared and web place profile controls next to the nickname and persist icons and photos', async (t) => {
@@ -124,11 +111,12 @@ test('shared and web place profile controls next to the nickname and persist ico
     }
 });
 
-test('web icon validation, localized labels and patch reversal match shared settings', () => {
+test('shared icon validation and all localized labels remain available', () => {
     const z = createRequire(new URL('../plugin/package.json', import.meta.url))('zod').z;
-    const schema = /assistantIcon:(f\.z\.enum\(\[[^\]]+\]\)\.catch\(""\)),/.exec(patched);
+    const schema = /assistantIcon: (z\.enum\(ASSISTANT_ICONS\)\.catch\(""\)),/.exec(
+        read('android/packages/app/src/hooks/use-settings/storage.ts'));
     assert.ok(schema);
-    const iconSchema = runInNewContext(schema[1], { f: { z } });
+    const iconSchema = runInNewContext(schema[1], { z, ASSISTANT_ICONS });
     for (const icon of ASSISTANT_ICONS) assert.equal(iconSchema.parse(icon), icon);
     for (const invalid of [undefined, null, 'unknown', 7, {}, ['🐶']]) assert.equal(iconSchema.parse(invalid), '');
     for (const locale of ['ar', 'en', 'es', 'fr', 'ja', 'ko', 'pt-BR', 'ru', 'zh-CN']) {
@@ -136,13 +124,7 @@ test('web icon validation, localized labels and patch reversal match shared sett
         const copy = /assistantIcon: \{([\s\S]*?)\n\s*\}/.exec(source);
         assert.ok(copy);
         const values = Object.fromEntries([...copy[1].matchAll(/(label|description|initial): "([^"]+)"/g)].map((match) => [match[1], match[2]]));
-        assert.ok(patched.includes('assistantIcon:' + JSON.stringify(values)));
+        assert.deepEqual(Object.keys(values).sort(), ['description', 'initial', 'label']);
+        assert.ok(Object.values(values).every(value => value.trim().length > 0));
     }
-    assert.equal(withAssistantIcon(withoutAssistantIcon(patched)), patched);
-    const [before, after] = ASSISTANT_ICON_EDITS[1];
-    const partial = patched.replace(after, before);
-    assert.notEqual(partial, patched);
-    assert.throws(() => patchedComposerSource(partial), /Partial Paseo assistant (icon|photo)/);
-    assert.equal(composerFixture(patched), patched);
-    assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
 });

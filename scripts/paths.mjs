@@ -3,6 +3,8 @@ import { dirname, resolve, join, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// 서버 웹은 고정 npm 번들이 아니라 이 checkout의 공유 앱 소스에서 생성한다.
+export const serverWebDist = join(root, 'android', 'packages', 'server', 'dist', 'server', 'web-ui');
 const defaultStateRoot = process.platform === 'win32'
     ? join(process.env.LOCALAPPDATA, 'paseodog')
     : join(homedir(), '.local', 'share', 'paseodog');

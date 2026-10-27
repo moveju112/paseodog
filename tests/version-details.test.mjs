@@ -2,10 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
-import { Script } from 'node:vm';
 import { createVersionLabels } from '../android/packages/app/src/utils/version-labels.ts';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { withVersionDetails, withoutVersionDetails } from '../patches/paseo-version-details.mjs';
 import release from '../plugin/shared/release.json' with { type: 'json' };
 
 const require = createRequire(new URL('../plugin/package.json', import.meta.url));
@@ -13,24 +10,6 @@ const React = require('react');
 const { create, act } = require('react-test-renderer');
 const { transformSync } = createRequire(new URL('../android/packages/app/package.json', import.meta.url))('esbuild');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = patchedComposerSource(installed);
-const start = '/* paseodog-version-details:start */', end = '/* paseodog-version-details:end */';
-const webFactory = patched.slice(patched.indexOf(start) + start.length, patched.indexOf(end));
-
-function webLabels(deps, runtimeVersion = null) {
-    const modules = {
-        36: deps.React,
-        855: { useHostRuntimeClient: deps.useClient, useHostRuntimeIsConnected: deps.useConnected },
-        4061: { useProvidersSnapshot: deps.useProvidersSnapshot },
-        883: { isElectronRuntime: () => runtimeVersion !== null },
-        4381: { getDesktopRuntimeInfo: async () => ({ appVersion: runtimeVersion }) },
-    };
-    return new Function('r', `${webFactory};return paseodogVersionLabels;`)(id => {
-        assert.ok(modules[id], `Unexpected module ${id}`);
-        return modules[id];
-    });
-}
 
 async function harness(t, platform, options = {}) {
     const calls = [];
@@ -52,7 +31,7 @@ async function harness(t, platform, options = {}) {
         useClient: id => clients[id], useConnected: () => connected,
         useProvidersSnapshot: () => ({ entries: [{ provider: options.provider ?? 'paseodog' }] }),
     };
-    const hooks = platform === 'web' ? webLabels(deps, options.runtimeVersion) : createVersionLabels(deps);
+    const hooks = createVersionLabels(deps);
     let app, host;
     function Component() {
         app = hooks.useAppVersionText('v0.11.4');
@@ -72,10 +51,12 @@ async function harness(t, platform, options = {}) {
     };
 }
 
-for (const platform of ['source', 'web']) {
+// 클라이언트별 메타데이터 획득은 아래 실제 어댑터 검사에서, 표시와 호스트 격리는
+// 모든 빌드가 사용하는 공통 훅에서 검증한다.
+for (const platform of ['shared']) {
     test(`${platform}: separates app and per-host release/build/base versions`, async t => {
         const state = await harness(t, platform);
-        const expected = platform === 'web' ? release : { version: '1.0.0-rc.7.11075', versionCode: 11075 };
+        const expected = { version: '1.0.0-rc.7.11075', versionCode: 11075 };
         assert.equal(state.app, `PaseoDog: ${expected.version}\n빌드: ${expected.versionCode}\nPaseo: v0.11.4`);
         assert.equal(state.host, 'PaseoDog: 1.0.0-rc.7\n빌드: 11073\nPaseo: v0.11.4\nMixdog: 1.3.1');
         await state.update({ serverId: 'two' });
@@ -99,7 +80,9 @@ for (const platform of ['source', 'web']) {
 }
 
 test('web desktop shows the installed runtime version instead of the bundled release', async t => {
-    const state = await harness(t, 'web', { runtimeVersion: '1.0.0-rc.7.11070' });
+    const state = await harness(t, 'shared', {
+        appRelease: { version: '1.0.0-rc.7.11070', versionCode: 11070 },
+    });
     assert.equal(state.app, 'PaseoDog: 1.0.0-rc.7.11070\n빌드: 11070\nPaseo: v0.11.4');
 });
 
@@ -158,13 +141,4 @@ test('app adapter reads Android package metadata, desktop IPC and web build meta
     assert.deepEqual(await read(), { version: '1.0.0-rc.7.11070', versionCode: 11070 });
     desktop = false;
     assert.deepEqual(await read(), release);
-});
-
-test('web version details are reversible, idempotent, syntax-valid and reject drift/partial patches', () => {
-    assert.equal(withVersionDetails(withoutVersionDetails(patched)), patched);
-    assert.equal(patchedComposerSource(patched), patched);
-    assert.doesNotThrow(() => new Script(patched));
-    assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
-    assert.throws(() => patchedComposerSource(patched.replace(start, '')), /Partial/);
-    assert.throws(() => withVersionDetails('unexpected upstream'), /anchor mismatch/);
 });

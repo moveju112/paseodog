@@ -4,11 +4,13 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { composerFixture, installedComposerFixture } from './composer-fixture.mjs';
+import { composerFixture } from './composer-fixture.mjs';
 
 test('shared fixture verifies bytes and sends unknown inputs to the real hash gate', async t => {
-    const source = installedComposerFixture();
-    assert.equal(composerFixture(source), source);
+    // 더 이상 배포하지 않는 변환기의 미검토 입력 거절은 계속 검사한다.
+    // 공유 소스의 빌드 성공은 build-web 테스트와 실제 릴리즈 export에서 검증한다.
+    const source = 'unreviewed fixture bytes';
+    assert.throws(() => composerFixture(source), /hash mismatch/);
     assert.throws(() => composerFixture(source + '// drift'), /hash mismatch/);
     const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-fixture-test-');
     t.after(() => rm(directory, { recursive: true, force: true }));

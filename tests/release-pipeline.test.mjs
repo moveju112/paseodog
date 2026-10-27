@@ -163,7 +163,7 @@ test('verification retains completed checks across failure and output-workspace 
     assert.equal(counts.get('check.log'), 2);
 });
 
-for (const failure of [null, 'upload', 'export', 'install', 'pages']) {
+for (const failure of [null, 'upload', 'export', 'install', 'pages', 'prepare']) {
 test(`integrated delivery protects active turns, overlaps upload/export and resumes safely: ${failure ?? 'success'}`,
     { timeout: 10000 }, async t => {
     const directory = await temporary(t);
@@ -173,6 +173,7 @@ test(`integrated delivery protects active turns, overlaps upload/export and resu
         workspace: directory, cacheRoot: directory + '-cache', signingInit: init, signingKey: key,
         previousApk: previous, androidTools: '/sdk/tools', metroWorkers: 2, appTests: ['src/fixture.test.ts'],
         repo: 'moveju112/paseodog', pagesProject: 'paseodog', webUrl: 'https://paseodog.choondoggy.com/',
+        prepareOnly: failure === 'prepare',
     });
     t.after(() => rm(config.cacheRoot, { recursive: true, force: true }));
     const calls = [];
@@ -233,6 +234,18 @@ test(`integrated delivery protects active turns, overlaps upload/export and resu
         launchDesktop: async () => { calls.push(['desktop']); },
         installedRelease: async () => ({ versionCode: Number(config.versionCode) }),
     };
+    if (failure === 'prepare') {
+        const result = await deliverRelease(config, operations);
+        assert.equal(result.prepared, true);
+        assert.deepEqual(result.assets, assets);
+        assert.ok(calls.some(row => row[0] === 'verify-artifacts'));
+        assert.equal(calls.some(row => row[0] === 'gh' && ['create', 'upload', 'edit'].includes(row[2])), false);
+        assert.equal(calls.some(row => row[0] === 'sudo' || row.includes('wrangler') || row.includes('reload')), false);
+        assert.equal(calls.some(row => row.includes('ls') && row.includes('--json')), false);
+        assert.equal(calls.some(row => row[0] === 'desktop'), false);
+        await assert.rejects(readFile(join(directory, 'delivery.lock')), { code: 'ENOENT' });
+        return;
+    }
     if (failure) {
         await assert.rejects(deliverRelease(config, operations), new RegExp(`${failure} failed`));
         const saved = JSON.parse(await readFile(join(directory, 'release-state.json'), 'utf8'));

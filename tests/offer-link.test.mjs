@@ -4,8 +4,6 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { OFFER_LINK_BEFORE, OFFER_LINK_AFTER, withOfferLink, withoutOfferLink } from '../patches/paseo-offer-link.mjs';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { composerFixture } from './composer-fixture.mjs';
 
 const require = createRequire(new URL('../plugin/package.json', import.meta.url));
 const React = require('react');
@@ -101,16 +99,8 @@ for (const [platform, factory] of [['shared', sharedListener], ['web', webListen
     });
 }
 
-test('web listener patch is hash-gated, reversible and idempotent in the composer chain', () => {
-    const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    // 하드코딩한 모듈 식별자가 실제 PairLinkModal 모듈인지 검토된 번들에서 확인한다.
-    const modalStart = installed.indexOf('_e.PairLinkModal=function');
-    const modalEnd = installed.indexOf('\n__d(', modalStart);
-    assert.match(installed.slice(modalStart, modalEnd), /\},5268,\[/);
-    const patched = composerFixture(installed);
-    assert.ok(patched.includes(OFFER_LINK_AFTER));
-    assert.equal(composerFixture(patched), patched);
+// 이전 패치의 순수 변환 계약은 유지하되, 실제 연결 동작은 위 공유 리스너에서 검사한다.
+test('legacy listener transform refuses an already transformed input', () => {
     assert.equal(withoutOfferLink(withOfferLink(OFFER_LINK_BEFORE)), OFFER_LINK_BEFORE);
     assert.throws(() => withOfferLink(OFFER_LINK_AFTER), /anchor mismatch/);
-    assert.throws(() => patchedComposerSource(installed + '// drift'), /hash mismatch/);
 });

@@ -2,9 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
-import { runInNewContext, Script } from 'node:vm';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { withSettingsOrganization, withoutSettingsOrganization } from '../patches/paseo-settings-organization.mjs';
+import { runInNewContext } from 'node:vm';
+import { runSharedAppTests } from './shared-app-tests.mjs';
 
 const require = createRequire(new URL('../plugin/package.json', import.meta.url));
 const React = require('react');
@@ -12,8 +11,6 @@ const { create, act } = require('react-test-renderer');
 const ts = createRequire(new URL('../android/package.json', import.meta.url))('typescript');
 const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 const shared = read('android/packages/app/src/screens/settings-screen.tsx');
-const patched = composerFixture(read('tools/node_modules/@getpaseo/server/' + COMPOSER_FILE));
-import { composerFixture } from './composer-fixture.mjs';
 const plain = (source) => stripTypeScriptTypes(source).replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '');
 const routeSource = plain(read('android/packages/app/src/plugins/routes.ts'));
 const buildPluginSurfaceRoute = runInNewContext(routeSource + '; buildPluginSurfaceRoute');
@@ -21,31 +18,6 @@ const detailsSource = plain(read('android/packages/app/src/screens/settings/diag
 const compile = (source) => ts.transpileModule(source, {
     compilerOptions: { jsx: ts.JsxEmit.React, jsxFactory: 'React.createElement' },
 }).outputText;
-const memo = (size) => Array(size).fill(Symbol.for('react.memo_cache_sentinel'));
-const jsx = (type, props) => React.createElement(type, props);
-
-test('settings organization remains hash-gated, reversible and idempotent', () => {
-    new Script(patched);
-    assert.equal(composerFixture(patched), patched);
-    assert.equal(withSettingsOrganization(withoutSettingsOrganization(patched)), patched);
-    assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
-    assert.throws(() => withSettingsOrganization(''), /anchor mismatch/);
-});
-
-test('previous workflow settings upgrade without accepting partial patches or source drift', () => {
-    const durationStart = patched.indexOf('const PaseodogTurnDurationSettings=');
-    const durationEnd = patched.indexOf('const k=[{value:"none",label:', durationStart);
-    assert.ok(durationStart > 0 && durationEnd > durationStart);
-    const duration = patched.slice(durationStart, durationEnd);
-    const row = 'e.section==="workflow"?u.createElement(PaseodogTurnDurationSettings,{key:"duration:"+e.serverId,serverId:e.serverId}):null,';
-    assert.ok(patched.includes(row));
-    const previous = patched.replace(duration, '').replace(row, '');
-    assert.equal(patchedComposerSource(previous), patched);
-    assert.equal(withoutSettingsOrganization(previous), withoutSettingsOrganization(patched));
-    assert.throws(() => patchedComposerSource(previous + '// drift'), /hash mismatch/);
-    assert.throws(() => patchedComposerSource(patched.replace(row, '')), /Partial|hash mismatch/);
-    assert.throws(() => patchedComposerSource(patched.replace(duration, '')), /Partial|hash mismatch/);
-});
 
 // 실제 공통 진단과 고정 웹 컴포넌트의 클릭·표시·호스트 연결을 함께 검증한다.
 test('shared and web diagnostic details keep playback explicit and open the selected host viewer', async (t) => {
@@ -72,19 +44,7 @@ test('shared and web diagnostic details keep playback explicit and open the sele
         useTranslation: () => ({ t: (key) => key }),
         useAppDiagnosticStore: () => () => {},
     });
-    const webStart = patched.indexOf('const PaseodogDiagnosticDetails=');
-    const baseStart = patched.indexOf('function PaseodogBaseDiagnostics(', webStart);
-    const webEnd = patched.indexOf('function ', baseStart + 9);
-    const Web = runInNewContext(patched.slice(webStart, webEnd) + '; Me', {
-        c: React, s: components, t: components, q: components, T: components, Q: components,
-        p: { useRouter: common.useRouter }, he: { useInstalledPlugins: plugins },
-        L: { useHostRuntimeIsConnected: common.useHostRuntimeIsConnected },
-        r: (id) => { assert.equal(id, 3893); return { buildPluginSurfaceRoute }; },
-        ae: { settingsStyles: {} }, l: { c: memo }, Pe: { jsx, jsxs: jsx },
-        S: { useTranslation: () => ({ t: (key) => key }) },
-        ce: { useAppDiagnosticStore: () => () => {} }, We() {}, Ce: { isNative: false },
-    });
-    for (const Component of [Native, Web]) {
+    for (const Component of [Native]) {
         let played = 0;
         const props = {
             serverId: 'host/one', voiceAudioEngine: {}, isPlaybackTestRunning: false,
@@ -130,49 +90,6 @@ test('shared and web diagnostic details keep playback explicit and open the sele
     }
 });
 
-// 동일한 compiler cache를 유지한 채 켜기·끄기를 반복해 웹의 조건부 행 갱신을 확인한다.
-test('web Auto-Clear details follow the switch without changing thresholds', () => {
-    const anchor = patched.indexOf('children:[pe,...(Q?.enabled?[Te,ke,Ve]:[])]');
-    const start = patched.lastIndexOf('function we(', anchor);
-    const end = patched.indexOf('function je(', anchor);
-    const cache = memo(104);
-    const element = (type, props) => ({ type, ...props });
-    const Tokens = runInNewContext('(' + patched.slice(start, end) + ')', {
-        c: { c: () => cache }, C: { jsx: element, jsxs: element, Fragment: 'fragment' },
-        I: 'row', D: 'select', w: { Switch: 'switch' }, j: { Button: 'button' },
-        b: { SettingsSection: 'section' }, n: { View: 'view' }, S: { settingsStyles: {} },
-        M: [], _: [], E: [], z: [], P: [], L: [], fe: 'usage', je: (value) => value,
-    });
-    const nodes = (node) => {
-        if (!node || typeof node !== 'object') return [];
-        if (Array.isArray(node)) return node.flatMap(nodes);
-        return [node, ...nodes(node.children)];
-    };
-    let snapshot = { models: [], route: {}, compaction: { auto: true }, sessions: [],
-        autoClear: { enabled: false, idleMs: 7200000, minContextPercent: 70 } };
-    const calls = [];
-    const request = (command) => {
-        calls.push(command);
-        if (command.action === 'autoClear') snapshot = { ...snapshot,
-            autoClear: { ...snapshot.autoClear, enabled: command.enabled } };
-    };
-    for (const enabled of [false, true, false, true]) {
-        const rendered = nodes(Tokens({ snapshot, request, disabled: false }));
-        const toggle = rendered.find((node) => node.accessibilityLabel === '유휴 컨텍스트 자동 초기화');
-        assert.equal(toggle.value, enabled);
-        for (const title of ['유휴 기준 시간', '최소 컨텍스트 점유율', '공급자 기본값 복원']) {
-            assert.equal(rendered.some((node) => node.title === title), enabled, title);
-        }
-        if (enabled) {
-            assert.equal(rendered.find((node) => node.type === 'select' && node.title === '유휴 기준 시간').value, '7200000');
-            assert.equal(rendered.find((node) => node.type === 'select' && node.title === '최소 컨텍스트 점유율').value, '70');
-        }
-        toggle.onValueChange(!enabled);
-    }
-    assert.deepEqual(calls.map((command) => ({ ...command })), [
-        { action: 'autoClear', enabled: true }, { action: 'autoClear', enabled: false },
-        { action: 'autoClear', enabled: true }, { action: 'autoClear', enabled: false },
-    ]);
-    assert.equal(snapshot.autoClear.idleMs, 7200000);
-    assert.equal(snapshot.autoClear.minContextPercent, 70);
-});
+// 실제 화면의 Auto-Clear 토글·임계값 보존·섹션 분리를 검사한다.
+test('shared Auto-Clear and workflow sections preserve confirmed values', () =>
+    runSharedAppTests(['src/screens/settings/ai-engine-page.test.tsx']));

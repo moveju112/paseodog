@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, lstatSync, copyFile
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { root, stateRoot, paseoHome, mixdogHome, journalRoot, worker } from './paths.mjs';
+import { root, stateRoot, paseoHome, mixdogHome, journalRoot, worker, serverWebDist } from './paths.mjs';
 const DISABLED_BUILTIN_PROVIDERS = ['claude', 'codex', 'copilot', 'opencode', 'pi', 'omp', 'muse', 'antigravity'];
 
 // Mixdog 데이터 디렉터리에 기본 설정값(에이전트 전부 비활성, 지침 ON, 워크트리 OFF, 스킬 OFF)을 시드한다.
@@ -59,6 +59,9 @@ export function configure({home=paseoHome, enginePath=worker, nativeHome=mixdogH
     const {defaultProvider:_ignoredDefaultProvider,...restAgents}=previous.agents||{};
     // Never add plugin source entries by hand: Paseo owns their install lifecycle.
     const config={...previous,version:1,pluginsEnabled:true,daemon,
+        // 웹 활성화·인증 설정과 사용자 지정 경로는 보존하고 기본 산출물 위치만 공유 소스로 전환한다.
+        features:{...previous.features,webUi:{...previous.features?.webUi,
+            distDir:previous.features?.webUi?.distDir ?? serverWebDist}},
         agents:{...restAgents,providers}};
     if(existsSync(file))copyFileSync(file,`${file}.backup-${Date.now()}-${randomUUID().slice(0,8)}`,constants.COPYFILE_EXCL);
     const temp=file+'.'+randomUUID()+'.tmp';writeFileSync(temp,JSON.stringify(config,null,2)+'\n',{mode:0o600,flag:'wx'});renameSync(temp,file);

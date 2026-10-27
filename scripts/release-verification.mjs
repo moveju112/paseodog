@@ -3,13 +3,11 @@ import { mkdir, readFile, writeFile, rename, lstat, readlink } from 'node:fs/pro
 import { join } from 'node:path';
 import { runCommand } from './release-command.mjs';
 import { root } from './paths.mjs';
-import { COMPOSER_FILE } from './patch-paseo-composer.mjs';
 
 export async function sourceFingerprint(run = runCommand, prefixes) {
     const paths = (await run('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
         { cwd: root, capture: true })).split('\0').filter(Boolean).sort();
     paths.push(...['engine', 'tools', 'plugin', 'android'].map(directory => `${directory}/node_modules/.package-lock.json`),
-        `tools/node_modules/@getpaseo/server/${COMPOSER_FILE}`,
         'tools/node_modules/@getpaseo/server/dist/server/server/agent/tools/paseo-tools.js');
     const hash = createHash('sha256').update(process.version).update(process.env.NODE_OPTIONS || '');
     for (const path of [...new Set(paths)].sort()) {

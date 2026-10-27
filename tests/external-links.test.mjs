@@ -1,28 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { Script } from 'node:vm';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { EXTERNAL_LINK_EDITS, withExternalLinks, withoutExternalLinks } from '../patches/paseo-external-links.mjs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
-const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = composerFixture(installed);
-import { composerFixture } from './composer-fixture.mjs';
-
-test('web bundle renders no community or repository link buttons and unwraps exactly', () => {
-    assert.equal(composerFixture(patched), patched);
-    new Script(patched);
-    for (const [before, after] of EXTERNAL_LINK_EDITS) {
-        assert.equal(patched.includes(before), false);
-        assert.equal(patched.split(after).length, 2);
+test('shared screens omit community and repository buttons while retaining error recovery', () => {
+    const root = fileURLToPath(new URL('../android/packages/app/src/', import.meta.url));
+    const files = readdirSync(root, { recursive: true }).filter(path =>
+        path.endsWith('.tsx') && !path.endsWith('.test.tsx'));
+    assert.ok(files.length > 0);
+    // 모든 실제 공유 화면을 확인한다. 옛 번들의 압축 식별자와 렌더 캐시는 더 이상 입력이 아니다.
+    for (const path of files) {
+        const source = readFileSync(join(root, path), 'utf8');
+        assert.doesNotMatch(source, /CommunityLinks|Open GitHub issue|PaseoDog · GitHub/, path);
     }
-    // 렌더 위치가 사라졌으므로 버튼 testID·문구가 화면 트리에 들어갈 경로가 없다.
-    assert.equal(patched.includes('children:(0,R.jsx)(j.CommunityLinks,{})'), false);
-    assert.equal(patched.includes('children:(0,Pe.jsx)(J.CommunityLinks,{})'), false);
-    assert.equal(patched.includes('children:"Open GitHub issue"'), false);
-    assert.equal(patched.includes('actions:C},n[7]=b'), false);
-    assert.equal(patched.includes('children:"PaseoDog \\xb7 GitHub"'), false);
-    const original = withoutExternalLinks(patched);
-    assert.equal(withExternalLinks(original), patched);
-    assert.throws(() => withExternalLinks(patched), /external links anchor mismatch/);
+    const errorScreen = readFileSync(join(root, 'screens/startup-splash-screen.tsx'), 'utf8');
+    assert.match(errorScreen, /onPress=\{handleCopyLogs\}>\s*Copy logs/);
+    assert.match(errorScreen, /onPress=\{bootstrapState\.retry\}>\s*Retry/);
+    assert.doesNotMatch(errorScreen, />\s*Docs\s*</);
 });

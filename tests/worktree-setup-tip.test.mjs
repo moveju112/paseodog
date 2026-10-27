@@ -1,59 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
-import { Script } from 'node:vm';
-import { COMPOSER_FILE, DESKTOP_COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { composerFixture } from './composer-fixture.mjs';
+import { readFileSync } from 'node:fs';
+import { stripTypeScriptTypes } from 'node:module';
+import { runInNewContext } from 'node:vm';
 
-const originalPolicy = 'e.shouldShowWorktreeSetupCallout=function(t){return!0===t?.ok&&!n(t.config??{})}';
-const hiddenPolicy = 'e.shouldShowWorktreeSetupCallout=function(t){return!1}';
+const read = path => readFileSync(new URL('../android/packages/app/src/' + path, import.meta.url), 'utf8');
 
-// 실제 번들의 정책 모듈을 실행해 설정 팁 판단과 수동 설정 경로를 검사한다.
-function loadPolicy(source) {
-    const at = source.indexOf('e.shouldShowWorktreeSetupCallout=function');
-    assert.notEqual(at, -1);
-    const start = source.lastIndexOf('__d(', at);
-    const end = source.indexOf('\n', at);
-    const policy = {};
-    const dependencies = [
-        { i18n: { t: (key) => key } },
-        { buildProjectSettingsRoute: (serverId, projectId) => `/settings/${serverId}/${projectId}` },
-    ];
-    new Script(source.slice(start, end)).runInNewContext({
-        __d: (factory) => factory(null, (value) => value, null, null, null, policy, dependencies),
+// 공유 앱은 정책 함수의 결과를 변조하지 않고 안내 소스 자체를 등록하지 않는다.
+// 설치된 데스크톱 파일 존재 여부와 무관하게 모든 클라이언트가 사용하는 진입점을 검사한다.
+test('shared layout never mounts unsolicited worktree setup', () => {
+    const layout = read('app/_layout.tsx');
+    assert.doesNotMatch(layout, /WorktreeSetupCalloutSource/);
+    assert.match(layout, /SidebarCalloutProvider/);
+});
+
+test('shared worktree policy retains manual project settings and rejects invalid projects', () => {
+    const source = stripTypeScriptTypes(read('components/worktree-setup-callout-policy.ts'))
+        .replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '');
+    const policy = runInNewContext(source +
+        ';({selectActiveGitWorkspaceProject, buildWorktreeSetupCalloutPolicy})', {
+        i18n: { t: key => key },
+        buildProjectSettingsRoute: (serverId, projectId) => `/settings/${serverId}/${projectId}`,
     });
-    return policy;
-}
-
-for (const [client, path] of [
-    ['web', new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url)],
-    ['desktop', DESKTOP_COMPOSER_FILE],
-]) {
-    test(`${client} never promotes worktree setup and retains manual project settings`, {
-        skip: client === 'desktop' && !existsSync(path),
-    }, () => {
-        const source = readFileSync(path, 'utf8');
-        const patched = composerFixture(source);
-        assert.equal(composerFixture(patched), patched);
-        new Script(patched);
-        const policy = loadPolicy(patched);
-        const original = loadPolicy(patched.replace(hiddenPolicy, originalPolicy));
-        assert.equal(original.shouldShowWorktreeSetupCallout({ ok: true, config: {} }), true);
-        for (const response of [
-            undefined, null, { ok: false }, { ok: true }, { ok: true, config: {} },
-            ...[undefined, '', '  ', [], [''], 'npm ci', ['npm ci']].map((setup) => ({
-                ok: true, config: { worktree: { setup } },
-            })),
-        ]) {
-            assert.equal(policy.shouldShowWorktreeSetupCallout(response), false);
-        }
-        const workspace = { projectKind: 'git', projectId: 'project', projectRootPath: '/repo' };
-        const project = policy.selectActiveGitWorkspaceProject('host', workspace);
-        assert.equal(JSON.stringify(project), JSON.stringify(original.selectActiveGitWorkspaceProject('host', workspace)));
-        assert.equal(JSON.stringify(policy.buildWorktreeSetupCalloutPolicy(project)),
-            JSON.stringify(original.buildWorktreeSetupCalloutPolicy(project)));
-        assert.equal(policy.buildWorktreeSetupCalloutPolicy(project).projectSettingsRoute, '/settings/host/project');
-        assert.throws(() => patchedComposerSource(patched.replace(hiddenPolicy,
-            'e.shouldShowWorktreeSetupCallout=function(t){return!0}')), /source hash mismatch/);
+    const workspace = { projectKind: 'git', projectId: 'project', projectRootPath: '/repo' };
+    const project = policy.selectActiveGitWorkspaceProject('host', workspace);
+    assert.deepEqual(JSON.parse(JSON.stringify(project)), {
+        serverId: 'host', projectId: 'project', repoRoot: '/repo',
     });
-}
+    assert.equal(policy.buildWorktreeSetupCalloutPolicy(project).projectSettingsRoute,
+        '/settings/host/project');
+    for (const invalid of [
+        { ...workspace, projectKind: 'directory' },
+        { ...workspace, projectId: ' ' },
+        { ...workspace, projectRootPath: ' ' },
+    ]) assert.equal(policy.selectActiveGitWorkspaceProject('host', invalid), null);
+});

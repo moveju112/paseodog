@@ -2,27 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import {
-    SINGLE_WORKSPACE_EDITS, WORKSPACE_HEADER_EDITS, withSingleWorkspace, withoutSingleWorkspace,
-} from '../patches/paseo-single-workspace.mjs';
 
 const app = new URL('../android/packages/app/', import.meta.url);
 const { transformSync } = createRequire(new URL('package.json', app))('esbuild');
 const readApp = (path) => readFileSync(new URL(`src/${path}`, app), 'utf8');
-const installed = readFileSync(new URL(
-    `../tools/node_modules/@getpaseo/server/${COMPOSER_FILE}`, import.meta.url), 'utf8');
-const patched = composerFixture(installed);
-import { composerFixture } from './composer-fixture.mjs';
-
-function evaluateModule(source, id, dependencies) {
-    const end = source.indexOf(`},${id},[`);
-    const start = source.lastIndexOf('__d(function', end) + '__d('.length;
-    const exports = {};
-    new Function(`return ${source.slice(start, end + 1)}`)()(globalThis,
-        (index) => dependencies[index], null, null, {}, exports, dependencies.map((_, i) => i));
-    return exports;
-}
 
 function sourceRowModel() {
     const code = transformSync(readApp('utils/sidebar-project-row-model.ts'), {
@@ -33,7 +16,6 @@ function sourceRowModel() {
     return module.exports.buildSidebarProjectRowModel;
 }
 
-const webRowModel = evaluateModule(patched, 4355, [{}]).buildSidebarProjectRowModel;
 
 function headerHarness(platform) {
     let compact = false;
@@ -45,13 +27,13 @@ function headerHarness(platform) {
         borderRadius: { lg: 8 },
         colors: { surfaceSidebar: '#111' },
     };
-    const source = platform === 'source' ? readApp('components/left-sidebar.tsx') : patched;
+    const source = readApp('components/left-sidebar.tsx');
     const slice = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
     let code;
     let styles;
     let bindings;
     let name;
-    if (platform === 'source') {
+    {
         const styleCode = transformSync(`const styles = {
             ${slice('workspacesSectionHeader:', 'workspacesSectionTitle:')}
             ${slice('mobileCloseButton:', 'desktopSidebarBorder:')}
@@ -67,20 +49,6 @@ function headerHarness(platform) {
             TooltipContent: 'content', IconTooltipContent: 'icon',
             SidebarDisplayPreferencesMenu: 'display-menu',
             SidebarWorkspaceFolderCreateButton: 'folder-create',
-        };
-    } else {
-        styles = new Function('e', `return {
-            ${slice('workspacesSectionHeader:', 'workspacesSectionTitle:')}
-            ${slice('mobileCloseButton:', 'desktopSidebarBorder:')}
-        };`)(theme);
-        code = slice('function we(){const isCompact=', 'const xe=');
-        name = 'we';
-        const cache = Array(4).fill(Symbol.for('react.memo_cache_sentinel'));
-        bindings = {
-            A: { useIsCompactFormFactor: () => compact }, n: { c: () => cache },
-            oe: { jsx, jsxs: jsx }, Re: styles, t: { View: 'view' }, o: { Text: 'text' },
-            T: { Tooltip: 'tooltip', TooltipTrigger: 'trigger', TooltipContent: 'content' },
-            k: { SidebarDisplayPreferencesMenu: 'display-menu' }, ae: 'icon',
         };
     }
     const component = new Function(...Object.keys(bindings), `${code};return ${name};`)(
@@ -117,11 +85,11 @@ function blockHarness(platform) {
     const state = (value) => [value, () => {}];
     const toast = { error() {} };
     const translate = (key) => key;
-    const rowModel = platform === 'source' ? sourceRowModel() : webRowModel;
+    const rowModel = sourceRowModel();
     let code;
     let name;
     let bindings;
-    if (platform === 'source') {
+    {
         const source = readApp('components/sidebar-workspace-list.tsx');
         code = transformSync(source.slice(source.indexOf('function ProjectBlock('),
             source.indexOf('type ProjectBlockProps =')), {
@@ -136,21 +104,6 @@ function blockHarness(platform) {
             navigateToWorkspace: navigate, jsx, Fragment: 'Fragment', View: 'View',
             ProjectHeaderRow: 'header', DraggableList: 'workspaces', styles: {},
             workspaceKeyExtractor: keyExtractor, activeWorkspaceSelectionKey: selectionKey,
-        };
-    } else {
-        const start = patched.indexOf('function dr(e){const singleWorkspaceMode=');
-        code = patched.slice(start, patched.indexOf('function lr(', start));
-        name = 'dr';
-        bindings = {
-            r: (id) => id === 4072 ? { useSidebarViewStore: useStore } : { navigateToWorkspace: navigate },
-            d: Array.from({ length: 15 }, (_, i) => i),
-            k: { c: () => cache }, Z: { useLimitedSidebarGroup: limited },
-            pe: { buildSidebarProjectRowModel: rowModel },
-            A: { useSidebarProjectStatusBucket: status }, Ae: isActive,
-            G: { useToast: () => toast }, v: { useTranslation: () => ({ t: translate }) },
-            b: { useState: state }, Se: { jsx, jsxs: jsx, Fragment: 'Fragment' },
-            h: { View: 'View' }, or: 'header', Tr: {}, C: { DraggableList: 'workspaces' },
-            fe: keyExtractor, Ne: selectionKey,
         };
     }
     const component = new Function(...Object.keys(bindings), `${code};return ${name};`)(
@@ -185,27 +138,8 @@ function blockHarness(platform) {
     };
 }
 
-test('single workspace patch is reversible, idempotent and refuses drift or partial application', () => {
-    const base = withoutSingleWorkspace(patched);
-    assert.equal(withSingleWorkspace(base), patched);
-    assert.equal(composerFixture(patched), patched);
-    assert.throws(() => patchedComposerSource(`${patched}// drift`), /hash mismatch/);
-    const [before, after] = SINGLE_WORKSPACE_EDITS[0];
-    assert.throws(() => withoutSingleWorkspace(patched.replace(after, before)), /Partial/);
-    assert.throws(() => withSingleWorkspace('unexpected upstream'), /anchor mismatch/);
-});
-
-test('header fix upgrades the previous patch and rejects partial or duplicate header edits', () => {
-    let previous = patched;
-    for (const [before, after] of [...WORKSPACE_HEADER_EDITS].reverse())
-        previous = previous.replace(after, () => before);
-    assert.equal(patchedComposerSource(previous), patched);
-    const [before, after] = WORKSPACE_HEADER_EDITS[0];
-    assert.throws(() => withoutSingleWorkspace(patched.replace(after, before)), /Partial/);
-    assert.throws(() => withoutSingleWorkspace(patched + after), /drift/);
-});
-
-for (const platform of ['source', 'web']) {
+// 모든 클라이언트가 사용하는 공유 구현에 화면 크기·선택·호스트 격리 시나리오를 적용한다.
+for (const platform of ['shared']) {
     test(`${platform}: display menu stays outside the mobile close hit target across layout changes`, () => {
         const harness = headerHarness(platform);
         const desktop = harness.render(false);

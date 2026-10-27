@@ -1,57 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
-import { createRequire, stripTypeScriptTypes } from 'node:module';
-import { Script } from 'node:vm';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { windowFromReportedDuration } from '../tools/node_modules/@getpaseo/plugin/dist/server/usage.js';
-import { COMPOSER_FILE, DESKTOP_COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { USAGE_ORDER_EDITS, withUsageOrder, withoutUsageOrder } from '../patches/paseo-usage-order.mjs';
 
-const { z } = createRequire(new URL('../tools/package.json', import.meta.url))('zod');
-const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = composerFixture(installed);
-import { composerFixture } from './composer-fixture.mjs';
-const current = withoutUsageOrder(patched);
-const androidPinned = readFileSync(new URL('../android/packages/app/src/usage/pinned.ts', import.meta.url), 'utf8');
+const require = createRequire(new URL('../android/package.json', import.meta.url));
+const { buildSync } = require('esbuild');
 const defaults = { displayAs: 'used', pins: null, serverId: null };
 
-// Metro 모듈 하나를 시작 위치에서 잘라 실제 팩토리·id·의존성 id 목록으로 돌려준다.
-function parseModule(source, start) {
-    const text = source.slice(start + '\n__d('.length, source.indexOf('\n__d(', start + 1));
-    const tail = /\},(\d+),\[([\d,]*)\]\);\s*$/.exec(text);
-    return {
-        id: Number(tail[1]),
-        deps: tail[2] ? tail[2].split(',').map(Number) : [],
-        factory: new Function(`return ${text.slice(0, tail.index + 1)}`)(),
-    };
-}
-
-// 사이드바 요약 모듈과 직접 의존 모듈(퍼센트 형식·보고서 모델·기본 핀·단계 색)을 번들 원문 그대로 실행하고 나머지는 zod만 담은 대역으로 둔다.
-function loadUsageModules(source) {
-    const root = parseModule(source, source.lastIndexOf('\n__d(', source.indexOf('e.resolvePinnedUsage=')));
-    const real = new Set([root.id, ...root.deps]);
-    const cache = new Map();
-    const load = (id) => {
-        if (!real.has(id)) return { z };
-        if (!cache.has(id)) {
-            const module = id === root.id ? root : parseModule(source, source.lastIndexOf('\n__d(', source.indexOf(`},${id},[`)));
-            const exports = {};
-            cache.set(id, exports);
-            module.factory(globalThis, load, null, null, { exports }, exports, module.deps);
-        }
-        return cache.get(id);
-    };
-    const [format, model, preferences, tone] = root.deps.map(load);
-    return { pinned: load(root.id), format, model, preferences, tone };
-}
-
-// Android pinned.ts 원문의 타입만 지우고 같은 호스트 의존 함수(번들 모듈)로 실행한다.
-function loadAndroidPinned(modules) {
-    const code = stripTypeScriptTypes(androidPinned)
-        .replace(/^import \{([^}]*)\} from "\.\/(\w+)";$/gm, 'const {$1} = dependencies.$2;')
-        .replace(/^export /gm, '');
-    return new Function('dependencies', `${code}\nreturn { resolvePinnedUsage };`)(modules);
-}
+// 앱·서버 웹·데스크톱의 공통 구현과 실제 의존성을 함께 컴파일한다.
+// 사라진 npm 웹 번들의 모듈 번호나 패치 전 코드에는 의존하지 않는다.
+const compiled = buildSync({
+    stdin: { contents: 'export * as pinned from "./pinned"; export * as model from "./model";',
+        resolveDir: fileURLToPath(new URL('../android/packages/app/src/usage/', import.meta.url)) },
+    tsconfig: fileURLToPath(new URL('../android/packages/app/tsconfig.json', import.meta.url)),
+    bundle: true, platform: 'node', format: 'cjs', write: false,
+});
+const module = { exports: {} };
+new Function('module', 'exports', 'require', compiled.outputFiles[0].text)(module, module.exports, require);
+const { pinned, model } = module.exports;
 
 // 사이드바 보고서 항목 (공급자·계정·창)
 function entry(sourceId, sourceLabel, windows, { account, fetchedAt = '2026-10-20T00:00:00.000Z' } = {}) {
@@ -94,42 +61,12 @@ const expected = [
     ['codex:default', [['5h', '0%'], ['7D', '97%']]],
 ];
 
-test('sidebar usage order patch is hash gated, idempotent and reversible', () => {
+test('host duration windows retain their canonical ids and labels', () => {
     assert.deepEqual(codex.report.windows.map((window) => [window.id, window.shortLabel]),
         [['five_hour', '5h'], ['weekly', 'wk'], ['code_review:weekly', 'Code review wk']]);
-    assert.equal(withoutUsageOrder(current), current);
-    assert.equal(withUsageOrder(current), patched);
-    assert.equal(composerFixture(patched), patched);
-    assert.equal(patchedComposerSource(current), patched);
-    new Script(patched);
-    for (const [before, after] of USAGE_ORDER_EDITS) {
-        assert.equal(patched.split(after).length, 2);
-        assert.equal(patched.includes(before), false);
-        assert.equal(current.split(before).length, 2);
-    }
-    assert.equal(withoutUsageOrder(withoutUsageOrder(patched)), current);
-    assert.throws(() => withUsageOrder(patched), /anchor mismatch/);
-    assert.throws(() => withUsageOrder(current.replace(USAGE_ORDER_EDITS[1][0], '')), /anchor mismatch/);
-    assert.throws(() => withoutUsageOrder(patched + USAGE_ORDER_EDITS[0][1]), /drift/);
-    const partial = patched.replace(USAGE_ORDER_EDITS[1][1], USAGE_ORDER_EDITS[1][0]);
-    assert.throws(() => withoutUsageOrder(partial), /Partial Paseo usage order/);
-    assert.throws(() => patchedComposerSource(partial), /Partial Paseo usage order/);
-    const drifted = current.replace(USAGE_ORDER_EDITS[0][0], USAGE_ORDER_EDITS[0][0].replace('flatMap', 'map'));
-    assert.throws(() => patchedComposerSource(drifted), /hash mismatch/);
-    // 이전 Codex -> Claude 순서 패치도 새 Claude -> Codex 순서로 교체된다.
-    const legacy = patched.replace('["claude","codex"].indexOf', '["codex","claude"].indexOf');
-    assert.notEqual(legacy, patched);
-    assert.equal(withoutUsageOrder(legacy), current);
-    assert.equal(patchedComposerSource(legacy), patched);
 });
 
 test('sidebar shows Claude before Codex whichever report or update arrives first', () => {
-    const original = loadUsageModules(current);
-    const { pinned, model } = loadUsageModules(patched);
-    // 원본은 도착 순서를 따라 Claude/Codex 위치가 바뀌고 주간 창을 wk로 보인다.
-    assert.deepEqual(summary(original.pinned, [claude, codex]).map(([key]) => key), ['claude:default', 'codex:default']);
-    assert.deepEqual(summary(original.pinned, [codex, claude]), [
-        ['codex:default', [['5h', '0%'], ['wk', '97%']]], ['claude:default', [['5H', '2%'], ['7D', '64%']]]]);
     for (const reports of permutations([claude, codex])) {
         const before = [...reports];
         assert.deepEqual(summary(pinned, reports), expected);
@@ -148,8 +85,6 @@ test('sidebar shows Claude before Codex whichever report or update arrives first
 });
 
 test('only weekly wk becomes 7D; 5H, other labels, values, tones and accessible labels stay', () => {
-    const original = loadUsageModules(current).pinned;
-    const { pinned } = loadUsageModules(patched);
     const pins = { ...defaults, pins: [
         { sourceId: 'codex', windowId: 'five_hour' }, { sourceId: 'codex', windowId: 'weekly' },
         { sourceId: 'codex', windowId: 'code_review:weekly' }, { sourceId: 'claude', windowId: 'claude-0' },
@@ -157,10 +92,18 @@ test('only weekly wk becomes 7D; 5H, other labels, values, tones and accessible 
     ] };
     for (const preferences of [pins, { ...pins, displayAs: 'remaining' }]) {
         const reports = [claude, codex, grok];
-        const before = original.resolvePinnedUsage(reports, preferences);
         const after = pinned.resolvePinnedUsage(reports, preferences);
-        assert.deepEqual(after, before.map((source) => ({ ...source, windows: source.windows.map((window) =>
-            ({ ...window, shortLabel: window.shortLabel === 'wk' ? '7D' : window.shortLabel })) })));
+        // 기대값은 출력의 다른 실행이 아니라 입력 보고서에서 독립적으로 계산한다.
+        for (const source of after) {
+            const report = reports.find(entry => entry.id === source.key);
+            for (const window of source.windows) {
+                const input = report.report.windows.find(item => `${report.id}/${item.id}` === window.key);
+                const percent = preferences.displayAs === 'remaining' ? input.remainingPct : input.usedPct;
+                assert.equal(window.percent, percent);
+                assert.equal(window.percentText, `${Math.round(percent)}%`);
+                assert.equal(window.label, `${report.sourceLabel} ${input.label} ${Math.round(percent)}% ${preferences.displayAs === 'remaining' ? 'left' : 'used'}`);
+            }
+        }
         assert.deepEqual(after.flatMap((source) => source.windows.map((window) => window.shortLabel)),
             ['5H', '7D', '5h', '7D', 'Code review wk', '7D', 'mo']);
     }
@@ -169,21 +112,19 @@ test('only weekly wk becomes 7D; 5H, other labels, values, tones and accessible 
         percentText: '97%', tone: 'danger', resetsAt: null });
 });
 
-test('Android pinned source renders the same fixed order and labels as the patched web bundle', () => {
-    const modules = loadUsageModules(patched);
-    const android = loadAndroidPinned(modules);
+test('shared clients preserve account order for every arrival order and preference', () => {
     const work = entry('claude', 'Claude', [{ id: 'claude-1', label: '7D', usedPct: 70, remainingPct: 30, resetsAt: null }], { account: 'work' });
     const preferenceSets = [defaults, { ...defaults, displayAs: 'remaining' },
         { ...defaults, pins: [{ sourceId: 'claude', windowId: 'claude-1' }, { sourceId: 'codex', windowId: 'weekly' }, { sourceId: 'grok', windowId: 'weekly' }] }];
     for (const reports of permutations([work, grok, claude, codex])) {
         for (const preferences of preferenceSets)
-            assert.deepEqual(android.resolvePinnedUsage(reports, preferences), modules.pinned.resolvePinnedUsage(reports, preferences));
+            assert.deepEqual(pinned.resolvePinnedUsage(reports, preferences),
+                pinned.resolvePinnedUsage([claude, work, codex, grok], preferences));
     }
-    assert.deepEqual(summary(android, [work, claude, codex]), [expected[0], ['claude:work', [['7D', '70%']]], expected[1]]);
+    assert.deepEqual(summary(pinned, [work, claude, codex]), [expected[0], ['claude:work', [['7D', '70%']]], expected[1]]);
 });
 
-test('reviewed desktop bundle renders the same fixed sidebar usage order', { skip: !existsSync(DESKTOP_COMPOSER_FILE) }, () => {
-    const desktop = patchedComposerSource(readFileSync(DESKTOP_COMPOSER_FILE, 'utf8'));
-    assert.equal(withUsageOrder(withoutUsageOrder(desktop)), desktop);
-    assert.deepEqual(summary(loadUsageModules(desktop).pinned, [claude, codex]), expected);
+test('shared usage hides unavailable reports and honors explicitly empty pins', () => {
+    assert.deepEqual(summary(pinned, [claude, codex], { ...defaults, pins: [] }), []);
+    assert.deepEqual(summary(pinned, [{ ...claude, report: { status: 'unavailable' } }, codex]), [expected[1]]);
 });

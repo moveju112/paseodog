@@ -6,9 +6,7 @@ import { controlRuntime } from '../engine/src/controls.mjs';
 import { AGENT_PATCHES, gitBlob, patch, patchedAgentSource } from '../scripts/patch-mixdog.mjs';
 import { AGENT_EDITOR_SAFETY_PATCHES } from '../patches/agent-editor-safety.mjs';
 import { createAgentRouteApi } from '../engine/node_modules/mixdog/src/session-runtime/workflow-agents-api/agent-route.mjs';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { composerFixture } from './composer-fixture.mjs';
-import { withoutAgentEditorSafety, withAgentEditorSafety } from '../patches/paseo-agent-editor-safety.mjs';
+import { runSharedAppTests } from './shared-app-tests.mjs';
 
 test('duplicate native patch targets fail before reading or writing runtime files', () => {
     AGENT_PATCHES.push(AGENT_PATCHES[0]);
@@ -134,36 +132,5 @@ test('native route preparation performs no config write until explicitly committ
     assert.equal(config.agents.worker.model, 'test');
 });
 
-test('web editor preserves the draft on failure, requires revision and prevents duplicate saves', async () => {
-    const source = composerFixture(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
-    assert.equal(withAgentEditorSafety(withoutAgentEditorSafety(source)), source);
-    const start = source.indexOf('Bt=async()=>{if(paseodogEditor.saving)');
-    const end = source.indexOf(',t[63]=Me', start);
-    assert.ok(start >= 0 && end > start);
-    const editor = { revision: null, saving: false };
-    const calls = [];
-    let closed = 0;
-    let reply = async () => undefined;
-    const save = vm.runInNewContext(`(${source.slice(start + 3, end)})`, {
-        paseodogEditor: editor, $e: 'openai', Ie: 'test', De: 'low', Me: false, ze: false,
-        pe: true, Oe: [], ie: 'edit', ge: 'worker', Te: 'Worker', ke: '', Pe: '# Original', je: '',
-        Ue: () => {}, ft: () => { closed++; },
-        x: async (payload) => { calls.push(payload); return reply(); },
-    });
-    await save();
-    assert.equal(calls.length, 0);
-    editor.revision = 'a'.repeat(24);
-    await save();
-    assert.equal(closed, 0);
-    assert.equal(calls[0].expectedRevision, editor.revision);
-    assert.equal(calls[0].body, '# Original');
-    let complete;
-    reply = () => new Promise((resolve) => { complete = resolve; });
-    const pending = save();
-    await save();
-    assert.equal(calls.length, 2);
-    complete({});
-    await pending;
-    assert.equal(closed, 1);
-    assert.equal(editor.saving, false);
-});
+test('shared settings preserve editor failure and revision safety', () =>
+    runSharedAppTests(['src/screens/settings/ai-engine-page.test.tsx']));

@@ -1,14 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { COMPOSER_FILE, patchedComposerSource, patchedComposerWholeSource } from '../scripts/patch-paseo-composer.mjs';
+import { patchedComposerSource, patchedComposerWholeSource } from '../scripts/patch-paseo-composer.mjs';
 
-const installed = readFileSync(new URL(`../tools/node_modules/@getpaseo/server/${COMPOSER_FILE}`, import.meta.url), 'utf8');
+// 공유 소스 export로 전환해도 옛 변환기가 임의 바이트를 승인해서는 안 된다.
+const installed = 'unreviewed bundle\n__d(function(){},1,[]);';
 
-test('indexed composer matches the complete reviewed transformation byte for byte', () => {
-    const expected = patchedComposerWholeSource(installed);
-    assert.equal(patchedComposerSource(installed), expected);
-    assert.equal(patchedComposerSource(expected), expected);
+test('both legacy transformation paths reject unreviewed bytes', () => {
+    assert.throws(() => patchedComposerWholeSource(installed), /source hash mismatch/);
+    assert.throws(() => patchedComposerSource(installed), /source hash mismatch/);
 });
 
 test('whole bundle hash gate still rejects edits outside the selected modules and changed boundaries', () => {

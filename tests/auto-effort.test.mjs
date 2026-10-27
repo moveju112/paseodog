@@ -3,9 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fixture, until } from './helpers.mjs';
-import { patchedComposerSource, COMPOSER_FILE } from '../scripts/patch-paseo-composer.mjs';
-import { withoutWhite2Theme } from '../scripts/patch-paseo-theme.mjs';
-import { withoutCollaboration } from '../patches/paseo-collaboration.mjs';
+import { runSharedAppTests } from './shared-app-tests.mjs';
 import {
     AUTO_EFFORT_ID, AUTO_EFFORT_SOURCE, AUTO_EFFORT_SOURCE_ANCHOR, AUTO_EFFORT_EDITS,
     createAutoEffortState, withoutAutoEffort,
@@ -14,26 +12,10 @@ import {
 const require = createRequire(new URL('../plugin/package.json', import.meta.url));
 const React = require('react');
 const { create, act } = require('react-test-renderer');
-const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = composerFixture(installed);
-import { composerFixture } from './composer-fixture.mjs';
-
-test('both PaseoDog control bars route through the effort wrapper and duplicate switches are removed reversibly', () => {
-    assert.equal(composerFixture(patched), patched);
-    for (const [before, after, count] of AUTO_EFFORT_EDITS) {
-        if (!after.includes(before)) assert.equal(patched.split(before).length, 1);
-        assert.equal(patched.split(after).length, count + 1);
-    }
-    const draftStart = patched.indexOf('_e.DraftAgentControls=function');
-    assert.ok(patched.slice(draftStart, patched.indexOf('return ae', draftStart)).includes('PaseodogEffortControls,{paseodogScope:"draft",provider:te,'));
-    assert.ok(patched.includes('PaseodogEffortControls,{paseodogScope:"live",provider:h.provider,'));
-    const stripped = withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(patched)));
-    assert.ok(!stripped.includes('PaseodogEffortControls') && stripped.includes('(0,J.jsx)(ve,{provider:te,'));
-    assert.throws(() => patchedComposerSource(patched.replace(AUTO_EFFORT_EDITS[0][1], AUTO_EFFORT_EDITS[0][0])),
-        /Partial Paseo auto effort/);
-    assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
-    new Function(patched);
-});
+// 현재 공유 컨트롤의 실제 렌더링·호스트/세션 격리·불확실한 저장 방지를 검증한다.
+// 아래 기존 provider 연결 시나리오도 유지해 전송 계약 회귀를 계속 확인한다.
+test('shared controls preserve draft/live effort isolation and confirmed writes', () =>
+    runSharedAppTests(['src/composer/agent-controls/paseodog-controls.test.tsx']));
 
 // 주입 소스를 실제 번들과 같은 이름(s=React, J=jsx, O=세션 저장소, ve=컨트롤 바)으로 평가한다.
 // AgentControls(Te)처럼 컨트롤 바 요소를 agentId 없는 의존성으로 캐시하고, 캐시 밖에서 주입된 에이전트 범위 식을 그대로 적용한다.

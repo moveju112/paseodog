@@ -3,14 +3,12 @@ import assert from 'node:assert/strict';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { MAX_TURN_MINUTES } from '../plugin/shared/turn-duration.mjs';
 import { readFileSync } from 'node:fs';
-import { runInNewContext, Script } from 'node:vm';
+import { runInNewContext } from 'node:vm';
 import { controlRuntime } from '../engine/src/controls.mjs';
 import { compactionSummaryPlan } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/session/loop/fresh-context.mjs';
 import { createCompactionSettings } from '../engine/node_modules/mixdog/src/session-runtime/settings-compaction-api.mjs';
 import { normalizeCompactionConfig } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/runtime-core/config-helpers.mjs';
-import { patchedComposerSource, COMPOSER_FILE } from '../scripts/patch-paseo-composer.mjs';
-import { composerFixture } from './composer-fixture.mjs';
-import { withSettingsCorrections, withoutSettingsCorrections } from '../patches/paseo-settings-corrections.mjs';
+import { runSharedAppTests } from './shared-app-tests.mjs';
 
 // 실제 RPC 스키마와 네이티브 설정 저장기를 메모리 구성으로 연결한다.
 test('zero token override resets the native budget through the actual RPC contract', async () => {
@@ -85,14 +83,9 @@ test('summary route uses its configured provider and preserves model IDs contain
     assert.equal(fallback.model, 'large');
 });
 
-// 설치된 웹 번들의 전체 원본 해시·재적용과 실제 렌더 목록을 함께 확인한다.
-test('web settings hide unsupported timeout and describe background memory', () => {
-    const source = composerFixture(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
-    assert.equal(composerFixture(source), source);
-    assert.ok(source.includes('children:[le,ie,ne,ae,ce,ue,me,ge]'));
-    assert.ok(!source.includes('children:[le,ie,ne,ae,ce,ue,me,xe,ge]'));
-    assert.ok(source.includes(String.raw`\ubc31\uadf8\ub77c\uc6b4\ub4dc \uba54\ubaa8\ub9ac (Recap)`));
-});
+// 실제 공유 설정 화면에서 토큰 섹션의 저장·실패·연결 상태 계약을 검증한다.
+test('shared token settings retain supported controls and confirmed values', () =>
+    runSharedAppTests(['src/screens/settings/ai-engine-page.test.tsx']));
 
 // 실제 공통 소스와 고정 번들의 컴포넌트를 평가해 숨긴 항목과 유지한 업데이트 UI를 확인한다.
 test('shared and web about settings omit release channels and changelog without hiding updates', () => {
@@ -124,34 +117,13 @@ test('shared and web about settings omit release channels and changelog without 
         useTranslation: () => translation, useDesktopAppUpdater: () => updater,
         useCallback: (callback) => callback, useFocusEffect() {},
     });
-    const patched = composerFixture(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
-    new Script(patched);
-    const webFunction = (name, anchor) => {
-        const start = patched.lastIndexOf(`function ${name}(`, patched.indexOf(anchor));
-        return patched.slice(start, patched.indexOf('function ', start + 9));
-    };
-    const web = runInNewContext(`(${webFunction('Fe', 'settings.about.thisDevice')});`, {
-        l: { c: (size) => Array(size).fill(Symbol.for('react.memo_cache_sentinel')) },
-        S: { useTranslation: () => translation }, Pe: { jsx, jsxs: jsx, Fragment: 'Fragment' },
-        t: components, s: components, ae: { settingsStyles: {} }, ot: {},
-        Ue: 'whats-new', He: components, Qe: 'desktop-update', T: components, Ge: 'hosts',
-        paseodogVersionLabels: { useAppVersionText },
-    });
-    const webDesktop = runInNewContext(`(${webFunction('Qe', 'settings.about.releaseChannel.label')});`, {
-        l: { c: (size) => Array(size).fill(Symbol.for('react.memo_cache_sentinel')) },
-        S: { useTranslation: () => translation }, Pe: { jsx, jsxs: jsx, Fragment: 'Fragment' },
-        t: components, s: components, ae: { settingsStyles: {} }, ot: {},
-        A: { useSettings: () => ({ settings: { releaseChannel: 'stable' }, updateSettings() {} }) },
-        ie: { useDesktopAppUpdater: () => updater }, b: { useFocusEffect() {} },
-        X: { SegmentedControl: 'release-channel' }, q: components, qe: (t) => t('settings.about.updates.update'),
-    });
     function renderedValues(node) {
         if (node == null) return [];
         if (Array.isArray(node)) return node.flatMap(renderedValues);
         if (typeof node !== 'object') return [node];
         return [node.type, ...renderedValues(node.children)];
     }
-    for (const about of [native[0], web]) {
+    for (const about of [native[0]]) {
         for (const isDesktopApp of [false, true]) {
             const values = renderedValues(about({ appVersion: '1.0.0', appVersionText: 'v1.0.0', isDesktopApp }));
             assert.ok(values.includes('settings.about.appVersion'));
@@ -162,7 +134,7 @@ test('shared and web about settings omit release channels and changelog without 
             assert.ok(!values.includes('settings.about.whatsNewHint'));
         }
     }
-    for (const desktop of [native[1], webDesktop]) {
+    for (const desktop of [native[1]]) {
         const values = renderedValues(desktop());
         assert.ok(!values.includes('release-channel'));
         assert.ok(!values.includes('settings.about.releaseChannel.label'));
@@ -174,7 +146,4 @@ test('shared and web about settings omit release channels and changelog without 
         assert.equal(desktop(), null);
         updater.isDesktopApp = true;
     }
-    assert.equal(composerFixture(patched), patched);
-    assert.equal(withSettingsCorrections(withoutSettingsCorrections(patched)), patched);
-    assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
 });

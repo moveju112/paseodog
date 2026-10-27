@@ -2,14 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Script } from 'node:vm';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { runSharedAppTests } from './shared-app-tests.mjs';
 import {
     TOOLBAR_ITEM, TOOLBAR_ITEMS, ROWS_FILTER, TOOLBAR_RENDER, withoutSidebarToolbar,
 } from '../patches/paseo-sidebar-toolbar.mjs';
 
-const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = composerFixture(installed);
-import { composerFixture } from './composer-fixture.mjs';
 
 // 검토 번들 사이드바 모듈 범위의 대역으로 주입 함수를 실행해 PaseoDog 항목만 고른다.
 function loadToolbarItems(items) {
@@ -20,11 +17,8 @@ function loadToolbarItems(items) {
         { useRef: (value) => ({ current: value }) }, { jsx }, { View: 'view' }, { PluginSidebarItem: 'plugin-item' });
 }
 
-test('PaseoDog footer item moves from the quota rows into the bottom-left toolbar', () => {
-    assert.equal(composerFixture(patched), patched);
-    new Script(patched);
-    assert.ok(patched.includes(ROWS_FILTER) && patched.includes(TOOLBAR_RENDER));
-    assert.throws(() => patchedComposerSource(patched.replace(TOOLBAR_RENDER, '')), /Partial Paseo sidebar toolbar/);
+test('PaseoDog footer item moves from the quota rows into the bottom-left toolbar', async () => {
+    await runSharedAppTests(['src/components/left-sidebar.test.tsx']);
     const own = { kind: 'plugin', visible: true, key: 'own', group: { pluginId: 'paseodog-provider' } };
     const other = { kind: 'plugin', visible: true, key: 'other', group: { pluginId: 'other-plugin' } };
     const hidden = { ...own, key: 'hidden', visible: false };
@@ -38,5 +32,4 @@ test('PaseoDog footer item moves from the quota rows into the bottom-left toolba
         [['plugin-item', 'own', 'footer', own.group]]);
     assert.equal(row.props.children[0].props.onBeforeNavigate, onBeforeNavigate);
     assert.equal(loadToolbarItems([usage, other]).PaseodogToolbarItems({}), null);
-    assert.equal(withoutSidebarToolbar(withoutSidebarToolbar(patched)).includes('PaseodogToolbarItems'), false);
 });

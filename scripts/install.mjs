@@ -4,12 +4,12 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { root, journalRoot, launcherPath, supportedNode } from './paths.mjs';
+import { root, journalRoot, launcherPath, supportedNode, serverWebDist } from './paths.mjs';
 import { ensureWindowsJobHelper, windowsCompilerPath } from '../plugin/server/windows-job.mjs';
 
 // Upstream patches applied then verified at install, in this order.
 const PATCHES = ['mixdog', 'paseo-usage', 'paseo-steer', 'paseo-agent-messages', 'paseo-assistant-phase',
-    'paseo-workspace-name', 'paseo-session-titles', 'paseo-local-stt', 'paseo-relay-password', 'paseo-composer'];
+    'paseo-workspace-name', 'paseo-session-titles', 'paseo-local-stt', 'paseo-relay-password'];
 
 // Mixdog의 정리 훅이 하위 설치 파일을 지우므로 고정된 하위 훅부터 순서대로 완료한다.
 export function engineInstallSteps() {
@@ -34,6 +34,9 @@ export function installSteps(platform = process.platform) {
         ...engineInstallSteps(),
         npm('--prefix', 'plugin', 'ci'),
         ...PATCHES.flatMap((name) => [node(`scripts/patch-${name}.mjs`), node(`scripts/patch-${name}.mjs`, '--check')]),
+        // 잠긴 공유 UI 의존성을 설치한 뒤 브라우저용으로 export한다. npm 서버 번들은 수정하지 않는다.
+        npm('--prefix', 'android', 'ci'),
+        node('scripts/build-web.mjs', '--hosting', 'server', '--output', serverWebDist, '--metro-workers', '1'),
         npm('run', 'check'),
         // Root tests assume POSIX tooling (bash, python3, mode bits, symlinks).
         ...(platform === 'win32' ? [] : [npm('test')]),
@@ -92,7 +95,7 @@ async function install(argv) {
         }
     }
     // Reviewed lockfiles are part of the release: install must never resolve new dependency versions.
-    for (const name of ['tools', 'engine', 'plugin'])
+    for (const name of ['tools', 'engine', 'plugin', 'android'])
         if (!existsSync(join(root, name, 'package-lock.json')))
             throw new Error(`Missing ${name}/package-lock.json; use a complete release checkout`);
     if (process.platform === 'win32') console.log('Skipping root tests on Windows (they require POSIX tooling).');

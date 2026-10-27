@@ -52,7 +52,7 @@ test('web build stops on failure before exporting or preparing Pages files', asy
     assert.deepEqual(calls, ['npm']);
     await assert.rejects(buildWeb({ output: 'relative' }), /absolute path/);
     await assert.rejects(buildWeb({ output: '/unused', metroWorkers: '0' }), /positive integer/);
-    await assert.rejects(buildWeb({ output: '/unused', hosting: 'unknown' }), /github or cloudflare/);
+    await assert.rejects(buildWeb({ output: '/unused', hosting: 'unknown' }), /hosting must be github, cloudflare or server/);
 });
 
 test('Cloudflare exports root assets without overriding its built-in SPA fallback', async (t) => {

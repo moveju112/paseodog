@@ -9,8 +9,7 @@ import { createNativeEngine } from '../engine/src/native-engine.mjs';
 import { controlRuntime } from '../engine/src/controls.mjs';
 import { createStandaloneHookBus } from '../engine/node_modules/mixdog/src/session-runtime/services/hook-bus.mjs';
 import { changeHookSettings, readHookSettings } from '../engine/src/hook-settings.mjs';
-import { patchedComposerSource, COMPOSER_FILE } from '../scripts/patch-paseo-composer.mjs';
-import { composerFixture } from './composer-fixture.mjs';
+import { runSharedAppTests } from './shared-app-tests.mjs';
 import { withSettingsBehavior, withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
 
 // 원래 세션의 모델·본문을 기록하는 무과금 런타임. 실제 어댑터 configure 경로를 호출한다.
@@ -205,38 +204,5 @@ test('malformed hook files and invalid input are rejected without overwriting ex
     assert.equal(readFileSync(f.status.rulesPath, 'utf8'), '{broken');
 });
 
-test('web settings patch is reversible, hash-gated, and persists before publishing state', async () => {
-    const bundle = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const source = composerFixture(bundle);
-    new Script(source);
-    assert.equal(composerFixture(source), source);
-    assert.equal(withSettingsBehavior(withoutSettingsBehavior(source)), source);
-    assert.throws(() => patchedComposerSource(source + '// drift'), /hash mismatch/);
-    const start = source.indexOf('_e.saveAppSettings=(()=>');
-    const end = source.indexOf(',_e.loadAppSettingsFromStorage=Q', start);
-    let cache = { enabled: true }, disk = { enabled: true }, error = null;
-    let fail = true;
-    const sandbox = {
-        _e: {}, V: value => ({ ...value }), F: ['app-settings'], Q: async () => disk,
-        ie: async () => ({}), h: { APP_SETTINGS_KEY: 'settings' }, J: { parse: () => ({}) },
-        re: async (_storage, _stored, value) => { if (fail) throw new Error('disk full'); disk = value; },
-    };
-    runInNewContext(source.slice(start, end), sandbox);
-    const queryClient = {
-        getQueryData: () => cache,
-        setQueryData(key, value) { if (key[0] === 'app-settings') cache = value; else error = value; },
-    };
-    await assert.rejects(sandbox._e.saveAppSettings({ queryClient, updates: { enabled: false }, deps: { storage: {} } }), /disk full/);
-    assert.equal(cache.enabled, true);
-    assert.equal(disk.enabled, true);
-    assert.match(error, /저장하지 못했어요/);
-    fail = false;
-    await Promise.all([
-        sandbox._e.saveAppSettings({ queryClient, updates: { enabled: false }, deps: { storage: {} } }),
-        sandbox._e.saveAppSettings({ queryClient, updates: current => ({ peer: current.enabled }), deps: { storage: {} } }),
-    ]);
-    assert.equal(cache.enabled, false);
-    assert.equal(cache.peer, false);
-    assert.equal(disk.peer, false);
-    assert.equal(error, null);
-});
+test('shared settings persist before publishing and serialize functional updates after failures', () =>
+    runSharedAppTests(['src/hooks/use-settings/storage.test.ts']));

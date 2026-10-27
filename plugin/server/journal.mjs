@@ -1,6 +1,6 @@
 import { constants, existsSync, lstatSync, mkdirSync, openSync, readFileSync, writeFileSync, closeSync, fsyncSync, renameSync, unlinkSync, rmdirSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import { safeKey, plainObject } from './util.mjs';
 
@@ -39,13 +39,16 @@ function privateDir(path) {
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`Unsafe state directory: ${path}`);
     if (process.platform !== 'win32' && (stat.mode & 0o077)) throw new Error(`State directory must be owner-only (chmod 700): ${path}`);
 }
-function readJson(path) {
+function readBytes(path) {
     const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW || 0));
     try {
         const data = readFileSync(fd);
         if (data.length > MAX_BYTES) throw new Error('Session journal exceeds safety limit');
-        return JSON.parse(data.toString('utf8'));
+        return data;
     } finally { closeSync(fd); }
+}
+function readJson(path) {
+    return JSON.parse(readBytes(path).toString('utf8'));
 }
 function atomicJson(path, data) {
     if (existsSync(path) && lstatSync(path).isSymbolicLink()) throw new Error('Refusing symlink journal');
@@ -153,8 +156,11 @@ export class JournalStore {
             try {
                 const stat = lstatSync(join(this.root, file), { bigint: true });
                 if (!stat.isFile()) { this.summaryCache.delete(file); continue; }
-                // 외부 writer의 원자적 교체와 같은 크기·mtime의 덮어쓰기도 감지한다.
-                const revision = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}:${stat.mode}`;
+                // 파일시스템 시간 해상도 때문에 연속 쓰기의 ctime도 같을 수 있다.
+                // 메타데이터만으로 과거 본문을 되살리지 않도록 실제 바이트를 함께 비교한다.
+                // 기존 O_NOFOLLOW와 크기 제한을 재사용하고 JSON 파싱·요약은 변경 시에만 수행한다.
+                const digest = createHash('sha256').update(readBytes(join(this.root, file))).digest('hex');
+                const revision = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}:${stat.mode}:${digest}`;
                 let cached = this.summaryCache.get(file);
                 if (!cached || cached.revision !== revision) {
                     cached = { revision, summary: sessionSummary(this.load(file.slice(0, -5))) };

@@ -6,8 +6,6 @@ import { runInNewContext } from 'node:vm';
 import { normalizeAssistantPhoto, assistantPhotoCrop } from '../android/packages/app/src/hooks/use-settings/assistant-photo.ts';
 import { createAssistantProfileSettings } from '../android/packages/app/src/screens/settings/chat/assistant-profile-settings.ts';
 import { ASSISTANT_ICONS } from '../android/packages/app/src/hooks/use-settings/assistant-icons.ts';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { composerFixture } from './composer-fixture.mjs';
 
 const photo = 'data:image/jpeg;base64,/9j/2Q==';
 const req = createRequire(new URL('../plugin/package.json', import.meta.url));
@@ -124,15 +122,15 @@ test('profile controls ignore stale picker results and report save failure witho
     assert.equal(updates.length, 1);
 });
 
-test('reviewed web settings validate photos and reject partial photo patches', () => {
-    const source = composerFixture(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
-    const expression = /assistantPhoto:(f\.z\.string\(\)\.transform\([\s\S]*?\)\.catch\(""\)),/.exec(source);
+test('shared web settings reject remote and executable photo values at the storage boundary', () => {
+    // 저장 시 실제 사용하는 스키마 표현식에 공유 정규화 함수를 연결한다.
+    const source = readFileSync(new URL('../android/packages/app/src/hooks/use-settings/storage.ts', import.meta.url), 'utf8');
+    const expression = /assistantPhoto: (z\.string\(\)\.transform\(normalizeAssistantPhoto\)\.catch\(""\)),/.exec(source);
     assert.ok(expression);
-    const schema = runInNewContext(expression[1], { f: { z: req('zod').z } });
+    const schema = runInNewContext(expression[1], { z: req('zod').z, normalizeAssistantPhoto });
     assert.equal(schema.parse(photo), photo);
     for (const value of [undefined, null, 'https://example.com/photo', 'data:image/svg+xml;base64,PHN2Zz4='])
         assert.equal(schema.parse(value), '');
-    const partial = source.replace('assistantPhoto:"",toolCallDetailLevel:', 'toolCallDetailLevel:');
-    assert.notEqual(partial, source);
-    assert.throws(() => patchedComposerSource(partial), /Partial Paseo assistant photo/);
+    for (const value of [1, {}, [], photo + 'A'.repeat(128 * 1024), 'data:image/jpeg;base64,/9j/!'])
+        assert.equal(schema.parse(value), '');
 });

@@ -6,9 +6,7 @@ import { Script } from 'node:vm';
 import { createDaemonUpdateCallouts } from '../android/packages/app/src/desktop/updates/daemon-update-callouts.ts';
 import { DAEMON_RELEASE } from '../plugin/server/util.mjs';
 import { daemonRelease, daemonUpdate } from '../plugin/shared/controls.ts';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { composerFixture } from './composer-fixture.mjs';
-import { withDaemonUpdate, withoutDaemonUpdate } from '../patches/paseo-daemon-update.mjs';
+import { runSharedAppTests } from './shared-app-tests.mjs';
 import release from '../plugin/shared/release.json' with { type: 'json' };
 
 const require = createRequire(new URL('../plugin/package.json', import.meta.url));
@@ -269,26 +267,10 @@ test('daemon release RPC reports the loaded product release and rejects mutation
     assert.throws(() => daemonRelease.input.parse({ restart: true }));
 });
 
-test('web patch preserves the app callout, shares source behavior and remains hash gated', () => {
-    const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const patched = composerFixture(installed), original = withoutDaemonUpdate(patched);
-    new Script(patched);
-    assert.equal(withDaemonUpdate(original), patched);
-    assert.equal(composerFixture(patched), patched);
-    assert.ok(patched.includes(createDaemonUpdateCallouts.toString()));
-    assert.ok(patched.includes('createElement(PaseodogOriginalUpdateCallout)'));
-    // 패치된 실제 Metro 모듈을 실행해 기존 앱 알림과 데몬 알림이 함께 마운트되는지 확인한다.
-    const position = patched.indexOf('e.UpdateCalloutSource=');
-    const from = patched.lastIndexOf('\n__d(', position);
-    const to = patched.indexOf('\n__d(', position);
-    const text = patched.slice(from + '\n__d('.length, to);
-    const tail = /\},(\d+),\[([\d,]*)\]\);\s*$/.exec(text);
-    const factory = new Function(`return ${text.slice(0, tail.index + 1)}`)();
-    const exports = {};
-    factory(globalThis, id => id === 36 ? React : {}, null, null, { exports }, exports, tail[2].split(',').map(Number));
-    const children = exports.UpdateCalloutSource().props.children;
-    assert.equal(children.length, 2);
-    assert.equal(children[1].type.name, 'DaemonUpdateCallouts');
-    assert.throws(() => patchedComposerSource(original + '\n/* drift */'), /hash mismatch/);
-    assert.throws(() => patchedComposerSource(patched.replace('/* paseodog-daemon-update:end */', '')), /Partial Paseo daemon update/);
+test('shared update source retains app callouts alongside daemon notices', async () => {
+    await runSharedAppTests(['src/desktop/updates/resolve-update-callout.test.ts']);
+    const source = readFileSync(new URL('../android/packages/app/src/desktop/updates/update-callout-source.tsx', import.meta.url), 'utf8');
+    assert.match(source, /return <DaemonUpdateCallouts \/>/);
+    assert.match(source, /return callouts\.show\(/);
+    assert.match(source, /resolveUpdateCalloutDescriptor\(\{/);
 });

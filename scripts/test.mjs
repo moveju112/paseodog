@@ -1,25 +1,15 @@
-import { mkdtemp, readFile, readdir, rm, writeFile, open } from 'node:fs/promises';
+import { readdir, open } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { COMPOSER_FILE, patchedComposerSource } from './patch-paseo-composer.mjs';
 import { runTestFiles } from './test-files.mjs';
 import { sourceFingerprint } from './release-verification.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
-export async function prepareComposerFixture(directory) {
-    const source = await readFile(join(root, 'tools/node_modules/@getpaseo/server', COMPOSER_FILE), 'utf8');
-    const patched = patchedComposerSource(source);
-    if (patchedComposerSource(patched) !== patched) throw new Error('Composer patch is not idempotent');
-    const digest = text => createHash('sha256').update(text).digest('hex');
-    await writeFile(join(directory, 'patched.js'), patched);
-    await writeFile(join(directory, 'receipt.json'), JSON.stringify({ input: digest(source), output: digest(patched) }));
-}
-
-// 전체 테스트 목록은 유지한다. 공통 대형 번들 생성만 한 번 하고 각 파일은 기존 격리 프로세스로 실행한다.
+// 전체 테스트 목록과 프로세스 격리를 유지하며 공유 소스 회귀 검사를 실행한다.
 export async function withTestLock(run, identity = 'paseodog-heavy-tests') {
     // 릴리즈 호스트의 flock만 사용한다. Windows/macOS의 기존 로컬 테스트 실행은 막지 않는다.
     if (process.platform !== 'linux') {
@@ -45,18 +35,14 @@ export async function withTestLock(run, identity = 'paseodog-heavy-tests') {
 }
 
 export async function runTests(args = [], selectedFiles) {
-    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-tests-');
-    try {
+    {
         const files = selectedFiles ?? (await readdir(join(root, 'tests'))).filter(name => name.endsWith('.test.mjs'))
             .sort().map(name => join(root, 'tests', name));
-        let fixture;
         const execute = async file => {
-            // 캐시 적중만 있는 재시도는 22MB 번들을 다시 생성하지 않는다.
-            if (!selectedFiles) await (fixture ??= prepareComposerFixture(directory));
             return new Promise((resolveRun, reject) => {
             const child = spawn(process.execPath, ['--test', ...args, file], {
                 cwd: root, stdio: 'inherit', env: { ...process.env,
-                    PASEODOG_TEST_COMPOSER_FIXTURE: selectedFiles ? '' : directory },
+                    PASEODOG_TEST_COMPOSER_FIXTURE: '' },
             });
             child.on('error', reject);
             child.on('close', (code, signal) => signal ? reject(new Error(`Tests interrupted: ${signal}`)) : resolveRun(code));
@@ -68,7 +54,7 @@ export async function runTests(args = [], selectedFiles) {
             identity: { input: process.env.PASEODOG_TEST_INPUT, node: process.version, args },
             validate: async () => !expected || await sourceFingerprint() === expected,
         });
-    } finally { await rm(directory, { recursive: true, force: true }); }
+    }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

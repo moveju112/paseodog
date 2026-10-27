@@ -36,6 +36,9 @@ export async function runReleaseBuild(run, { android = true, desktop = true, web
             await settleBuilds([linux, windows]);
         })() : null,
     ].filter(Boolean));
+    // Electron 산출물은 브라우저용 연결·첨부 처리와 다르므로 별도로 export한다.
+    // 선택하지 않은 웹을 빌드하지 않고, 플랫폼 작업 종료 후 실행해 최대 두 작업 제한을 지킨다.
+    if (web) await run('server-web');
 }
 // 고유 산출물 폴더와 재사용 캐시를 분리하고 플랫폼별 Metro 임시 경로를 고정한다.
 export async function buildRelease({ workspace, cacheRoot, signingInit, versionCode, version, metroWorkers, checkpoint, targets }) {
@@ -67,6 +70,8 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
         'desktop-main': [desktopRoot, ['npm', 'run', 'build:main']],
         linux: [desktopRoot, [...builder, '--linux', 'deb', 'AppImage']],
         windows: [desktopRoot, [...builder, '--win', 'nsis', '--x64']],
+        'server-web': [root, [process.execPath, 'scripts/build-web.mjs', '--hosting', 'server',
+            '--output', join(workspace, 'server-web'), '--metro-workers', metroWorkers || '1']],
     };
     const execute = async name => {
         const temporary = join(cacheRoot, name);
@@ -117,6 +122,7 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
             join(output, 'latest-linux.yml')],
         windows: [join(output, `PaseoDog-Setup-${version}-x64.exe`),
             join(output, `PaseoDog-Setup-${version}-x64.exe.blockmap`), join(output, 'latest.yml')],
+        'server-web': [join(workspace, 'server-web')],
     };
     await runReleaseBuild(name => checkpoint
         ? checkpoint(`build-${name}`, () => execute(name), { artifacts: artifacts[name] })

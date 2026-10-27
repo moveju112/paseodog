@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { runInNewContext } from 'node:vm';
-import { composerFixture } from './composer-fixture.mjs';
-import { COMPOSER_FILE } from '../scripts/patch-paseo-composer.mjs';
 import { DEFAULT_TURN_MINUTES, MAX_TURN_MINUTES } from '../plugin/shared/turn-duration.mjs';
 
 const require = createRequire(new URL('../plugin/package.json', import.meta.url));
@@ -12,15 +10,13 @@ const React = require('react');
 const { create, act } = require('react-test-renderer');
 const ts = createRequire(new URL('../android/package.json', import.meta.url))('typescript');
 const read = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
-const bundle = composerFixture(read('tools/node_modules/@getpaseo/server/' + COMPOSER_FILE));
 const source = stripTypeScriptTypes(read('android/packages/app/src/screens/settings/turn-duration-settings.ts'))
     .replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '');
-const start = bundle.indexOf('const PaseodogTurnDurationSettings=');
-const web = bundle.slice(start, bundle.indexOf('const k=', start));
 const components = { View: 'view', Text: 'text', AdaptiveTextInput: 'input', Pressable: 'pressable' };
 
-for (const platform of ['app', 'web']) {
-    test(`${platform}: native workflow duration saves minutes safely and isolates hosts`, async t => {
+// 서버 웹과 앱은 같은 컴포넌트를 빌드한다. 사라진 번들 복사본 대신 실제 공유 구현에
+// 입력 검증·중복 저장 방지·불확실한 응답·호스트 전환의 기존 시나리오를 모두 적용한다.
+    test('shared app/server web workflow duration saves minutes safely and isolates hosts', async t => {
         globalThis.IS_REACT_ACT_ENVIRONMENT = true;
         t.after(() => { delete globalThis.IS_REACT_ACT_ENVIRONMENT; });
         let connected = true, fail = false, malformed = false, deferred, finish;
@@ -43,18 +39,9 @@ for (const platform of ['app', 'web']) {
             useHostRuntimeIsConnected: () => connected,
         };
         const common = { ...React, ...components, ...runtime, settingsStyles: {} };
-        const Component = platform === 'app'
-            ? runInNewContext(source + ';TurnDurationSettings', common)
-            : runInNewContext(web + ';PaseodogTurnDurationSettings', {
-                u: React, n: components, o: components, r: components, S: { settingsStyles: {} },
-                _r: id => {
-                    if (id === 3930) return components;
-                    assert.equal(id, 3762);
-                    return runtime;
-                },
-            });
+        const Component = runInNewContext(source + ';TurnDurationSettings', common);
         let Page;
-        if (platform === 'app') {
+        {
             const page = read('android/packages/app/src/screens/settings/ai-engine-page.tsx');
             const body = page.slice(page.indexOf('export function AiEnginePage(')).replace('export function', 'function');
             const compiled = ts.transpileModule(body, {
@@ -64,13 +51,6 @@ for (const platform of ['app', 'web']) {
                 ...common, React, TurnDurationSettings: Component, AgentMessageSettings: () => null,
                 useAiEngineSettings: () => ({ snapshot: null, connected: true, request() {} }),
                 layout: {}, Button: 'button',
-            });
-        } else {
-            const anchor = bundle.indexOf('_e.AiEnginePage=function(e){');
-            const end = bundle.indexOf(';function PaseodogBaseAiEnginePage', anchor);
-            Page = runInNewContext('const _e={};' + bundle.slice(anchor, end) + ';_e.AiEnginePage', {
-                u: React, n: components, PaseodogTurnDurationSettings: Component,
-                PaseodogAgentMessageSettings: () => null, PaseodogBaseAiEnginePage: () => null,
             });
         }
         let tree;
@@ -141,4 +121,3 @@ for (const platform of ['app', 'web']) {
         assert.equal(field().props.initialValue, '240');
         await act(async () => tree.unmount());
     });
-}

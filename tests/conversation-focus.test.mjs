@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { Script } from 'node:vm';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { composerFixture } from './composer-fixture.mjs';
+import { runSharedAppTests } from './shared-app-tests.mjs';
 import { CONVERSATION_FOCUS_EDITS, withConversationFocus, withoutConversationFocus } from '../patches/paseo-conversation-focus.mjs';
 import { WORK_RECORD_EDITS } from '../patches/paseo-work-records.mjs';
 import { withoutAssistantIcon } from '../patches/paseo-assistant-icon.mjs';
@@ -25,19 +24,8 @@ test('the injected web renderer retains its disconnect check without module clos
     }, () => null, { serverId: 's', agentId: 'a' }));
 });
 
-test('focus web patch is reversible, idempotent, exact-blob gated and rejects partial application', () => {
-    const source = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const patched = composerFixture(source);
-    new Script(patched);
-    assert.equal(composerFixture(patched), patched);
-    assert.equal(withConversationFocus(withoutConversationFocus(patched)), patched);
-    const [before, after] = CONVERSATION_FOCUS_EDITS[0];
-    const nicknameOnly = withoutAssistantIcon(patched);
-    const partial = nicknameOnly.replace(after, before);
-    assert.notEqual(partial, nicknameOnly);
-    assert.throws(() => patchedComposerSource(partial), /Partial/);
-    assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
-});
+test('shared conversation projection keeps request records attached to their answers', () =>
+    runSharedAppTests(['src/agent-stream/work-record.test.ts']));
 
 test('assistant heading updates its nickname without replacing Markdown content', async () => {
     const require = createRequire(new URL('../plugin/package.json', import.meta.url));

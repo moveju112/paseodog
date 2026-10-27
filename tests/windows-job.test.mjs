@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { createProcessScope } from '../plugin/server/process-scope.mjs';
 import { createWindowsJobScope, ensureWindowsJobHelper, windowsCompilerPath, windowsJobHelperPath } from '../plugin/server/windows-job.mjs';
 import { engineInstallSteps, installSteps, launcherScript } from '../scripts/install.mjs';
+import { serverWebDist } from '../scripts/paths.mjs';
 
 const launchFor = (stateDir) => ({ command: 'C:\\Program Files\\nodejs\\node.exe', args: ['C:\\pd\\engine.mjs'],
     env: { PASEODOG_STATE_DIR: stateDir } });
@@ -76,7 +77,8 @@ test('install steps keep the patch order and skip only POSIX root tests on Windo
     const engine = engineInstallSteps().map(({ args }) => args.join(' '));
     assert.deepEqual(linux.slice(0, engine.length + 2), ['--prefix tools ci', ...engine, '--prefix plugin ci']);
     assert.deepEqual(linux.slice(engine.length + 2, engine.length + 4), ['scripts/patch-mixdog.mjs', 'scripts/patch-mixdog.mjs --check']);
-    assert.deepEqual(linux.slice(-5), ['scripts/patch-paseo-composer.mjs --check', 'run check', 'test', 'run typecheck',
+    assert.deepEqual(linux.slice(-6), ['--prefix android ci',
+        `scripts/build-web.mjs --hosting server --output ${serverWebDist} --metro-workers 1`, 'run check', 'test', 'run typecheck',
         'scripts/configure.mjs --trust-plugins']);
     assert.deepEqual(windows, linux.filter((step) => step !== 'test'));
 });

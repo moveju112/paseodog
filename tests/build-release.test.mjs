@@ -88,7 +88,7 @@ test('desktop packaging starts before a pending APK completes and dependencies r
         if (name === 'windows') finishAndroid();
     });
     await build;
-    assert.deepEqual(calls, ['dependencies', 'android', 'desktop-dependencies', 'web', 'desktop-main', 'linux', 'windows']);
+    assert.deepEqual(calls, ['dependencies', 'android', 'desktop-dependencies', 'web', 'desktop-main', 'linux', 'windows', 'server-web']);
 });
 
 // 독립 작업 중 실패해도 이미 시작한 빌드를 남기지 않고 모두 종료 후 실패를 알린다.
@@ -152,7 +152,7 @@ test('release builds run only the selected platform stages', async () => {
         return calls;
     };
     assert.deepEqual(await order({ android: true, desktop: false, web: false }), ['dependencies', 'android']);
-    assert.deepEqual(await order({ android: false, desktop: false, web: true }), ['dependencies']);
+    assert.deepEqual(await order({ android: false, desktop: false, web: true }), ['dependencies', 'server-web']);
     assert.deepEqual(await order({ android: false, desktop: false, web: false }), []);
     assert.deepEqual(await order({ android: false, desktop: true, web: false }),
         ['dependencies', 'desktop-dependencies', 'web', 'desktop-main', 'linux', 'windows']);
@@ -165,4 +165,15 @@ test('release builds require explicit versions and separate absolute output/cach
         workspace: '/unused', cacheRoot: '/unused-cache', signingInit: '/unused-init',
         versionCode: '0', version: '1.0.0',
     }), /positive version-code/);
+});
+
+test('server browser export failure prevents release build success', async () => {
+    const completed = [];
+    await assert.rejects(runReleaseBuild(async name => {
+        if (name === 'server-web') {
+            for (const platform of ['android', 'linux', 'windows']) assert.ok(completed.includes(platform));
+            throw new Error('server export failed');
+        }
+        completed.push(name);
+    }), /server export failed/);
 });

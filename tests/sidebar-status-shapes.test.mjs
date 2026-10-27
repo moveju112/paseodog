@@ -2,28 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { Script } from 'node:vm';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
-import { composerFixture } from './composer-fixture.mjs';
-import { SIDEBAR_STATUS_SHAPE_EDITS, withSidebarStatusShapes, withoutSidebarStatusShapes } from '../patches/paseo-sidebar-status-shapes.mjs';
 
 const androidRequire = createRequire(new URL('../android/package.json', import.meta.url));
 const pluginRequire = createRequire(new URL('../plugin/package.json', import.meta.url));
 const { transformSync } = androidRequire('esbuild');
 const React = pluginRequire('react');
-const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-
-test('status shapes preserve the reviewed composer hash gate and reject partial patches', () => {
-    const patched = composerFixture(installed);
-    const base = withoutSidebarStatusShapes(patched);
-    assert.equal(withSidebarStatusShapes(base), patched);
-    assert.equal(composerFixture(patched), patched);
-    new Script(patched);
-    const [before, after] = SIDEBAR_STATUS_SHAPE_EDITS[0];
-    assert.throws(() => patchedComposerSource(patched.replace(after, before)), /Partial/);
-    assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
-    assert.equal(withoutSidebarStatusShapes(base), base);
-});
+// 패치 적용·해제 대신 아래 실제 공유 행의 상태별 렌더링을 검증한다.
 
 test('workspace status icons distinguish running, completed and needs-input without changing the row', () => {
     const source = readFileSync(new URL('../android/packages/app/src/components/sidebar/sidebar-workspace-row-content.tsx', import.meta.url), 'utf8');

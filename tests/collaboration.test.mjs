@@ -7,8 +7,7 @@ import { PassThrough } from 'node:stream';
 import { createNativeEngine } from '../engine/src/native-engine.mjs';
 import { normalizeOrchestrationMode } from '../engine/src/orchestration-mode.mjs';
 import { createEngineControls } from '../plugin/server/controls.mjs';
-import { patchedComposerSource, COMPOSER_FILE, withoutWorktreeSetupTip } from '../scripts/patch-paseo-composer.mjs';
-import { composerFixture } from './composer-fixture.mjs';
+import { runSharedAppTests } from './shared-app-tests.mjs';
 import { withoutWhite2Theme } from '../scripts/patch-paseo-theme.mjs';
 import { withoutSingleWorkspace } from '../patches/paseo-single-workspace.mjs';
 import { withoutHostSwitch } from '../patches/paseo-host-switch.mjs';
@@ -80,55 +79,9 @@ test('the actual SDK RPC schema accepts only the two supported orchestration val
     }
 });
 
-test('composer hook preserves the reviewed original, existing controls, and refuses partial or drifted bundles', () => {
-    const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const original = withoutAgentsSettings(withoutHideReasoning(withoutUsageOrder(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutWorktreeSetupTip(withoutImportCwd(installed))))))))))));
-    assert.equal(gitBlob(original), 'bdc4b8ed97dbccc7e6215d7f2f7be2e420fce895');
-    const result = patchedComposerSource(original);
-    assert.equal(withoutAgentsSettings(withoutHideReasoning(withoutUsageOrder(withoutUsageColors(withoutHelpMenu(withoutSidebarToolbar(withoutAgentProgress(withoutAutoEffort(withoutCollaboration(withoutWhite2Theme(withoutWorktreeSetupTip(withoutImportCwd(result)))))))))))), original);
-    assert.equal(composerFixture(result), result);
-    assert.ok(result.includes(FAST_RENDER));
-    assert.ok(result.includes('children:[Fe,Le,Ee,ze,Be]'));
-    assert.ok(result.includes('j.AgentModeControl,Object.assign({},ve,{onClose:E})'));
-    assert.ok(result.includes('k.PluginComposerPills,{serverId:j,workspaceId:D,agentId:x,compact:L}'));
-    assert.throws(() => patchedComposerSource(result.replace(FAST_RENDER, '')), /Partial Paseo collaboration/);
-    assert.throws(() => patchedComposerSource(result.replace(FAST_DRAFT_RENDER, COLLABORATION_DRAFT_ANCHOR)),
-        /Partial Paseo collaboration/);
-    assert.throws(() => patchedComposerSource(original + '// drift'), /hash mismatch/);
-    new Function(result);
-});
-
-test('new-agent draft composer gets Fast, and each exact previous install upgrades through the hash gate', () => {
-    const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-    const result = composerFixture(installed);
-    const draftStart = result.indexOf('_e.DraftAgentControls=function');
-    const draftEnd = result.indexOf('var o=r(d[0])', draftStart);
-    assert.ok(draftStart > 0 && result.slice(draftStart, draftEnd).endsWith(FAST_DRAFT_RENDER));
-    assert.ok(result.slice(draftStart, draftEnd).includes('modelSelectorServerId:w'));
-    assert.ok(result.includes('Trigger:K.AgentControlTrigger,Icon:b.Zap'));
-    for (const source of PREVIOUS_FAST_SOURCES) {
-        const previous = result.replace(COLLABORATION_SOURCE, source);
-        assert.equal(patchedComposerSource(previous), result);
-        assert.throws(() => patchedComposerSource(previous.replace('enabled: null, error:', 'enabled: false, error:')),
-            /Partial Paseo collaboration patch/);
-    }
-    // 모든 이전 협업 UI는 원본 해시를 통과한 뒤 Fast 토글로 바뀐다.
-    const [v1, v2] = LEGACY_COLLABORATION_SOURCES;
-    const legacyBase = result.replace(FAST_RENDER, COLLABORATION_RENDER).replace(FAST_DRAFT_RENDER, COLLABORATION_DRAFT_RENDER)
-        .replace('jsx:J.jsx,Controls:PaseodogFastControls})}', 'jsx:J.jsx,Controls:ve})}');
-    const legacyV1 = legacyBase.replace(COLLABORATION_SOURCE, v1.source).replace(COLLABORATION_DRAFT_RENDER, COLLABORATION_DRAFT_ANCHOR);
-    const legacyV2 = legacyBase.replace(COLLABORATION_SOURCE, v2.source);
-    for (const entry of LEGACY_COLLABORATION_SOURCES) {
-        const legacy = legacyBase.replace(COLLABORATION_SOURCE, entry.source)
-            .replace(COLLABORATION_DRAFT_RENDER, entry.draft ? COLLABORATION_DRAFT_RENDER : COLLABORATION_DRAFT_ANCHOR);
-        assert.notEqual(legacy, result);
-        assert.equal(patchedComposerSource(legacy), result);
-        assert.throws(() => patchedComposerSource(legacy + '// drift'), /hash mismatch/);
-    }
-    assert.throws(() => patchedComposerSource(legacyV1.replace(COLLABORATION_RENDER, COLLABORATION_ANCHOR)), /Partial Paseo collaboration/);
-    assert.throws(() => patchedComposerSource(legacyV2.replace(COLLABORATION_DRAFT_RENDER, COLLABORATION_DRAFT_ANCHOR)), /Partial Paseo collaboration/);
-    assert.throws(() => patchedComposerSource(result.replace(COLLABORATION_SOURCE_ANCHOR, v1.source)), /Partial Paseo collaboration/);
-});
+// 현재 UI의 명시적 저장·오프라인 차단·세션 격리는 실제 공유 컴포넌트로 확인한다.
+test('shared Fast controls isolate live sessions and never replay uncertain writes', () =>
+    runSharedAppTests(['src/composer/agent-controls/paseodog-controls.test.tsx']));
 
 // 주입 소스를 번들과 같은 이름으로 평가한다. 트리거·Combobox는 열기/선택/닫기 계약만 흉내 내는 테스트용 대역이다.
 function ocheModule(store = { sessions: {} }) {

@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync,readFileSync,writeFileSync,readdirSync,mkdirSync,syml
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {configure} from '../scripts/configure.mjs';
-import {supportedNode,providerEnvironment} from '../scripts/paths.mjs';
+import {supportedNode,providerEnvironment,serverWebDist} from '../scripts/paths.mjs';
 function setup(t){const root=mkdtempSync(join(tmpdir(),'paseodog-config-'));t.after(()=>rmSync(root,{recursive:true,force:true}));return {root,options:{home:join(root,'paseo'),nativeHome:join(root,'mixdog'),stateDir:join(root,'sessions'),enginePath:'/path with space/worker.mjs'}};}
 test('configure requires explicit trust and does not enable plugins silently',t=>{const {options}=setup(t);assert.throws(()=>configure(options),/trust-plugins/);});
 test('configure preserves unrelated config, disables non-paseodog built-in providers, and uses absolute argv with no shell',t=>{
@@ -12,6 +12,20 @@ test('configure preserves unrelated config, disables non-paseodog built-in provi
     const file=configure({...options,trustPlugins:true});const config=JSON.parse(readFileSync(file,'utf8'));assert.equal(config.daemon.listen,'127.0.0.1:9999');assert.equal(config.agents.providers.existing.enabled,true);assert.equal(config.agents.providers.opencode.enabled,false);assert.equal(config.agents.providers.pi.enabled,false);assert.equal(config.agents.providers.omp.enabled,false);assert.equal(config.agents.providers.customAcp,undefined);assert.equal(config.agents.defaultProvider,undefined);assert.deepEqual(config.agents.providers.paseodog.command,[process.execPath,options.enginePath]);assert.equal(config.plugins,undefined);assert.ok(readdirSync(options.home).some(x=>x.includes('backup')));
 });
 test('malformed existing config fails without replacing it',t=>{const {options}=setup(t);mkdirSync(options.home,{mode:0o700});const file=join(options.home,'config.json');writeFileSync(file,'broken');assert.throws(()=>configure({...options,trustPlugins:true}));assert.equal(readFileSync(file,'utf8'),'broken');});
+
+test('server web uses shared source output without enabling access or overwriting explicit settings', t => {
+    const { options } = setup(t);
+    const file = configure({ ...options, trustPlugins: true });
+    const config = JSON.parse(readFileSync(file, 'utf8'));
+    assert.deepEqual(config.features.webUi, { distDir: serverWebDist });
+    config.features.webUi = { enabled: false, distDir: '/explicit/web' };
+    config.features.otherFeature = { enabled: true };
+    writeFileSync(file, JSON.stringify(config));
+    configure({ ...options, trustPlugins: true });
+    const updated = JSON.parse(readFileSync(file, 'utf8'));
+    assert.deepEqual(updated.features, config.features);
+    assert.deepEqual(updated.daemon, config.daemon);
+});
 // 최초 설정은 모델·개인 에이전트를 주입하지 않고 사용자가 켠 상태는 재설정 시 보존한다.
 test('agent defaults contain no seeded routes or custom definitions and preserve enabled choices', (t) => {
     const { options } = setup(t);

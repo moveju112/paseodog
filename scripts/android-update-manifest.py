@@ -26,7 +26,12 @@ def manifest(version, name, tag, apks, target_abi=None):
         if target_abi is not None and abis != {target_abi}:
             raise ValueError("Targeted release requires an actual arm64-v8a-only APK")
         with file.open("rb") as source:
-            digest = hashlib.file_digest(source, "sha256").hexdigest()
+            # Python 3.10 호스트에서도 APK 전체 바이트를 같은 SHA256으로 검증한다.
+            # 큰 APK를 메모리에 모두 적재하지 않도록 고정 크기로 읽는다.
+            checksum = hashlib.sha256()
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                checksum.update(chunk)
+            digest = checksum.hexdigest()
         row = {
             "url": f"https://github.com/moveju112/paseodog/releases/download/{tag}/{file.name}",
             "sha256": digest,

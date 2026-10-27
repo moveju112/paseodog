@@ -6,7 +6,7 @@ import { Script } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { createClaudeUsageSource, createCodexUsageSource } from '../plugin/server/usage.ts';
 import { readPluginProviderIcon } from '../android/packages/server/src/server/plugins/provider-icon.ts';
-import { COMPOSER_FILE, DESKTOP_COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { runSharedAppTests } from './shared-app-tests.mjs';
 import { usageDonutEdits, createUsageSummaryTrigger, donutArcRotations, usageCountdownText, usageTooltipText, usageIconSvg, withUsageDonut,
     withoutUsageDonut } from '../patches/paseo-usage-donut.mjs';
 
@@ -15,21 +15,6 @@ const pluginRequire = createRequire(new URL('../plugin/package.json', import.met
 const React = pluginRequire('react');
 const { jsx, jsxs } = pluginRequire('react/jsx-runtime');
 const { create, act } = pluginRequire('react-test-renderer');
-const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const patched = composerFixture(installed);
-import { composerFixture } from './composer-fixture.mjs';
-const current = withoutUsageDonut(patched);
-
-// 번들 Metro 모듈 하나를 시작 위치에서 잘라 팩토리로 실행한다(의존 모듈은 zod 대역).
-function loadBundleModule(source, marker) {
-    const start = source.lastIndexOf('\n__d(', source.indexOf(marker));
-    const text = source.slice(start + '\n__d('.length, source.indexOf('\n__d(', start + 1));
-    const tail = /\},(\d+),\[([\d,]*)\]\);\s*$/.exec(text);
-    const factory = new Function(`return ${text.slice(0, tail.index + 1)}`)();
-    const exports = {};
-    factory(globalThis, () => ({ z }), null, null, { exports }, exports, tail[2].split(',').map(Number));
-    return exports;
-}
 
 // Android donut-model.ts 원문의 타입만 지워 실행한다.
 function loadAndroidDonutModel() {
@@ -38,41 +23,8 @@ function loadAndroidDonutModel() {
     return new Function(`${code}\nreturn { usageCountdownText, usageTooltipText, usageIconSvg, donutArcRotations, DONUT_SIZE, DONUT_STROKE };`)();
 }
 
-test('sidebar usage donut patch is hash gated, idempotent and reversible', () => {
-    new Script(patched);
-    assert.equal(withUsageDonut(current), patched);
-    assert.equal(patchedComposerSource(current), patched);
-    assert.equal(composerFixture(patched), patched);
-    const edits = usageDonutEdits(current);
-    for (const [before, after] of edits) {
-        assert.equal(patched.split(after).length, 2);
-        assert.equal(current.split(before).length, 2);
-    }
-    // 툴팁은 번들의 실제 TooltipContent 모듈을 Metro 번호로 불러온다.
-    const tooltipId = /\},(\d+),\[/.exec(patched.slice(patched.indexOf('e.TooltipContent=function')))[1];
-    assert.ok(patched.includes(`TooltipContent:r(${tooltipId}).TooltipContent`));
-    assert.throws(() => withUsageDonut(patched), /anchor mismatch/);
-    const partial = patched.replace(edits[0][1], edits[0][0]);
-    assert.throws(() => patchedComposerSource(partial), /Partial Paseo usage donut/);
-    // 이전 버전(공급자 이름 편집 없음·다른 트리거 본문)도 새 패치로 교체된다.
-    const labelEdit = edits.find(([before]) => before === '[{key:l.id,icon:l.icon??null,windows:s}]');
-    const legacy = patched.replace(labelEdit[1], labelEdit[0]).replace('tooltipText:function usageTooltipText', 'legacy:function usageTooltipText');
-    assert.equal(patchedComposerSource(legacy), patched);
-    // 사이드바 주기 갱신이 없던 이전 패치도 새 패치로 교체되고, 사이드바 쿼터 조회만 2분 주기를 갖는다.
-    const refreshEdit = edits.find(([, after]) => after.includes('refetchInterval:12e4'));
-    assert.equal(patchedComposerSource(patched.replace(refreshEdit[1], refreshEdit[0])), patched);
-    const hostReports = patched.slice(patched.indexOf('useUsageHostReports=function'), patched.indexOf('e.useAgentUsage=function'));
-    assert.ok(hostReports.includes(refreshEdit[1]));
-});
-
-test('bundle preferences keep donuts only and the setter stores the choice', () => {
-    const preferences = loadBundleModule(patched, 'e.setUsageSidebarStyle=');
-    const defaults = preferences.DEFAULT_USAGE_PREFERENCES;
-    const donut = preferences.setUsageSidebarStyle(defaults, 'donut');
-    assert.deepEqual(preferences.UsagePreferencesSchema.parse(donut), { ...defaults, sidebarStyle: 'donut' });
-    for (const sidebarStyle of ['bar', 'ring', 3, undefined])
-        assert.deepEqual(preferences.UsagePreferencesSchema.parse({ ...defaults, sidebarStyle }), defaults);
-});
+test('shared usage preferences retain donuts and reject malformed styles without losing pins', () =>
+    runSharedAppTests(['src/usage/preferences.test.ts']));
 
 test('Android donut model matches the bundle countdown and arc math', () => {
     const android = loadAndroidDonutModel();
@@ -170,9 +122,4 @@ test('dedicated Codex catalog icon loads with the same blue color on Android and
     assert.equal(svg.trim(), original.trim().replace('fill="currentColor"', 'fill="#3B82F6"'));
     assert.equal(usageIconSvg(svg, source.id), svg);
     assert.equal(loadAndroidDonutModel().usageIconSvg(svg, source.id), svg);
-});
-
-test('reviewed desktop bundle accepts the same donut patch', { skip: !existsSync(DESKTOP_COMPOSER_FILE) }, () => {
-    const desktop = patchedComposerSource(readFileSync(DESKTOP_COMPOSER_FILE, 'utf8'));
-    assert.equal(withUsageDonut(withoutUsageDonut(desktop)), desktop);
 });

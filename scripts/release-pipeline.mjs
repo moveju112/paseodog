@@ -10,7 +10,7 @@ import { runCommand } from './release-command.mjs';
 import { releaseArtifacts, verifyReleaseArtifacts, verifyRemoteAssets } from './release-artifacts.mjs';
 import { carriedAssets, deliveryPlan, describePlan, recordDeployment, validateTargets } from './release-targets.mjs';
 import { verifyReleaseWeb } from './release-web-check.mjs';
-import { root } from './paths.mjs';
+import { root, serverWebDist } from './paths.mjs';
 import { restartDesktop } from './release-apply.mjs';
 import { verifyReleaseSource } from './release-verification.mjs';
 import { releasePreflight } from './release-preflight.mjs';
@@ -38,6 +38,8 @@ export function validateReleaseConfig(input) {
         || config.appTests.some(path => !/^src\/[\w./-]+\.(test|spec)\.tsx?$/.test(path) || path.includes('..')))
         throw new Error('appTests must explicitly name affected app tests');
     config.targets = validateTargets(config.targets);
+    if (config.prepareOnly !== undefined && typeof config.prepareOnly !== 'boolean')
+        throw new Error('prepareOnly must be a boolean');
     // 데몬 업데이터는 호스트 프로필에 둘 다 있을 때만 배포가 직접 실행한다.
     if ((config.updaterRoot === undefined) !== (config.updaterUnit === undefined)
         || (config.updaterRoot !== undefined && (!isAbsolute(config.updaterRoot)
@@ -157,7 +159,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             await assertSource();
         });
         // verify 직후 알린다. 버전 커밋 push로 먼저 시작한 업데이터도 같은 리비전의 root 테스트를 건너뛴다.
-        if (config.updaterRoot) await writeFile(join(config.updaterRoot, 'preverified.json'), JSON.stringify({
+        if (config.updaterRoot && !config.prepareOnly) await writeFile(join(config.updaterRoot, 'preverified.json'), JSON.stringify({
             revision: commit, verifiedAt: new Date().toISOString(), workspace }) + '\n', { mode: 0o600 });
         // 기준점은 실제 공개·설치 기록에서 읽는다. 재개 시에는 저장된 계획을 그대로 쓴다.
         const plan = await stage('plan', () => deliveryPlan(config, { capture, commit, cwd: root }));
@@ -187,6 +189,15 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             // 업로드 직전마다 서명·해시를 다시 확인해 재개 사이 산출물 변조를 차단한다.
             uploadAssets = await verifyArtifacts(config, run, plan);
             expected = Object.fromEntries(await Promise.all(uploadAssets.map(async path => [basename(path), (await stat(path)).size])));
+        }
+        // 준비 전용 실행은 검증된 산출물까지만 만든다. draft 생성도 원격 변경이므로 이 경계 밖이다.
+        // 업데이터 통지·배포 기록·이전 workspace 정리 역시 실행하지 않아 설치 상태를 보존한다.
+        if (config.prepareOnly) {
+            await assertSource();
+            console.log('Release artifacts prepared; publication and runtime apply were not requested.');
+            return { commit, version, tag, plan, prepared: true, assets: uploadAssets };
+        }
+        if (github) {
             await stage('github-draft', () => execute('github-draft', 'gh', ['release', 'create', tag, '--draft',
                 '--repo', config.repo, '--target', commit, '--title', `PaseoDog ${version}`, '--notes-file', join(root, 'CHANGELOG.md')]),
             { mutation: true });
@@ -226,8 +237,9 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
                     await recordDeployment(config.cacheRoot, 'web', { commit, version });
                 }
                 if (targets.runtime) await stage('web-patch', async () => {
-                    await execute('web-patch', process.execPath, ['scripts/patch-paseo-composer.mjs']);
-                    await execute('web-patch-check', process.execPath, ['scripts/patch-paseo-composer.mjs', '--check']);
+                    // 서버도 APK·데스크톱과 같은 소스로 빌드한다. 설치된 npm 번들의 내용·hash는 바꾸지 않는다.
+                    await execute('web-patch', process.execPath, ['scripts/build-web.mjs',
+                        '--hosting', 'server', '--output', serverWebDist, '--metro-workers', config.metroWorkers]);
                 });
             })(),
             (async () => {
