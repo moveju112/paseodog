@@ -92,6 +92,7 @@ PaseoDog의 기본 페어링 링크는 비밀번호 입력을 지원하는 `http
 Cloudflare Pages에는 `node scripts/build-web.mjs --hosting cloudflare --output <절대 출력 경로>`로 내보낸 정적 파일을 배포합니다.
 프로젝트의 Custom domains에서 웹 도메인을 등록하고 해당 프로젝트의 `*.pages.dev`를 가리키는 CNAME을 연결합니다.
 Cloudflare용 export는 루트 경로를 사용하며 최상위 `404.html` 없이 Pages의 SPA fallback을 사용합니다.
+`main`에서 `PaseoDog Cloudflare Pages` 워크플로를 수동 실행하면 같은 export를 기존 Direct Upload 프로젝트에 배포합니다. `cloudflare-production` environment에 secret `CLOUDFLARE_API_TOKEN`(Account의 Cloudflare Pages Edit 권한만 부여)과 variable `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_PAGES_PROJECT`를 등록하고, 배포 브랜치를 `main`으로 제한하고 승인자를 지정해야 합니다.
 정적 웹만 공개하며 데몬 포트를 외부에 열지 않습니다.
 
 GitHub Pages에 별도로 배포하려면 저장소 **Settings → Pages → Source → GitHub Actions**를 선택한 뒤,
