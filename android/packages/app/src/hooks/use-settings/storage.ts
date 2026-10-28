@@ -82,6 +82,7 @@ export const MIN_CONTENT_MAX_WIDTH = 600;
 export const MAX_CONTENT_MAX_WIDTH = 4000;
 
 export interface AppSettings {
+  backgroundNotificationsEnabled: boolean;
   theme: ThemePreference;
   /** Which contributed theme `theme: "plugin"` selects. */
   pluginThemeId: string | null;
@@ -155,6 +156,7 @@ export interface Settings extends AppSettings {
 }
 
 export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
+  backgroundNotificationsEnabled: false,
   theme: DEFAULT_THEME_PREFERENCE,
   pluginThemeId: null,
   language: "ko",
@@ -317,6 +319,7 @@ const StoredAppSettingsSchema = z
       }),
     pullRequestOpenLocation: z.enum(["main", "side", "explorer"]).optional(),
     clientErrorReportingEnabled: z.boolean().catch(true),
+    backgroundNotificationsEnabled: z.boolean().catch(false),
     clientErrorRetentionDays: z
       .union([z.literal(1), z.literal(7), z.literal(30)])
       .catch(DEFAULT_CLIENT_ERROR_RETENTION_DAYS),

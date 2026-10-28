@@ -68,6 +68,31 @@ function restoreGlobals(): void {
 }
 
 describe("sendOsNotification", () => {
+  it("routes Android notifications locally without using desktop delivery", async () => {
+    const sendAndroidNotification = vi.fn(async () => true);
+    vi.doMock("./android-notifications", () => ({ sendAndroidNotification }));
+    const desktopSend = vi.fn();
+    const { sendOsNotification } = await loadModuleForPlatform("android", {
+      desktopHost: { notification: { sendNotification: desktopSend } },
+    });
+    const payload = { title: "Done", data: { agentId: "a" } };
+    expect(await sendOsNotification(payload)).toBe(true);
+    expect(sendAndroidNotification).toHaveBeenCalledWith(payload);
+    expect(desktopSend).not.toHaveBeenCalled();
+    vi.doUnmock("./android-notifications");
+  });
+
+  it("returns false rather than rejecting when Android delivery fails", async () => {
+    vi.doMock("./android-notifications", () => ({
+      sendAndroidNotification: vi.fn().mockRejectedValue(new Error("permission revoked")),
+    }));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { sendOsNotification } = await loadModuleForPlatform("android");
+    expect(await sendOsNotification({ title: "Done" })).toBe(false);
+    expect(warn).toHaveBeenCalled();
+    vi.doUnmock("./android-notifications");
+  });
+
   beforeEach(() => {
     class MockCustomEvent<T = unknown> {
       type: string;
