@@ -38,6 +38,7 @@ import {
   type QueueWriter,
   type QueuedComposerMessage,
 } from "./actions";
+import { i18n } from "@/i18n/i18next";
 
 const imageMetadata: AttachmentMetadata = {
   id: "img-1",
@@ -1118,7 +1119,12 @@ describe("file upload preparation", () => {
             },
           ],
         }),
-      ).rejects.toThrow(failure === "unreadable" ? "read failed" : "too large");
+      ).rejects.toThrow(
+        // 앱 기본 언어와 무관하게 실제 번역 문구로 비교한다.
+        failure === "unreadable"
+          ? "read failed"
+          : i18n.t("composer.errors.fileTooLarge", { size: "50MB", fileName: "missing.bin" }),
+      );
       expect(sends).toBe(0);
     },
   );
