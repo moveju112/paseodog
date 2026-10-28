@@ -1173,10 +1173,12 @@ export const ru: TranslationResources = {
       windowAccessibility: "Показать сессии за {{window}}",
       splitLinked: "Открыта в разделённом виде с {{title}}",
       windows: {
-        fifteenMinutes: "15 мин",
-        oneHour: "1 ч",
+        minutes: "{{value}} мин",
+        hours: "{{value}} ч",
         today: "Сегодня",
       },
+      settingsTitle: "Диапазоны недавних",
+      settingsDescription: "Выберите от 1 до 3 диапазонов для списка недавних в боковой панели",
     },
     statusGroupAccessibility: "Группа «{{label}}»",
     statusBucket: {

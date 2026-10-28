@@ -1192,10 +1192,12 @@ export const es: TranslationResources = {
       windowAccessibility: "Mostrar sesiones de {{window}}",
       splitLinked: "Abierta en vista dividida con {{title}}",
       windows: {
-        fifteenMinutes: "15 min",
-        oneHour: "1 h",
+        minutes: "{{value}} min",
+        hours: "{{value}} h",
         today: "Hoy",
       },
+      settingsTitle: "Rangos de tiempo recientes",
+      settingsDescription: "Elige de 1 a 3 rangos para la lista de recientes de la barra lateral",
     },
     statusGroupAccessibility: "Grupo {{label}}",
     statusBucket: {

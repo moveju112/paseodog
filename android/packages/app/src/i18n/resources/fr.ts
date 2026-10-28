@@ -1184,10 +1184,12 @@ export const fr: TranslationResources = {
       windowAccessibility: "Afficher les sessions : {{window}}",
       splitLinked: "Ouverte en vue scindée avec {{title}}",
       windows: {
-        fifteenMinutes: "15 min",
-        oneHour: "1 h",
+        minutes: "{{value}} min",
+        hours: "{{value}} h",
         today: "Aujourd’hui",
       },
+      settingsTitle: "Plages de temps récentes",
+      settingsDescription: "Choisissez 1 à 3 plages pour la liste récente de la barre latérale",
     },
     statusGroupAccessibility: "Groupe {{label}}",
     statusBucket: {

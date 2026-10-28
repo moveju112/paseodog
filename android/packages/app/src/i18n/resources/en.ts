@@ -1164,10 +1164,12 @@ export const en = {
       windowAccessibility: "Show sessions from the last {{window}}",
       splitLinked: "Open in split view with {{title}}",
       windows: {
-        fifteenMinutes: "15m",
-        oneHour: "1h",
+        minutes: "{{value}}m",
+        hours: "{{value}}h",
         today: "Today",
       },
+      settingsTitle: "Recent time ranges",
+      settingsDescription: "Choose 1 to 3 ranges for the sidebar's recent list",
     },
     statusGroupAccessibility: "{{label}} group",
     statusBucket: {

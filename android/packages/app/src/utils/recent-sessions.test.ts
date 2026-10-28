@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { Agent } from "@/stores/session-store";
 import type { WorkspaceLayout } from "@/stores/workspace-layout-actions";
 import { matchSessionReveal } from "@/stores/session-reveal-store";
+import { i18n } from "@/i18n/i18next";
 import {
+  DEFAULT_RECENT_SESSIONS_WINDOWS,
+  effectiveRecentSessionsWindow,
   groupRecentSessionsBySplit,
+  normalizeRecentSessionsWindows,
   recentSessionsCutoff,
+  recentSessionsWindowLabel,
   selectRecentSessions,
   selectSplitSessionGroups,
 } from "./recent-sessions";
@@ -58,7 +63,47 @@ describe("recent sessions", () => {
   it("uses rolling windows and local midnight for today", () => {
     expect(recentSessionsCutoff("15m", now)).toBe(minutesAgo(15).getTime());
     expect(recentSessionsCutoff("1h", now)).toBe(minutesAgo(60).getTime());
+    expect(recentSessionsCutoff("30m", now)).toBe(minutesAgo(30).getTime());
+    expect(recentSessionsCutoff("4h", now)).toBe(minutesAgo(240).getTime());
+    expect(recentSessionsCutoff("12h", now)).toBe(minutesAgo(720).getTime());
+    expect(recentSessionsCutoff("24h", now)).toBe(minutesAgo(1440).getTime());
     expect(recentSessionsCutoff("today", now)).toBe(new Date(2026, 9, 20).getTime());
+  });
+
+  it("keeps configured ranges in option order, unique, at most three, never empty", () => {
+    expect(DEFAULT_RECENT_SESSIONS_WINDOWS).toEqual(["30m", "4h", "12h"]);
+    expect(normalizeRecentSessionsWindows(["today", "4h", "4h", "15m"])).toEqual([
+      "15m",
+      "4h",
+      "today",
+    ]);
+    expect(normalizeRecentSessionsWindows(["24h", "15m", "2h", "8h"])).toEqual(["15m", "2h", "8h"]);
+    expect(normalizeRecentSessionsWindows([])).toEqual(["30m", "4h", "12h"]);
+  });
+
+  it("falls back from a removed selection to the next wider configured range", () => {
+    const windows = normalizeRecentSessionsWindows(["30m", "4h", "12h"]);
+    expect(effectiveRecentSessionsWindow("4h", windows)).toBe("4h");
+    // 예전 기본 선택(1h)·범위 밖 선택은 그 이상인 첫 범위, 더 넓은 범위가 없으면 가장 넓은 범위
+    expect(effectiveRecentSessionsWindow("1h", windows)).toBe("4h");
+    expect(effectiveRecentSessionsWindow("15m", windows)).toBe("30m");
+    expect(effectiveRecentSessionsWindow("today", windows)).toBe("12h");
+  });
+
+  it("labels ranges in minutes, hours or today in the app language", async () => {
+    const original = i18n.language;
+    const labels = () =>
+      (["30m", "4h", "12h", "today"] as const).map((window) =>
+        recentSessionsWindowLabel(i18n.t, window),
+      );
+    try {
+      await i18n.changeLanguage("ko");
+      expect(labels()).toEqual(["30분", "4시간", "12시간", "오늘"]);
+      await i18n.changeLanguage("en");
+      expect(labels()).toEqual(["30m", "4h", "12h", "Today"]);
+    } finally {
+      await i18n.changeLanguage(original);
+    }
   });
 
   it("keeps top-level sessions messaged inside the window, newest first", () => {
