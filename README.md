@@ -106,4 +106,8 @@ GitHub Pages의 깊은 링크 새로고침은 `404.html`로 SPA를 표시합니�
 APK는 공개 디버그 키 서명이며 Windows·Linux 설치파일에는 코드서명이 없습니다.
 다운로드 파일의 무결성은 릴리즈의 `SHA256SUMS`로 확인할 수 있습니다.
 
+## 개발 참여
+
+소스에서 검사·테스트를 실행하는 환경 준비는 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)를 참고하세요.
+
 라이선스: Apache-2.0 (`NOTICE` 참고).

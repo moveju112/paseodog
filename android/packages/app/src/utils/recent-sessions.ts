@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import type { Agent } from "@/stores/session-store";
 import {
   collectAllPanes,
@@ -11,16 +12,79 @@ export interface RecentSessionGroup {
   linked: Agent[];
 }
 
-export type RecentSessionsWindow = "15m" | "1h" | "today";
+// 설정에서 고를 수 있는 범위 (짧은 순, 자정 기준인 오늘은 맨 뒤)
+export const RECENT_SESSIONS_WINDOW_OPTIONS = [
+  "15m",
+  "30m",
+  "1h",
+  "2h",
+  "4h",
+  "8h",
+  "12h",
+  "24h",
+  "today",
+] as const;
 
-export const RECENT_SESSIONS_WINDOWS: readonly RecentSessionsWindow[] = ["15m", "1h", "today"];
+export type RecentSessionsWindow = (typeof RECENT_SESSIONS_WINDOW_OPTIONS)[number];
+
+export const DEFAULT_RECENT_SESSIONS_WINDOWS: readonly RecentSessionsWindow[] = [
+  "30m",
+  "4h",
+  "12h",
+];
+
+export const MAX_RECENT_SESSIONS_WINDOWS = 3;
+
+const WINDOW_MINUTES: Record<Exclude<RecentSessionsWindow, "today">, number> = {
+  "15m": 15,
+  "30m": 30,
+  "1h": 60,
+  "2h": 120,
+  "4h": 240,
+  "8h": 480,
+  "12h": 720,
+  "24h": 1440,
+};
 
 // 최근 범위 하한 계산 (선택 범위 -> 기준 시각 이후 하한 ms)
 export function recentSessionsCutoff(window: RecentSessionsWindow, now: Date): number {
   if (window === "today") {
     return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   }
-  return now.getTime() - (window === "15m" ? 15 : 60) * 60_000;
+  return now.getTime() - WINDOW_MINUTES[window] * 60_000;
+}
+
+// 설정한 범위 정리 (선택지 순서·중복 제거·최대 개수, 비어 있으면 기본값)
+export function normalizeRecentSessionsWindows(
+  windows: readonly RecentSessionsWindow[],
+): RecentSessionsWindow[] {
+  const result = RECENT_SESSIONS_WINDOW_OPTIONS.filter((option) => windows.includes(option)).slice(
+    0,
+    MAX_RECENT_SESSIONS_WINDOWS,
+  );
+  return result.length > 0 ? result : [...DEFAULT_RECENT_SESSIONS_WINDOWS];
+}
+
+// 표시할 선택 범위 (저장된 선택이 목록에 없으면 그 이상인 첫 범위, 없으면 가장 넓은 범위)
+export function effectiveRecentSessionsWindow(
+  window: RecentSessionsWindow,
+  windows: readonly RecentSessionsWindow[],
+): RecentSessionsWindow {
+  if (windows.includes(window)) return window;
+  const rank = RECENT_SESSIONS_WINDOW_OPTIONS.indexOf(window);
+  return (
+    windows.find((option) => RECENT_SESSIONS_WINDOW_OPTIONS.indexOf(option) >= rank) ??
+    windows[windows.length - 1]!
+  );
+}
+
+// 범위 표시 이름 (60분 미만은 분, 그 이상은 시간)
+export function recentSessionsWindowLabel(t: TFunction, window: RecentSessionsWindow): string {
+  if (window === "today") return t("sidebar.recentSessions.windows.today");
+  const minutes = WINDOW_MINUTES[window];
+  return minutes < 60
+    ? t("sidebar.recentSessions.windows.minutes", { value: minutes })
+    : t("sidebar.recentSessions.windows.hours", { value: minutes / 60 });
 }
 
 // 최근 세션 추림 (서버별 세션 -> 내 마지막 채팅이 범위 안인 최상위 세션, 최신순)

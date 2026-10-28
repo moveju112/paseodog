@@ -1156,10 +1156,12 @@ export const ar: TranslationResources = {
       windowAccessibility: "عرض الجلسات خلال {{window}}",
       splitLinked: "مفتوحة في عرض مقسّم مع {{title}}",
       windows: {
-        fifteenMinutes: "15 د",
-        oneHour: "1 س",
+        minutes: "{{value}} د",
+        hours: "{{value}} س",
         today: "اليوم",
       },
+      settingsTitle: "النطاقات الزمنية للحديثة",
+      settingsDescription: "اختر من 1 إلى 3 نطاقات لقائمة الحديثة في الشريط الجانبي",
     },
     statusGroupAccessibility: "مجموعة {{label}}",
     statusBucket: {

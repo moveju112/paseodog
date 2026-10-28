@@ -1148,10 +1148,12 @@ export const zhCN: TranslationResources = {
       windowAccessibility: "显示{{window}}内的会话",
       splitLinked: "与{{title}}分屏显示",
       windows: {
-        fifteenMinutes: "15分钟",
-        oneHour: "1小时",
+        minutes: "{{value}}分钟",
+        hours: "{{value}}小时",
         today: "今天",
       },
+      settingsTitle: "最近时间范围",
+      settingsDescription: "选择 1 到 3 个范围显示在侧边栏最近列表中",
     },
     statusGroupAccessibility: "{{label}} 分组",
     statusBucket: {

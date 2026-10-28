@@ -26,11 +26,16 @@ export function engineInstallSteps() {
 }
 
 // 설치 단계 목록 (잠금 파일 의존성 -> 패치 적용·검증 -> 검사 -> 프로필 설정)
-export function installSteps(platform = process.platform) {
+// full은 기존 전체 회귀 테스트를 포함한다(외부 데몬 업데이터 호환). install은 root 테스트만 뺀다:
+// root 테스트는 릴리스 호스트 스크래치 경로·Android 의존성·Playwright를 전제하며 CI·릴리스가 실행한다.
+export function installSteps(platform = process.platform, { scope = 'full' } = {}) {
+    if (!['full', 'install'].includes(scope)) throw new Error(`Unknown install scope: ${scope}`);
     const node = (...args) => ({ command: process.execPath, args });
     const npm = (...args) => ({ command: 'npm', args });
     return [
         npm('--prefix', 'tools', 'ci'),
+        // composer 패치의 검토 입력은 npm tarball이 아닌 고정 web-ui 묶음이다.
+        node('scripts/prepare-paseo-web-ui.mjs'),
         ...engineInstallSteps(),
         npm('--prefix', 'plugin', 'ci'),
         ...PATCHES.flatMap((name) => [node(`scripts/patch-${name}.mjs`), node(`scripts/patch-${name}.mjs`, '--check')]),
@@ -39,7 +44,7 @@ export function installSteps(platform = process.platform) {
         node('scripts/build-web.mjs', '--hosting', 'server', '--output', serverWebDist, '--metro-workers', '1'),
         npm('run', 'check'),
         // Root tests assume POSIX tooling (bash, python3, mode bits, symlinks).
-        ...(platform === 'win32' ? [] : [npm('test')]),
+        ...(platform === 'win32' || scope === 'install' ? [] : [npm('test')]),
         npm('run', 'typecheck'),
         node('scripts/configure.mjs', '--trust-plugins'),
     ];
@@ -99,7 +104,7 @@ async function install(argv) {
         if (!existsSync(join(root, name, 'package-lock.json')))
             throw new Error(`Missing ${name}/package-lock.json; use a complete release checkout`);
     if (process.platform === 'win32') console.log('Skipping root tests on Windows (they require POSIX tooling).');
-    for (const step of installSteps()) run(step);
+    for (const step of installSteps(process.platform, { scope: 'install' })) run(step);
     if (process.platform === 'win32')
         await ensureWindowsJobHelper({ stateDir: journalRoot, runCommand: promisify(execFile) });
     // Use a launcher rather than symlinking the source: spaces in paths remain valid.

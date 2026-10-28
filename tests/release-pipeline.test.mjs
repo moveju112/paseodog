@@ -12,15 +12,16 @@ import { verifyRemoteAssets, verifyUpdaterManifest } from '../scripts/release-ar
 import { desktopRootPids } from '../scripts/release-apply.mjs';
 import { verifyReleaseWeb } from '../scripts/release-web-check.mjs';
 import { buildWeb } from '../scripts/build-web.mjs';
+import { runReleaseBuild } from '../scripts/build-release.mjs';
 import { verifyReleaseSource, sourceFingerprint } from '../scripts/release-verification.mjs';
-import { root } from '../scripts/paths.mjs';
+import { root, scratchPath } from '../scripts/paths.mjs';
 import { withTestLock } from '../scripts/test.mjs';
 import { carriedAssets, classifyPaths, deliveryPlan, pathTargets, readLedger, recordDeployment, validateTargets } from '../scripts/release-targets.mjs';
 import { runtimeChanges } from '../scripts/runtime-changes.mjs';
 import { execFileSync } from 'node:child_process';
 
 async function temporary(t) {
-    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-release-test-');
+    const directory = await mkdtemp(scratchPath('paseodog-release-test-'));
     t.after(() => rm(directory, { recursive: true, force: true }));
     return directory;
 }
@@ -285,9 +286,122 @@ test(`integrated delivery protects active turns, overlaps upload/export and resu
 });
 }
 
+for (const failure of [null, 'export', 'early-export', 'artifacts', 'upload', 'windows']) {
+test(`early browser export drains under the delivery lock and resumes without duplicate work: ${failure ?? 'success'}`,
+    { timeout: 10000 }, async t => {
+    const directory = await temporary(t);
+    const key = join(directory, 'approved.keystore'), init = join(directory, 'signing.gradle'), previous = join(directory, 'previous.apk');
+    await writeFile(key, 'fixture'); await writeFile(init, `storeFile = file("${key}")`); await writeFile(previous, 'old');
+    const config = validateReleaseConfig({
+        workspace: directory, cacheRoot: directory + '-cache', signingInit: init, signingKey: key,
+        previousApk: previous, androidTools: '/sdk/tools', metroWorkers: 2, appTests: ['src/fixture.test.ts'],
+        repo: 'moveju112/paseodog', pagesProject: 'paseodog', webUrl: 'https://paseodog.choondoggy.com/',
+        targets: ['android', 'desktop', 'web'],
+    });
+    t.after(() => rm(config.cacheRoot, { recursive: true, force: true }));
+    const exporting = Promise.withResolvers(), finishExport = Promise.withResolvers(), reached = Promise.withResolvers();
+    const finishPackaging = Promise.withResolvers();
+    const commit = 'a'.repeat(40), packageFile = join(directory, 'package.apk');
+    const events = [];
+    let exports = 0, uploads = 0, windows = 0, fail = failure;
+    const run = async (command, args, options) => {
+        assert.equal(args.includes('build:app-deps'), false, 'browser export must reuse built dependencies');
+        if (command === 'git' && args[0] === 'rev-parse') return commit + '\n';
+        if (command === 'git' && args[0] === 'ls-remote') return commit + '\trefs/heads/main\n';
+        if (command === 'python3') await writeFile(join(directory, 'paseodog-android-update.json'), '{}');
+        if (command === 'systemd-run' && args.includes('expo')) {
+            exports++;
+            assert.equal(options.env.TMPDIR, join(config.cacheRoot, 'web-cloudflare'));
+            assert.equal(options.env.PASEO_WEB_PLATFORM, '');
+            assert.equal(args[args.indexOf('--output-dir') + 1], join(directory, 'web-cloudflare'));
+            exporting.resolve();
+            if (fail === 'early-export') { reached.resolve(); throw new Error('early-export failed'); }
+            await finishExport.promise;
+            if (fail === 'export') throw new Error('export failed');
+            await mkdir(join(directory, 'web-cloudflare'), { recursive: true });
+            await writeFile(join(directory, 'web-cloudflare/index.html'), 'fixture');
+            events.push('export-complete');
+        }
+        if (command === 'gh' && args[1] === 'view')
+            return JSON.stringify({ targetCommitish: commit, assets: [{ name: 'package.apk', size: 7 }] });
+        if (command === 'gh' && args[1] === 'upload') {
+            uploads++;
+            events.push('upload');
+            reached.resolve();
+            if (fail === 'upload') throw new Error('upload failed');
+        }
+        if (command === 'gh' && args[1] === 'edit') {
+            assert.ok(events.includes('export-complete'));
+            events.push('publish');
+        }
+        if (args.includes('ls') && args.includes('--json')) return '[]';
+        return '';
+    };
+    const operations = {
+        run,
+        build: ({ targets, checkpoint, onBrowserReady }) => runReleaseBuild(name => checkpoint(`build-${name}`, async () => {
+            if (name === 'windows') {
+                windows++;
+                await exporting.promise;
+                if (fail === 'early-export') await finishPackaging.promise;
+                if (fail === 'windows') { reached.resolve(); throw new Error('windows failed'); }
+                events.push('windows-complete');
+            }
+        }), targets, onBrowserReady),
+        verifyArtifacts: async () => {
+            assert.ok(events.includes('windows-complete'));
+            events.push('artifacts');
+            if (fail === 'artifacts') { reached.resolve(); throw new Error('artifacts failed'); }
+            await writeFile(packageFile, 'fixture');
+            return [packageFile];
+        },
+        checkWeb: async () => {},
+        launchDesktop: async () => {},
+        installedRelease: async () => ({ versionCode: Number(config.versionCode) }),
+    };
+    const delivery = deliverRelease(config, operations);
+    const result = failure ? assert.rejects(delivery, new RegExp(`${failure} failed`)) : delivery;
+    t.after(async () => {
+        finishExport.resolve();
+        finishPackaging.resolve();
+        await Promise.allSettled([delivery, result]);
+    });
+    await reached.promise;
+    assert.equal(exports, 1);
+    assert.equal(events.includes('export-complete'), false);
+    assert.equal(events.includes('publish'), false);
+    assert.ok(await stat(join(directory, 'delivery.lock')));
+    await assert.rejects(deliverRelease(config, operations), { code: 'EEXIST' });
+    assert.equal(exports, 1);
+    finishExport.resolve();
+    finishPackaging.resolve();
+    await result;
+    await assert.rejects(stat(join(directory, 'delivery.lock')), { code: 'ENOENT' });
+    const saved = JSON.parse(await readFile(join(directory, 'release-state.json'), 'utf8'));
+    assert.equal(saved.stages['browser-export'].status, failure?.endsWith('export') ? 'failed' : 'complete');
+    if (!failure || ['export', 'upload'].includes(failure))
+        assert.ok(events.indexOf('artifacts') < events.indexOf('upload'));
+    if (failure) {
+        assert.equal(events.includes('publish'), false);
+        fail = null;
+        await deliverRelease(config, { ...operations, retryStage: failure === 'upload' ? 'github-upload' : undefined });
+        assert.equal(exports, failure.endsWith('export') ? 2 : 1);
+        assert.equal(uploads, failure === 'upload' ? 2 : 1);
+        assert.equal(windows, failure === 'windows' ? 2 : 1);
+    }
+    assert.equal(events.filter(event => event === 'publish').length, 1);
+    const before = { exports, uploads, windows };
+    await deliverRelease(config, operations);
+    assert.deepEqual({ exports, uploads, windows }, before);
+    await writeFile(join(directory, 'web-cloudflare/index.html'), 'tampered');
+    await assert.rejects(deliverRelease(config, operations), /artifact drift: browser-export/);
+    assert.deepEqual({ exports, uploads, windows }, before);
+});
+}
+
 test('delivery defaults are explicit targets and detached execution is a service, not a caller-owned scope', () => {
     const input = {
-        workspace: '/data/tmp/ubuntu/paseodog-release-example', cacheRoot: '/data/tmp/ubuntu/cache',
+        workspace: scratchPath('paseodog-release-example'), cacheRoot: scratchPath('cache'),
         signingInit: '/approved/init.gradle', signingKey: '/approved/key', previousApk: '/approved/previous.apk',
         androidTools: '/sdk/tools', metroWorkers: 2, appTests: ['src/settings.test.ts'],
         repo: 'moveju112/paseodog', pagesProject: 'paseodog', webUrl: 'https://paseodog.choondoggy.com/',

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { scratchPath } from '../scripts/paths.mjs';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -41,7 +42,7 @@ test('runtime packager rejects unsupported targets before writing files', async 
 });
 
 test('runtime packaging preserves source bytes but makes private sources readable after root installation', async t => {
-    const root = mkdtempSync('/data/tmp/ubuntu/paseodog-runtime-modes-');
+    const root = mkdtempSync(scratchPath('paseodog-runtime-modes-'));
     t.after(() => rmSync(root, { recursive: true }));
     const source = join(root, 'source'), output = join(root, 'output');
     const directories = ['engine/bin', 'engine/src', 'plugin/server', 'plugin/client', 'plugin/shared'];

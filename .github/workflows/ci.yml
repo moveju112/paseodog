@@ -19,11 +19,17 @@ jobs:
       - name: Install root test dependencies from committed lockfiles
         run: |
           npm --prefix tools ci
+          # 설치 스크립트와 같은 준비 로직으로 composer 패치의 검토된 web-ui 입력을 고정한다.
+          node scripts/prepare-paseo-web-ui.mjs
           npm --prefix engine ci --install-strategy=nested
           npm --prefix plugin ci
           # Root tests also import Expo/desktop source and installed Android packages.
           # Never run Android workspace install hooks in this read-only CI setup.
           npm --prefix android ci --ignore-scripts
+          # Root tests import the built protocol package, as the daemon updater prepares it.
+          npm --prefix android run build:protocol
+          # The release web check launches the lockfile's Playwright headless Chromium.
+          android/node_modules/.bin/playwright install --with-deps --only-shell chromium
       - name: Verify controls EPIPE regression before web bundle integration tests
         run: node --test --test-name-pattern="control daemon stdin failures" tests/engine-controls.test.mjs
       - name: Apply and verify pinned runtime patches
@@ -39,6 +45,9 @@ jobs:
       - name: Prepare Chromium for shared browser regressions
         working-directory: android
         run: npx playwright install --with-deps chromium
+      # 테스트 잠금 파일을 만들 수 있도록 실행 계정 소유의 스크래치 경로를 준비한다.
+      - name: Create the test scratch root
+        run: sudo install -d -o "$USER" /data/tmp/ubuntu
       - run: npm test
       - run: python3 scripts/package.py
       - name: Verify release ZIP really includes pinned lockfiles

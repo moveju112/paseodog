@@ -84,6 +84,8 @@ const LEGACY_PROJECTION_HASHES = new Map([
 
 // 검토한 이전 렌더러 주입본 ("답변" 제목 판, 하단 접기만 있고 이어서 진행 버튼 이전 판)
 const LEGACY_RENDERER_HASHES = new Set([
+    // 연결 종료 한 문구에만 이어서 진행 버튼을 표시하던 사진 지원 렌더러.
+    '72dcd616740fc99890ba07332f790793eae9c7ed5f8129ab55e3777f2b8a28fe',
     // 사진 지원 직전의 아이콘 전용 렌더러 주입본.
     '359be0a8707e5c4e0c2efd58f30f89f34eaff4de9b26428bef583c6f7f4a0948',
     // 닉네임 첫 글자만 표시하던 검토된 렌더러.

@@ -1,0 +1,58 @@
+diff --git a/node_modules/@mattermost/react-native-paste-input/android/build.gradle b/node_modules/@mattermost/react-native-paste-input/android/build.gradle
+index 5b40074..f0e7f0e 100644
+--- a/node_modules/@mattermost/react-native-paste-input/android/build.gradle
++++ b/node_modules/@mattermost/react-native-paste-input/android/build.gradle
+@@ -62,37 +62,28 @@ if (isNewArchitectureEnabled()) {
+   // never works. After codegen runs we overwrite the generated files with our versions
+   // from src/codegen-patch/, which wire up the full AndroidTextInput shadow node
+   // machinery (MeasurableYogaNode traits + TextLayoutManager injection via adopt()).
+-  afterEvaluate {
+-    def patchTask = tasks.register("patchPasteTextInputCodegen") {
+-      def patchSrcDir = file("src/codegen-patch/react/renderer/components/PasteTextInputSpecs")
++  // PaseoDog: overwrite inside the codegen task itself so Gradle snapshots the patched files
++  // as that task's outputs. A separate finalizer task changed those outputs after the snapshot,
++  // which forced codegen and the dependent native build to rerun on every build.
++  def patchSrcDir = file("src/codegen-patch/react/renderer/components/PasteTextInputSpecs")
++  tasks.matching { it.name == "generateCodegenArtifactsFromSchema" }.configureEach { task ->
++    task.inputs.dir(patchSrcDir).withPropertyName("pasteInputCodegenPatch")
++    task.doLast {
+       def codegenDir = layout.buildDirectory.dir(
+           "generated/source/codegen/jni/react/renderer/components/PasteTextInputSpecs"
+       ).get().asFile
+-
+-      inputs.dir(patchSrcDir)
+-      inputs.dir(codegenDir).optional()
+-      outputs.upToDateWhen { false }
+-
+-      doLast {
+-        if (!codegenDir.exists()) {
+-          logger.warn("[PasteInput] codegen dir not found – skipping patch")
+-          return
+-        }
+-
+-        ["ShadowNodes.h", "ShadowNodes.cpp", "ComponentDescriptors.h", "ComponentDescriptors.cpp"].each { name ->
+-          def src = new File(patchSrcDir, name)
+-          def dst = new File(codegenDir, name)
+-          dst.text = src.text
+-        }
+-
+-        logger.lifecycle("[PasteInput] Patched ShadowNodes.h/.cpp and ComponentDescriptors.h/.cpp")
++      if (!codegenDir.exists()) {
++        logger.warn("[PasteInput] codegen dir not found – skipping patch")
++        return
+       }
+-    }
+ 
+-    tasks.configureEach { task ->
+-      if (task.name == "generateCodegenArtifactsFromSchema") {
+-        task.finalizedBy(patchTask)
++      ["ShadowNodes.h", "ShadowNodes.cpp", "ComponentDescriptors.h", "ComponentDescriptors.cpp"].each { name ->
++        def src = new File(patchSrcDir, name)
++        def dst = new File(codegenDir, name)
++        if (!dst.exists() || dst.text != src.text) dst.text = src.text
+       }
++
++      logger.lifecycle("[PasteInput] Patched ShadowNodes.h/.cpp and ComponentDescriptors.h/.cpp")
+     }
+   }
+ }

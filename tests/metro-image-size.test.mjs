@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { scratchPath } from '../scripts/paths.mjs';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -13,7 +14,7 @@ const assetFile = fileURLToPath(new URL('../android/node_modules/metro/src/Asset
 const original = withoutMetroImageSize(readFileSync(assetFile, 'utf8'));
 
 function fixture(t) {
-    const root = mkdtempSync('/data/tmp/ubuntu/paseodog-metro-image-size-');
+    const root = mkdtempSync(scratchPath('paseodog-metro-image-size-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     return root;
 }

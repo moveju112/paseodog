@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { scratchPath } from '../scripts/paths.mjs';
 import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +13,7 @@ const plan = versionCode => ({ target: 'paseodog', versionCode,
     ...Object.fromEntries(phases.map(name => [name, ['/usr/bin/host-owned-updater', name]])) });
 
 async function fixture(t, options = {}) {
-    const directory = await mkdtemp('/data/tmp/ubuntu/paseodog-daemon-update-test-');
+    const directory = await mkdtemp(scratchPath('paseodog-daemon-update-test-'));
     t.after(() => rm(directory, { recursive: true, force: true }));
     await writeFile(join(directory, 'plan.json'), JSON.stringify(plan(11069)), { mode: 0o600 });
     const starts = [];

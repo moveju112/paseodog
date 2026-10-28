@@ -18,7 +18,7 @@ observeI18nInit(
   i18n.use(initReactI18next).init({
     compatibilityJSON: "v4",
     fallbackLng: "en",
-    lng: "en",
+    lng: "ko",
     resources: brandTranslations({
       ar: { translation: ar },
       en: { translation: en },

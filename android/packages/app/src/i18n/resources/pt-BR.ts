@@ -1182,10 +1182,12 @@ export const ptBR: TranslationResources = {
       windowAccessibility: "Mostrar sessões de {{window}}",
       splitLinked: "Aberta em tela dividida com {{title}}",
       windows: {
-        fifteenMinutes: "15 min",
-        oneHour: "1 h",
+        minutes: "{{value}} min",
+        hours: "{{value}} h",
         today: "Hoje",
       },
+      settingsTitle: "Intervalos recentes",
+      settingsDescription: "Escolha de 1 a 3 intervalos para a lista de recentes da barra lateral",
     },
     statusGroupAccessibility: "Grupo {{label}}",
     statusBucket: {

@@ -17,10 +17,15 @@ async function settleBuilds(builds) {
 
 // 공통 의존성은 한 번만 빌드하고 웹이 준비되는 즉시 PC 패키징을 시작한다.
 // 변경 대상만 빌드한다. 웹(Pages) 단독 배포도 공통 의존성은 필요하다.
-export async function runReleaseBuild(run, { android = true, desktop = true, web = true } = {}) {
+export async function runReleaseBuild(run, { android = true, desktop = true, web = true } = {}, onBrowserReady) {
     if (!android && !desktop && !web) return;
     await run('dependencies');
     const androidBuild = android ? run('android') : null;
+    const browserReady = async builds => {
+        await Promise.all(builds);
+        // 콜백은 export를 시작만 한다. 종료 확인은 배포기가 맡아 Windows 이후 업로드를 막지 않는다.
+        if (web) onBrowserReady?.();
+    };
     await settleBuilds([
         androidBuild,
         desktop ? (async () => {
@@ -33,15 +38,18 @@ export async function runReleaseBuild(run, { android = true, desktop = true, web
                 if (androidBuild) await Promise.race([androidBuild, linux]);
                 await run('windows');
             })();
-            await settleBuilds([linux, windows]);
+            // 종료 순서와 관계없이 두 작업이 끝난 빈 슬롯만 export에 내준다.
+            await settleBuilds([linux, windows, browserReady([androidBuild, linux])]);
         })() : null,
+        !desktop ? browserReady([androidBuild]) : null,
     ].filter(Boolean));
     // Electron 산출물은 브라우저용 연결·첨부 처리와 다르므로 별도로 export한다.
     // 선택하지 않은 웹을 빌드하지 않고, 플랫폼 작업 종료 후 실행해 최대 두 작업 제한을 지킨다.
     if (web) await run('server-web');
 }
 // 고유 산출물 폴더와 재사용 캐시를 분리하고 플랫폼별 Metro 임시 경로를 고정한다.
-export async function buildRelease({ workspace, cacheRoot, signingInit, versionCode, version, metroWorkers, checkpoint, targets }) {
+export async function buildRelease({ workspace, cacheRoot, signingInit, versionCode, version, metroWorkers, checkpoint, targets,
+    onBrowserReady }) {
     for (const value of [workspace, cacheRoot, signingInit]) {
         if (!value || !isAbsolute(value)) throw new Error('workspace, cache-root and signing-init must be absolute');
     }
@@ -126,7 +134,7 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
     };
     await runReleaseBuild(name => checkpoint
         ? checkpoint(`build-${name}`, () => execute(name), { artifacts: artifacts[name] })
-        : execute(name), targets);
+        : execute(name), targets, onBrowserReady);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { scratchPath } from '../scripts/paths.mjs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { advanceReleaseVersion } from '../scripts/release-version.mjs';
 import { prepareRelease } from '../scripts/release-prepare.mjs';
 
 async function fixture(t) {
-    const root = await mkdtemp('/data/tmp/ubuntu/paseodog-version-');
+    const root = await mkdtemp(scratchPath('paseodog-version-'));
     t.after(() => rm(root, { recursive: true, force: true }));
     await mkdir(join(root, 'plugin/shared'), { recursive: true });
     const metadata = { version: '1.0.0-rc.7', versionCode: 40, paseodogUpstream: { paseo: '0.11.4' } };

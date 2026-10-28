@@ -1,6 +1,6 @@
 # Dedicated runtime
 
-Source changes do not authorize runtime apply. Apply only under an explicit release/apply request; ordinary implementation ends with its verified commit/push.
+Source changes do not authorize runtime apply. Apply only under an explicit release/apply request; ordinary implementation ends with its verified commit, branch push and pull request.
 
 ## Target and cutover
 

@@ -75,12 +75,25 @@ test('install steps keep the patch order and skip only POSIX root tests on Windo
     const linux = installSteps('linux').map(({ args }) => args.join(' '));
     const windows = installSteps('win32').map(({ args }) => args.join(' '));
     const engine = engineInstallSteps().map(({ args }) => args.join(' '));
-    assert.deepEqual(linux.slice(0, engine.length + 2), ['--prefix tools ci', ...engine, '--prefix plugin ci']);
-    assert.deepEqual(linux.slice(engine.length + 2, engine.length + 4), ['scripts/patch-mixdog.mjs', 'scripts/patch-mixdog.mjs --check']);
+    assert.deepEqual(linux.slice(0, engine.length + 3),
+        ['--prefix tools ci', 'scripts/prepare-paseo-web-ui.mjs', ...engine, '--prefix plugin ci']);
+    assert.deepEqual(linux.slice(engine.length + 3, engine.length + 5), ['scripts/patch-mixdog.mjs', 'scripts/patch-mixdog.mjs --check']);
     assert.deepEqual(linux.slice(-6), ['--prefix android ci',
         `scripts/build-web.mjs --hosting server --output ${serverWebDist} --metro-workers 1`, 'run check', 'test', 'run typecheck',
         'scripts/configure.mjs --trust-plugins']);
     assert.deepEqual(windows, linux.filter((step) => step !== 'test'));
+});
+
+test('install scope drops only the root regression tests and keeps the default full recipe', () => {
+    for (const platform of ['linux', 'win32']) {
+        const full = installSteps(platform);
+        assert.deepEqual(installSteps(platform, { scope: 'full' }), full);
+        assert.deepEqual(installSteps(platform, {}), full);
+        const install = installSteps(platform, { scope: 'install' });
+        assert.deepEqual(install, full.filter(({ command, args }) => !(command === 'npm' && args.join(' ') === 'test')));
+    }
+    assert.equal(installSteps('linux').length - installSteps('linux', { scope: 'install' }).length, 1);
+    assert.throws(() => installSteps('linux', { scope: 'release' }), /Unknown install scope: release/);
 });
 
 test('engine installation completes every pinned child hook before the pruning hook', () => {

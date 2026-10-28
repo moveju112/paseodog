@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createServer } from "node:http";
 import { patchQueryStringDecoder } from "../../../../scripts/patch-query-string-decoder.mjs";
@@ -54,7 +55,7 @@ describe("security dependency compatibility", () => {
   });
 
   it("preserves archive creation and extraction used by build tooling", async () => {
-    const root = await mkdtemp("/data/tmp/ubuntu/paseodog-security-archive-");
+    const root = await mkdtemp(join(process.env.PASEODOG_TMP || tmpdir(), "paseodog-security-archive-"));
     temporaryDirectories.push(root);
     await mkdir(join(root, "source"));
     await mkdir(join(root, "output"));

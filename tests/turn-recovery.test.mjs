@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
+import { scratchPath } from '../scripts/paths.mjs';
 import { join } from 'node:path';
 import { agentsBySession, interruptedTurns, resumeInterruptedTurns, scheduleTurnRecovery, CONTINUE_PROMPT } from '../plugin/server/turn-recovery.mjs';
 
 async function fixture(t) {
-    const root = await mkdtemp('/data/tmp/ubuntu/paseodog-turn-recovery-');
+    const root = await mkdtemp(scratchPath('paseodog-turn-recovery-'));
     t.after(() => rm(root, { recursive: true, force: true }));
     const state = join(root, 'sessions'), paseo = join(root, 'paseo');
     await mkdir(state, { mode: 0o700 }); await mkdir(join(paseo, 'agents', 'home-ubuntu'), { recursive: true });
