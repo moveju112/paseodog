@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat, writeFile, mkdir, symlink } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile, mkdir, symlink, rename } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -645,6 +645,8 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
     });
     const commit = 'f'.repeat(40), carried = 'v1.0.0-rc.7.11090', stale = 'e'.repeat(40);
     const calls = [];
+    const verifiedRevisions = [];
+    let pendingReceipt;
     let assets = [], active = [{ status: 'running' }], updaterStarts = 0;
     const run = async (command, args) => {
         calls.push([command, ...args]);
@@ -674,9 +676,9 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
             updaterStarts += 1;
             // 첫 실행은 미리 준비된 이전 리비전을 적용하고, 두 번째 실행이 배포 커밋까지 따라잡는다.
             const revision = updaterStarts === 1 ? stale : commit;
-            // 업데이터는 전환 직후 종료하고, 검증 서비스가 잠시 뒤 applied로 바꾼다.
+            // 업데이터 종료와 검증 완료는 분리한다. 아래 poll 대기 훅이 검증 완료를 진행한다.
             await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'awaiting-verification', revision }));
-            setTimeout(() => void writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'applied', revision })), 20);
+            pendingReceipt = { phase: 'applied', revision };
         }
         if (args.includes('diagnostic')) return '{"diagnostic":"Provider is available"}';
         return '';
@@ -696,7 +698,18 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
         checkWeb: async () => { throw new Error('web must not deploy'); },
         launchDesktop: async () => { throw new Error('desktop must not launch'); },
         installedRelease: async () => { throw new Error('desktop must not be read'); },
-        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, Math.min(ms, 10))),
+        sleep: async () => {
+            if (!pendingReceipt) return;
+            const path = join(updaterRoot, 'receipt.json');
+            assert.deepEqual(JSON.parse(await readFile(path, 'utf8')),
+                { phase: 'awaiting-verification', revision: pendingReceipt.revision });
+            // 타이머의 비동기 덮어쓰기는 빈 JSON을 노출할 수 있다. 완성한 파일만 원자적으로 공개한다.
+            // poll을 실제로 거친 뒤 완료시키고 모든 쓰기를 기다려 테스트 종료 뒤 작업도 남기지 않는다.
+            await writeFile(path + '.tmp', JSON.stringify(pendingReceipt));
+            await rename(path + '.tmp', path);
+            verifiedRevisions.push(pendingReceipt.revision);
+            pendingReceipt = undefined;
+        },
     });
     const download = calls.find(row => row[0] === 'gh' && row[2] === 'download' && row.includes(join(config.workspace, 'carry')));
     assert.ok(download.includes('PaseoDog-1.0.0-rc.7.11090-amd64.deb') && download.includes('latest.yml'));
@@ -708,6 +721,7 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
     const updateAt = calls.findIndex(row => row[0] === 'systemctl');
     assert.ok(updateAt > 0);
     assert.equal(updaterStarts, 2);
+    assert.deepEqual(verifiedRevisions, [stale, commit]);
     // 데스크톱 없는 runtime 적용도 요청 턴이 종료 시점으로 삼는 idle 대기 문구를 남긴다.
     assert.equal(logs.mock.calls.filter(call => String(call.arguments[0]).includes('waiting for idle')).length, 1);
     // 업데이터가 플러그인과 사후 검증을 맡으므로 배포가 다시 로드하지 않는다.
