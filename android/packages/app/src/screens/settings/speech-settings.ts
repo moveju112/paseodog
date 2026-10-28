@@ -136,7 +136,7 @@ export function SpeechSettings({ serverId }: { serverId: string }) {
     createElement(
       Text,
       { style: settingsStyles.rowHint },
-      "추가 API 과금 없는 로컬 모델만 제공해요. 받아쓰기·음성 모드 인식에 함께 적용해요. 현재 실행 방식은 호스트 PC의 CPU예요.",
+      "추가 API 과금 없는 로컬 모델만 제공해요. 받아쓰기·음성 모드 인식에 함께 적용해요. 호스트 PC에서 처리하며 CPU·GPU 구분은 각 후보 설명에 표시해요.",
     ),
     createElement(
       Text,

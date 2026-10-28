@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 export type SherpaLoaderEnvKey = "LD_LIBRARY_PATH" | "DYLD_LIBRARY_PATH" | "PATH";
@@ -7,6 +8,7 @@ export interface SherpaLoaderEnvResolution {
   key: SherpaLoaderEnvKey;
   libDir: string;
   packageName: string;
+  modulePath?: string;
 }
 
 export function sherpaPlatformArch(
@@ -50,7 +52,24 @@ export function prependEnvPath(existing: string | undefined, value: string): str
 export function resolveSherpaLoaderEnv(
   platform: NodeJS.Platform = process.platform,
   arch: string = process.arch,
+  env: NodeJS.ProcessEnv = process.env,
 ): SherpaLoaderEnvResolution | null {
+  if (env.PASEODOG_SPEECH_GPU === "1") {
+    if (platform !== "linux" || arch !== "x64" || !path.isAbsolute(env.PASEO_HOME ?? "")) {
+      throw new Error("GPU speech requires a dedicated Linux x64 home");
+    }
+    const root = path.join(env.PASEO_HOME!, "speech-gpu", "sherpa-1.12.28-cuda12");
+    const receipt = JSON.parse(readFileSync(path.join(root, "ready.json"), "utf8"));
+    if (receipt.schema !== 1 || receipt.runtime !== "sherpa-1.12.28-cuda12") {
+      throw new Error("Verified GPU speech runtime required");
+    }
+    return {
+      key: "LD_LIBRARY_PATH",
+      libDir: path.join(root, "node_modules", "sherpa-onnx-linux-x64"),
+      packageName: "sherpa-onnx-linux-x64",
+      modulePath: path.join(root, "node_modules", "sherpa-onnx-node"),
+    };
+  }
   const key = sherpaLoaderEnvKey(platform);
   if (!key) {
     return null;
@@ -95,7 +114,7 @@ export function applySherpaLoaderEnv(
   libDir: string | null;
   packageName: string | null;
 } {
-  const resolved = resolveSherpaLoaderEnv(platform, arch);
+  const resolved = resolveSherpaLoaderEnv(platform, arch, env);
   if (!resolved) {
     return {
       changed: false,

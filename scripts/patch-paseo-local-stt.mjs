@@ -90,9 +90,68 @@ const whisperEdits = [
         ['        numThreads: 2,\n', '        featureDim: whisper === "turbo" ? 128 : 80,\n        numThreads: 2,\n'],
     ],
 ];
-export const LOCAL_STT_PATCHES = previousPatches.map((spec, index) => ({
+const cpuPatches = previousPatches.map((spec, index) => ({
     ...spec, previousEdits: spec.edits, edits: [...spec.edits, ...whisperEdits[index]],
 }));
+
+const gpuCatalog = `    "whisper-turbo-cuda": {
+        kind: "stt-offline",
+        archiveUrl: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-turbo.tar.bz2",
+        extractedDir: "sherpa-onnx-whisper-turbo",
+        requiredFiles: ["turbo-encoder.int8.onnx", "turbo-decoder.int8.onnx", "turbo-tokens.txt"],
+        description: "Whisper Large-v3 Turbo (multilingual including Korean, NVIDIA CUDA).",
+    },
+`;
+const gpuEdits = [
+    [['    "kokoro-en-v0_19": {\n', gpuCatalog + '    "kokoro-en-v0_19": {\n']],
+    [],
+    [
+        ['"whisper-turbo-int8": "turbo" }[modelId]', '"whisper-turbo-int8": "turbo", "whisper-turbo-cuda": "turbo" }[modelId]'],
+        ['        featureDim: whisper === "turbo" ? 128 : 80,\n',
+            '        featureDim: whisper === "turbo" ? 128 : 80,\n        provider: modelId === "whisper-turbo-cuda" ? "cuda" : "cpu",\n'],
+    ],
+];
+const gpuResolution = `    if (env.PASEODOG_SPEECH_GPU === "1") {
+        if (platform !== "linux" || arch !== "x64" || !path.isAbsolute(env.PASEO_HOME ?? ""))
+            throw new Error("GPU speech requires a dedicated Linux x64 home");
+        const root = path.join(env.PASEO_HOME, "speech-gpu", "sherpa-1.12.28-cuda12");
+        const receipt = JSON.parse(readFileSync(path.join(root, "ready.json"), "utf8"));
+        if (receipt.schema !== 1 || receipt.runtime !== "sherpa-1.12.28-cuda12")
+            throw new Error("Verified GPU speech runtime required");
+        return { key: "LD_LIBRARY_PATH", libDir: path.join(root, "node_modules", "sherpa-onnx-linux-x64"),
+            packageName: "sherpa-onnx-linux-x64", modulePath: path.join(root, "node_modules", "sherpa-onnx-node") };
+    }
+`;
+export const LOCAL_STT_PATCHES = [
+    ...cpuPatches.map((spec, index) => ({
+        ...spec, cpuEdits: spec.edits, edits: [...spec.edits, ...gpuEdits[index]],
+    })),
+    { file: 'speech/providers/local/worker-client.js', blob: 'bc943a2acbce1a56cf516647a4819198920ddab3',
+        previousEdits: [], edits: [
+            ['function forkLocalSpeechWorker() {\n    const env = { ...process.env };\n',
+                'function forkLocalSpeechWorker(config) {\n    const env = { ...process.env };\n'
+                + '    delete env.PASEODOG_SPEECH_GPU;\n'
+                + '    if (config.dictationSttModel === "whisper-turbo-cuda" || config.voiceSttModel === "whisper-turbo-cuda") env.PASEODOG_SPEECH_GPU = "1";\n'],
+            ['this.forkWorker = options.forkWorker ?? forkLocalSpeechWorker;',
+                'this.forkWorker = options.forkWorker ?? (() => forkLocalSpeechWorker(options.config));'],
+        ] },
+    { file: 'speech/providers/local/sherpa/sherpa-runtime-env.js', blob: 'f2310bb0b49e0bcd3b91edb0f0b55907337affe6',
+        previousEdits: [], edits: [
+            ['import { createRequire } from "node:module";', 'import { createRequire } from "node:module";\nimport { readFileSync } from "node:fs";'],
+            ['export function resolveSherpaLoaderEnv(platform = process.platform, arch = process.arch) {\n',
+                'export function resolveSherpaLoaderEnv(platform = process.platform, arch = process.arch, env = process.env) {\n' + gpuResolution],
+            ['const resolved = resolveSherpaLoaderEnv(platform, arch);', 'const resolved = resolveSherpaLoaderEnv(platform, arch, env);'],
+        ] },
+    { file: 'speech/providers/local/sherpa/sherpa-onnx-node-loader.js', blob: 'ecad9b8b09aa635b7b3c7f199f563e9885bac3e4',
+        previousEdits: [], edits: [
+            ['    const require = createRequire(import.meta.url);\n    const attempts = [];\n',
+                '    const require = createRequire(import.meta.url);\n    const attempts = [];\n'
+                + '    if (process.env.PASEODOG_SPEECH_GPU === "1") {\n'
+                + '        const gpu = resolveSherpaLoaderEnv();\n'
+                + '        if (!gpu?.modulePath) throw new Error("Verified GPU speech runtime required");\n'
+                + '        cached = require(gpu.modulePath);\n        return cached;\n    }\n'],
+        ] },
+];
 
 // 원본·완성된 패치만 받으며 파일별 정확한 blob과 유일한 앵커를 검증한다.
 export function patchedLocalSttSource(source, spec) {
@@ -106,7 +165,9 @@ export function patchedLocalSttSource(source, spec) {
     }
     let previous = original;
     for (const [before, after] of spec.previousEdits) previous = previous.replace(before, after);
-    if (source !== original && source !== previous && source !== result)
+    let cpu = original;
+    for (const [before, after] of spec.cpuEdits ?? []) cpu = cpu.replace(before, after);
+    if (source !== original && source !== previous && source !== cpu && source !== result)
         throw new Error(`Partial Paseo local-STT patch: ${spec.file}`);
     return result;
 }
