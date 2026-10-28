@@ -7,8 +7,7 @@ import vm from 'node:vm';
 import { basicAgentIds, isBasicAgent } from '../android/packages/app/src/screens/settings/basic-agent-roles.ts';
 import { generateConversationTitle } from '../engine/src/session-title.mjs';
 import { resolveMaintenanceRoute } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/agent-runtime/maintenance-route.mjs';
-import { resultText } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/agent-runtime/completion-text.mjs';
-import { roleProviderCacheOpts } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/agent-runtime/cache-strategy.mjs';
+import { createTitleCompletion } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/agent-runtime/title-completion.mjs';
 import { AGENT_PATCHES, ADDITION, PIN, patch, patchedAgentSource } from '../scripts/patch-mixdog.mjs';
 import { SESSION_TITLE_ROUTE_PATCH } from '../patches/session-title-route.mjs';
 import { BUILTIN_AGENTS, BUILTIN_AGENT_FILES, SOLO_BASIC_ROLE_IDS } from '../patches/builtin-agents.mjs';
@@ -19,15 +18,6 @@ import { setModuleEnabledInConfig } from '../engine/node_modules/mixdog/src/runt
 import { canonicalizeModulesStorage } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/config-storage.mjs';
 import { compactionSummaryPlan } from '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/session/loop/fresh-context.mjs';
 import { BASIC_AGENTS_WEB_EDITS, AGENTS_SETTINGS_BEFORE, withAgentsSettings, withoutAgentsSettings } from '../patches/paseo-agents-settings.mjs';
-
-// 네이티브 팩토리를 그대로 실행하고 설정 읽기와 공급자 I/O만 메모리로 치환한다.
-const titleSource = readFileSync(new URL(
-    '../engine/node_modules/mixdog/src/runtime/agent/orchestrator/agent-runtime/title-completion.mjs', import.meta.url), 'utf8');
-const createTitleCompletion = vm.runInNewContext(titleSource
-    .replace(/^import .+;\n/gm, '')
-    .replace('export const generateSessionTitle = createTitleCompletion();', 'createTitleCompletion;'), {
-    resolveMaintenanceRoute, resultText, roleProviderCacheOpts,
-});
 
 function config() {
     return {

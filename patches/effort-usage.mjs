@@ -102,13 +102,13 @@ export function noteRequestEffort(value) {
         '      agent: opts.session?.agent,\n      fast:',
         '      agent: opts.session?.agent || opts.usageAgent || opts.role,\n      fast:',
     ]], [4, 5]),
-    usageAgent('runtime/agent/orchestrator/agent-runtime/title-completion.mjs', '1f7fcb10f2fa5f1f7f35fc375ed498204679c4f6',
+    usageAgent('runtime/agent/orchestrator/agent-runtime/title-completion.mjs', '3fb9c396de5a3d6a62886095732e596ed0eac225',
         '        maxOutputTokens: 128,', 'title-generator'),
     usageAgent('runtime/agent/orchestrator/agent-runtime/heartbeat-completion.mjs', 'c4a83c2f776b5e4ea597ec4736334d432d28ccdf',
         '        maxOutputTokens,', 'heartbeat'),
     usageAgent('runtime/agent/orchestrator/agent-runtime/room-supervisor-completion.mjs', '584de15de59328c4eebd91f97ad4681520d81ce7',
         '        maxOutputTokens: 400,', 'room-supervisor'),
-    spec('session-runtime/services/provider-admin.mjs', '8ce26d0a5cc5636d0772aa8398b225743a20f346', [[
+    spec('session-runtime/services/provider-admin.mjs', '4b757565e4c72c827bf5f086b8abbffdc696d1e7', [[
         '{ signal, maxTokens: 16 }',
         "{ signal, maxTokens: 16, usageAgent: 'provider-check' }",
     ]]),

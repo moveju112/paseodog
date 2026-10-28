@@ -32,7 +32,7 @@ export const AGENT_ROUTE_SAFETY_EDITS = [
 export const AGENT_EDITOR_SAFETY_PATCHES = [
     {
         file: 'src/session-runtime/workflow-agents-api/agent-editor.mjs',
-        blob: '2d1ff64ae8ae7025124ecf719647220243af6891',
+        blob: '01d3685166e95df4dac9422a3c137f8a35b218e4',
         edits: [
             [
                 "    // Opt-in (the agent profile): without `expectedRevision` the last write\n    // wins, as for the Workflows editor and the setup tool.\n    if (hasOwn(payload, 'expectedRevision') && String(payload.expectedRevision) !== definitionRevision(dataDir, id)) {\n      const conflict = new Error(`${AGENT_DEFINITION_CONFLICT}: agent \"${id}\" changed since it was loaded`);\n      conflict.code = AGENT_DEFINITION_CONFLICT;\n      throw conflict;\n    }",

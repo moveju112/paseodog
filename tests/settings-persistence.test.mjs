@@ -46,13 +46,16 @@ test('native config reload preserves saved and peer settings instead of boot def
     disk = { ...disk, default: { effort: 'high' }, instructionFiles: 'claude',
         workflow: { active: 'none' }, orchestrationMode: 'swarm', compaction: { auto: false },
         autoClear: { enabled: false }, worktree: { newTaskDefault: 'direct' },
-        skills: { disabled: [] }, mcpServers: { unexpected: {} }, update: { auto: true, channel: 'stable' } };
+        skills: { disabled: [] }, mcpServers: { unexpected: {} }, update: { auto: true, channel: 'stable' },
+        promptCacheWarming: true };
     lifecycle.reloadFullConfig();
     for (const key of ['default', 'instructionFiles', 'workflow', 'orchestrationMode', 'compaction', 'autoClear', 'worktree', 'skills'])
         assert.deepEqual(current[key], disk[key], key);
     assert.deepEqual(current.mcpServers, {});
     assert.equal(current.update.auto, false);
     assert.equal(current.update.channel, 'stable');
+    assert.equal(current.promptCacheWarming, false);
+    assert.equal(disk.promptCacheWarming, true);
     lifecycle.disposeConfigSync();
 });
 

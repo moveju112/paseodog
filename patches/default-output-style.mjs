@@ -27,7 +27,7 @@ export const DEFAULT_OUTPUT_STYLE_PATCHES = [
     },
     {
         file: 'src/lib/rules-builder.cjs',
-        blob: '6e08d0968a47dd554e5fbb395416210741e4a816',
+        blob: '563ca764259143ed227c0b8f9565de73927eb778',
         edits: [[
             '  DEFAULT_OUTPUT_STYLE_ID,\n',
             '  DEFAULT_OUTPUT_STYLE_ID,\n  NO_OUTPUT_STYLE,\n',
@@ -35,8 +35,8 @@ export const DEFAULT_OUTPUT_STYLE_PATCHES = [
             '  return sortOutputStyles([...byId.values()]);',
             "  // 카탈로그와 동일한 예약 스타일로 파일·별칭 충돌을 막는다.\n  byId.set(NO_OUTPUT_STYLE.id, NO_OUTPUT_STYLE);\n  return sortOutputStyles([...byId.values()]);",
         ], [
-            "  if (!style) return '';",
-            "  if (!style || style.id === NO_OUTPUT_STYLE.id) return '';",
+            "  if (!style) return null;",
+            "  if (!style || style.id === NO_OUTPUT_STYLE.id) return null;",
         ]],
     },
 ];

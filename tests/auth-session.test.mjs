@@ -34,3 +34,57 @@ test('unsupported providers and non-HTTPS login URLs fail closed', async () => {
     await assert.rejects(auth.request({ action: 'start', provider: 'openai-oauth' }));
     await auth.close();
 });
+
+test('headless ChatGPT device login exposes only the user code and follows polling completion', async () => {
+    let finish, options, canceled = 0;
+    const waitForCallback = new Promise(resolve => { finish = resolve; });
+    const auth = createAuthSession({
+        getProviderAccounts: () => ({ accounts: [] }),
+        beginOAuthProviderLogin: async (provider, input) => {
+            assert.equal(provider, 'openai-oauth');
+            options = input;
+            return { manualUrl: 'https://auth.openai.com/codex/device', userCode: 'ABCD-1234',
+                deviceCode: 'private-device-token', waitForCallback, cancel() { canceled++; } };
+        },
+    });
+    try {
+        const started = await auth.request({ action: 'start', provider: 'openai-oauth' });
+        assert.deepEqual(options, { openBrowser: false, addAccount: true });
+        assert.equal(started.url, 'https://auth.openai.com/codex/device');
+        assert.equal(started.userCode, 'ABCD-1234');
+        assert.equal(started.acceptsCode, false);
+        assert.doesNotMatch(JSON.stringify(started), /private-device-token|deviceCode/);
+        finish({ authenticated: true, accessToken: 'private-access-token' });
+        await waitForCallback;
+        const status = await auth.request({ action: 'status', provider: 'openai-oauth' });
+        assert.equal(status.state, 'completed');
+        assert.doesNotMatch(JSON.stringify(status), /private-access-token/);
+    } finally { await auth.close(); }
+    assert.equal(canceled, 1);
+});
+
+test('device polling failure and late completion after cancel cannot authenticate a flow', async () => {
+    let finish, fail;
+    const waits = [
+        new Promise((resolve, reject) => { fail = reject; }),
+        new Promise(resolve => { finish = resolve; }),
+    ];
+    const auth = createAuthSession({
+        getProviderAccounts: () => ({ accounts: [] }),
+        beginOAuthProviderLogin: async () => ({
+            url: 'https://auth.openai.com/codex/device', userCode: 'ABCD-1234',
+            waitForCallback: waits.shift(), cancel() {},
+        }),
+    });
+    try {
+        await auth.request({ action: 'start', provider: 'openai-oauth' });
+        fail(new Error('device code expired'));
+        await Promise.resolve();
+        assert.equal((await auth.request({ action: 'status', provider: 'openai-oauth' })).state, 'failed');
+        const started = await auth.request({ action: 'start', provider: 'openai-oauth' });
+        await auth.request({ action: 'cancel', provider: 'openai-oauth', id: started.id });
+        finish({ authenticated: true });
+        await Promise.resolve();
+        assert.equal((await auth.request({ action: 'status', provider: 'openai-oauth' })).state, 'idle');
+    } finally { await auth.close(); }
+});

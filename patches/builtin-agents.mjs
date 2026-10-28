@@ -71,7 +71,7 @@ export const BUILTIN_AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/shared/defaults-separation.mjs',
-        blob: '189eeace45e19613ae4a660eb037e07987b32542',
+        blob: '09115e8d73912e5db4ff20905438e261a3040f5d',
         edits: [[
             '      const kept = withoutDefaults(entry, MODULE_DEFAULTS);',
             "      const kept = withoutDefaults(entry, name === 'webSearch' ? { enabled: false } : MODULE_DEFAULTS);",
