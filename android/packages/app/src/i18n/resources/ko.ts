@@ -1163,10 +1163,12 @@ export const ko: TranslationResources = {
       windowAccessibility: "{{window}} 이내 세션 보기",
       splitLinked: "{{title}}와 분할 화면으로 연결됨",
       windows: {
-        fifteenMinutes: "15분",
-        oneHour: "1시간",
+        minutes: "{{value}}분",
+        hours: "{{value}}시간",
         today: "오늘",
       },
+      settingsTitle: "최근 목록 시간 범위",
+      settingsDescription: "사이드바 최근 목록에 표시할 범위를 1~3개 고르세요",
     },
     statusGroupAccessibility: "{{label}} 그룹",
     statusBucket: {

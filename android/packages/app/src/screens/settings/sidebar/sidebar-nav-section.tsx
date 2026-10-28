@@ -28,6 +28,14 @@ import {
 } from "@/sidebar-nav/model";
 import { resolvePluginIcon } from "@/plugins/icons";
 import { useSidebarNavItems } from "@/sidebar-nav/use-sidebar-nav-items";
+import { useRecentSessionsStore } from "@/stores/recent-sessions-store";
+import {
+  MAX_RECENT_SESSIONS_WINDOWS,
+  normalizeRecentSessionsWindows,
+  RECENT_SESSIONS_WINDOW_OPTIONS,
+  recentSessionsWindowLabel,
+  type RecentSessionsWindow,
+} from "@/utils/recent-sessions";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 
@@ -179,12 +187,90 @@ function SidebarItemsCard({ section }: { section: SidebarSection }): ReactElemen
   );
 }
 
+interface RecentWindowRowProps {
+  option: RecentSessionsWindow;
+  selected: boolean;
+  disabled: boolean;
+  isFirst: boolean;
+  onToggle: (option: RecentSessionsWindow, selected: boolean) => void;
+}
+
+// 최근 범위 행 (스위치 -> 사이드바 최근 목록 범위에 추가·제외)
+function RecentWindowRow({
+  option,
+  selected,
+  disabled,
+  isFirst,
+  onToggle,
+}: RecentWindowRowProps): ReactElement {
+  const { t } = useTranslation();
+  const label = recentSessionsWindowLabel(t, option);
+  const handleChange = useCallback((value: boolean) => onToggle(option, value), [option, onToggle]);
+  const rowStyle = useMemo(
+    () => [settingsStyles.row, isFirst ? null : settingsStyles.rowBorder, styles.row],
+    [isFirst],
+  );
+  return (
+    <View style={rowStyle} testID={`sidebar-recent-window-option-${option}`}>
+      <Text style={settingsStyles.rowTitle} numberOfLines={1}>
+        {label}
+      </Text>
+      <Switch
+        value={selected}
+        onValueChange={handleChange}
+        disabled={disabled}
+        accessibilityLabel={label}
+        testID={`sidebar-recent-window-toggle-${option}`}
+      />
+    </View>
+  );
+}
+
+// 사이드바 최근 목록 범위 카드 (1~3개 선택, 마지막 하나는 끌 수 없고 3개면 더 켤 수 없다)
+function RecentSessionsWindowsCard(): ReactElement {
+  const { t } = useTranslation();
+  const storedWindows = useRecentSessionsStore((state) => state.windows);
+  const setWindows = useRecentSessionsStore((state) => state.setWindows);
+  const windows = useMemo(() => normalizeRecentSessionsWindows(storedWindows), [storedWindows]);
+  const handleToggle = useCallback(
+    (option: RecentSessionsWindow, selected: boolean) =>
+      setWindows(selected ? [...windows, option] : windows.filter((item) => item !== option)),
+    [setWindows, windows],
+  );
+  return (
+    <SettingsSection
+      title={t("sidebar.recentSessions.settingsTitle")}
+      info={t("sidebar.recentSessions.settingsDescription")}
+      testID="sidebar-recent-windows-section"
+    >
+      <View style={settingsStyles.card}>
+        {RECENT_SESSIONS_WINDOW_OPTIONS.map((option, index) => {
+          const selected = windows.includes(option);
+          return (
+            <RecentWindowRow
+              key={option}
+              option={option}
+              selected={selected}
+              disabled={
+                selected ? windows.length === 1 : windows.length >= MAX_RECENT_SESSIONS_WINDOWS
+              }
+              isFirst={index === 0}
+              onToggle={handleToggle}
+            />
+          );
+        })}
+      </View>
+    </SettingsSection>
+  );
+}
+
 /** Settings > Sidebar: one card per section. The footer's bottom line is fixed and not listed. */
 export function SidebarNavSection(): ReactElement {
   return (
     <>
       <SidebarItemsCard section="header" />
       <SidebarItemsCard section="footer" />
+      <RecentSessionsWindowsCard />
     </>
   );
 }

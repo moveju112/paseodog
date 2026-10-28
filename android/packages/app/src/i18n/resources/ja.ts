@@ -1169,10 +1169,12 @@ export const ja: TranslationResources = {
       windowAccessibility: "{{window}}以内のセッションを表示",
       splitLinked: "{{title}}と分割表示で連結",
       windows: {
-        fifteenMinutes: "15分",
-        oneHour: "1時間",
+        minutes: "{{value}}分",
+        hours: "{{value}}時間",
         today: "今日",
       },
+      settingsTitle: "最近の時間範囲",
+      settingsDescription: "サイドバーの最近リストに表示する範囲を1〜3個選択してください",
     },
     statusGroupAccessibility: "{{label}} グループ",
     statusBucket: {

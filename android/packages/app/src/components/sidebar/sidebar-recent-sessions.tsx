@@ -11,8 +11,10 @@ import { requestSessionReveal } from "@/stores/session-reveal-store";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import {
+  effectiveRecentSessionsWindow,
   groupRecentSessionsBySplit,
-  RECENT_SESSIONS_WINDOWS,
+  normalizeRecentSessionsWindows,
+  recentSessionsWindowLabel,
   selectRecentSessions,
   selectSplitSessionGroups,
   type RecentSessionsWindow,
@@ -20,12 +22,6 @@ import {
 import { subscribeToRelativeTimeTick } from "@/utils/relative-time-ticker";
 import { deriveSidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { getStatusDotColor } from "@/utils/status-dot-color";
-
-const WINDOW_LABEL_KEYS = {
-  "15m": "sidebar.recentSessions.windows.fifteenMinutes",
-  "1h": "sidebar.recentSessions.windows.oneHour",
-  today: "sidebar.recentSessions.windows.today",
-} as const satisfies Record<RecentSessionsWindow, string>;
 
 // 분 단위 현재 시각 (공용 분 틱 -> 범위 재계산)
 function useMinuteNow(): Date {
@@ -41,8 +37,12 @@ export const SidebarRecentSessions = memo(function SidebarRecentSessions({
   onBeforeNavigate?: () => void;
 }) {
   const { t } = useTranslation();
-  const window = useRecentSessionsStore((state) => state.window);
+  const storedWindow = useRecentSessionsStore((state) => state.window);
+  const storedWindows = useRecentSessionsStore((state) => state.windows);
   const setWindow = useRecentSessionsStore((state) => state.setWindow);
+  // 설정에서 고른 범위만 보이고, 빠진 범위를 고른 상태였으면 가까운 넓은 범위로 보인다.
+  const windows = useMemo(() => normalizeRecentSessionsWindows(storedWindows), [storedWindows]);
+  const window = effectiveRecentSessionsWindow(storedWindow, windows);
   const now = useMinuteNow();
   const agentsByServer = useSessionStore(
     useShallow((state) => {
@@ -70,12 +70,12 @@ export const SidebarRecentSessions = memo(function SidebarRecentSessions({
       <View style={styles.header}>
         <Text style={styles.title}>{t("sidebar.recentSessions.title")}</Text>
         <View style={styles.windows}>
-          {RECENT_SESSIONS_WINDOWS.map((option) => (
+          {windows.map((option) => (
             <RecentWindowOption
               key={option}
-              label={t(WINDOW_LABEL_KEYS[option])}
+              label={recentSessionsWindowLabel(t, option)}
               accessibilityLabel={t("sidebar.recentSessions.windowAccessibility", {
-                window: t(WINDOW_LABEL_KEYS[option]),
+                window: recentSessionsWindowLabel(t, option),
               })}
               option={option}
               selected={option === window}
