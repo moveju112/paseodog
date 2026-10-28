@@ -51,9 +51,13 @@ test('fast on, off and unrecorded remain separate with duration-weighted measure
         assert.equal(groups.length, 5);
         const high = groups.filter(row => row.model === 'test' && row.effort === 'high');
         assert.equal(high.find(row => row.fast === true).outputTokensPerSecond, 40);
+        assert.equal(high.find(row => row.fast === true).minOutputTokensPerSecond, 300 / 9);
+        assert.equal(high.find(row => row.fast === true).maxOutputTokensPerSecond, 100);
         assert.equal(high.find(row => row.fast === true).output, 9400);
         assert.equal(high.find(row => row.fast === false).outputTokensPerSecond, 20);
         assert.equal(high.find(row => row.fast === null).outputTokensPerSecond, null);
+        assert.equal(high.find(row => row.fast === null).minOutputTokensPerSecond, null);
+        assert.equal(high.find(row => row.fast === null).maxOutputTokensPerSecond, null);
         const result = await readUsageMetrics({
             getUsageStats: async () => ({ range: { fromMs: ts, toMs: ts }, totals: {}, providers: [], daily: [] }),
             getUsageDashboard: async () => ({ rows: [] }),
@@ -61,6 +65,8 @@ test('fast on, off and unrecorded remain separate with duration-weighted measure
         });
         // 535 measured output tokens / 14 seconds, not an average of group rates.
         assert.equal(result.totals.outputTokensPerSecond, 38.2);
+        assert.equal(result.totals.minOutputTokensPerSecond, 20);
+        assert.equal(result.totals.maxOutputTokensPerSecond, 100);
         assert.equal(result.efforts.reduce((sum, row) => sum + row.turns, 0), 8);
         assert.doesNotMatch(JSON.stringify(result), /speedOutput|speedMs/);
     } finally { ledger.close(); }
@@ -183,11 +189,17 @@ test('metrics split response speed per provider with Codex and Claude labels', a
                 { provider: 'gemini', providerKind: 'api', tokens: 0, models: [] }] }),
         getUsageDashboard: async () => ({ rows: [] }),
         getEffortUsageStats: async () => [
-            { provider: 'openai-oauth', model: 'sol', speedOutput: 100, speedMs: 1000 },
-            { provider: 'anthropic-oauth', model: 'haiku', speedOutput: 300, speedMs: 1000 },
+            { provider: 'openai-oauth', model: 'sol', speedOutput: 100, speedMs: 1000,
+                minOutputTokensPerSecond: 50, maxOutputTokensPerSecond: 150 },
+            { provider: 'anthropic-oauth', model: 'haiku', speedOutput: 300, speedMs: 1000,
+                minOutputTokensPerSecond: 200, maxOutputTokensPerSecond: 400 },
         ],
     });
     assert.deepEqual(result.providers.map(({ provider, label, outputTokensPerSecond }) => [provider, label, outputTokensPerSecond]),
         [['openai-oauth', 'Codex', 100], ['anthropic-oauth', 'Claude', 300], ['gemini', 'gemini', null]]);
     assert.equal(result.totals.outputTokensPerSecond, 200);
+    assert.deepEqual(result.providers.map(row => [row.minOutputTokensPerSecond, row.maxOutputTokensPerSecond]),
+        [[50, 150], [200, 400], [null, null]]);
+    assert.equal(result.totals.minOutputTokensPerSecond, 50);
+    assert.equal(result.totals.maxOutputTokensPerSecond, 400);
 });

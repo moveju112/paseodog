@@ -137,7 +137,25 @@ export function noteRequestEffort(value) {
     ], [
         `export ${previousRollupSource}`,
         `export ${readEffortUsage.toString()}`,
-    ]], 1),
+    ], [
+        'SUM(CASE WHEN duration_ms>0 AND output>0 THEN duration_ms ELSE 0 END) AS speed_ms',
+        `SUM(CASE WHEN duration_ms>0 AND output>0 THEN duration_ms ELSE 0 END) AS speed_ms,
+                MIN(CASE WHEN duration_ms>0 AND output>0 THEN output*1000.0/duration_ms END) AS speed_min,
+                MAX(CASE WHEN duration_ms>0 AND output>0 THEN output*1000.0/duration_ms END) AS speed_max`,
+    ], [
+        'g.duration_ms,g.speed_output,g.speed_ms',
+        'g.duration_ms,g.speed_output,g.speed_ms,g.speed_min,g.speed_max',
+    ], [
+        'speedOutput: 0, speedMs: 0 };',
+        'speedOutput: 0, speedMs: 0, minOutputTokensPerSecond: null, maxOutputTokensPerSecond: null };',
+    ], [
+        '        bucket.speedMs += row.speed_ms;',
+        `        bucket.speedMs += row.speed_ms;
+        if (row.speed_min != null) {
+            bucket.minOutputTokensPerSecond = Math.min(bucket.minOutputTokensPerSecond ?? Infinity, row.speed_min);
+            bucket.maxOutputTokensPerSecond = Math.max(bucket.maxOutputTokensPerSecond ?? -Infinity, row.speed_max);
+        }`,
+    ]], [1, 2]),
     spec('runtime/shared/llm/usage-ledger-worker.mjs', 'b9c6f15802aa8dad06a811f2db59eeaae395b8fc', [[
         "import { readSessionUsage, rollupDelta, rollupUsage } from './usage-ledger-rollup.mjs';",
         "import { readSessionUsage, readEffortUsage, rollupDelta, rollupUsage } from './usage-ledger-rollup.mjs';",
@@ -151,5 +169,8 @@ export function noteRequestEffort(value) {
     ], [
         '        provider: row.provider, model: row.model, agent: row.agent, effort: row.effort,',
         '        provider: row.provider, model: row.model, agent: row.agent, effort: row.effort,\n        fast: row.fast, speedOutput: row.speedOutput, speedMs: row.speedMs,',
-    ]], 1),
+    ], [
+        '        fast: row.fast, speedOutput: row.speedOutput, speedMs: row.speedMs,',
+        '        fast: row.fast, speedOutput: row.speedOutput, speedMs: row.speedMs,\n        minOutputTokensPerSecond: row.minOutputTokensPerSecond, maxOutputTokensPerSecond: row.maxOutputTokensPerSecond,',
+    ]], [1, 2]),
 ];

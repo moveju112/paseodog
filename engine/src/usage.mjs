@@ -39,7 +39,8 @@ export async function readOAuthUsage(runtime, provider = 'anthropic-oauth') {
 }
 
 const metricKeys = ['turns', 'tokens', 'input', 'output', 'cacheRead', 'cacheWrite', 'cacheHitRate',
-    'costUsd', 'costBilled', 'costEstimated', 'costUnpricedTurns', 'outputTokensPerSecond', 'share'];
+    'costUsd', 'costBilled', 'costEstimated', 'costUnpricedTurns', 'outputTokensPerSecond',
+    'minOutputTokensPerSecond', 'maxOutputTokensPerSecond', 'share'];
 const visibleOAuthProviders = { 'anthropic-oauth': 'Claude', 'openai-oauth': 'Codex' };
 
 // 원본 통계에서 수치 필드만 선택해 경로·세션·인증정보가 UI로 새지 않게 한다.
@@ -88,13 +89,19 @@ export async function readUsageMetrics(runtime, request = {}) {
     const speedOf = (rows) => {
         const output = rows.reduce((sum, row) => sum + (row.speedOutput || 0), 0);
         const ms = rows.reduce((sum, row) => sum + (row.speedMs || 0), 0);
-        return ms > 0 ? Math.round(output * 10000 / ms) / 10 : null;
+        const minimums = rows.map((row) => row.minOutputTokensPerSecond).filter(Number.isFinite);
+        const maximums = rows.map((row) => row.maxOutputTokensPerSecond).filter(Number.isFinite);
+        return {
+            outputTokensPerSecond: ms > 0 ? Math.round(output * 10000 / ms) / 10 : null,
+            minOutputTokensPerSecond: minimums.length ? Math.min(...minimums) : null,
+            maxOutputTokensPerSecond: maximums.length ? Math.max(...maximums) : null,
+        };
     };
     return {
         generatedAt: stats.generatedAt,
         ...(quotaError ? { quotaError } : {}),
         range: { fromMs: stats.range.fromMs, toMs: stats.range.toMs },
-        totals: { ...metricProjection(stats.totals), outputTokensPerSecond: speedOf(efforts) },
+        totals: { ...metricProjection(stats.totals), ...speedOf(efforts) },
         efforts: efforts.map((row) => ({
             provider: row.provider, model: row.model,
             agent: row.agent || null, effort: row.effort || null,
@@ -103,7 +110,7 @@ export async function readUsageMetrics(runtime, request = {}) {
         providers: stats.providers.map((row) => ({
             provider: row.provider, providerKind: row.providerKind,
             label: visibleOAuthProviders[row.provider] || row.provider, ...metricProjection(row),
-            outputTokensPerSecond: speedOf(efforts.filter((effort) => effort.provider === row.provider)),
+            ...speedOf(efforts.filter((effort) => effort.provider === row.provider)),
             models: row.models.map((model) => ({ model: model.model, ...metricProjection(model) })),
         })),
         series: (stats.hourly || stats.daily).map((row) => ({
