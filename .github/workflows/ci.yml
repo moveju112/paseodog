@@ -21,7 +21,7 @@ jobs:
           npm --prefix tools ci
           # 설치 스크립트와 같은 준비 로직으로 composer 패치의 검토된 web-ui 입력을 고정한다.
           node scripts/prepare-paseo-web-ui.mjs
-          npm --prefix engine ci --install-strategy=nested
+          node scripts/install-engine.mjs
           npm --prefix plugin ci
           # Root tests also import Expo/desktop source and installed Android packages.
           # Never run Android workspace install hooks in this read-only CI setup.
@@ -102,7 +102,7 @@ jobs:
         with:
           node-version: '24'
       - name: Install native dependency using locked nested layout (no model credentials)
-        run: npm --prefix engine ci --install-strategy=nested
+        run: node scripts/install-engine.mjs
       - run: node scripts/patch-mixdog.mjs
       - run: node engine/bin/paseodog-engine.mjs --check
   lockfiles:
