@@ -12,6 +12,10 @@ const edits = [
 ];
 
 export function withoutSpeechSettings(source) {
+    const previous = component.replace(
+        '호스트 PC에서 처리하며 CPU·GPU 구분은 각 후보 설명에 표시해요.',
+        '현재 실행 방식은 호스트 PC의 CPU예요.');
+    source = source.replace(previous, () => component);
     const present = edits.map(([, after]) => source.includes(after));
     if (present.some(Boolean) && !present.every(Boolean)) throw new Error('Partial speech settings patch');
     for (const [before, after] of [...edits].reverse()) source = source.replace(after, () => before);

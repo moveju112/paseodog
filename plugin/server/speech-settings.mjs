@@ -1,13 +1,24 @@
 import { readFileSync, lstatSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { DEFAULT_KOREAN_SPEECH_MODEL, KOREAN_SPEECH_MODELS } from '../shared/speech-models.mjs';
+import { DEFAULT_KOREAN_SPEECH_MODEL, KOREAN_SPEECH_MODELS, GPU_SPEECH_MODEL } from '../shared/speech-models.mjs';
 
 const overrides = [
     'PASEO_DICTATION_STT_PROVIDER', 'PASEO_VOICE_STT_PROVIDER',
     'PASEO_DICTATION_LOCAL_STT_MODEL', 'PASEO_VOICE_LOCAL_STT_MODEL',
 ];
 const digest = text => createHash('sha256').update(text).digest('hex');
+
+export function gpuSpeechReady(home, platform = process.platform, arch = process.arch) {
+    if (platform !== 'linux' || arch !== 'x64') return false;
+    try {
+        const receipt = JSON.parse(readFileSync(join(home, 'speech-gpu', 'sherpa-1.12.28-cuda12', 'ready.json'), 'utf8'));
+        return receipt.schema === 1 && receipt.runtime === 'sherpa-1.12.28-cuda12';
+    } catch (error) {
+        if (error.code === 'ENOENT') return false;
+        throw new Error('GPU speech installation receipt is invalid');
+    }
+}
 
 // 전용 호스트의 STT 설정만 저장한다. 다운로드·재시작·유료 API 호출은 하지 않는다.
 export function handleSpeechSettings(request, env = process.env) {
@@ -23,11 +34,12 @@ export function handleSpeechSettings(request, env = process.env) {
     catch { throw new Error('Invalid daemon configuration'); }
     if (!config?.agents?.providers?.paseodog)
         throw new Error('Dedicated PaseoDog provider required');
+    const models = gpuSpeechReady(home) ? [...KOREAN_SPEECH_MODELS, GPU_SPEECH_MODEL] : KOREAN_SPEECH_MODELS;
     const blocked = overrides.some(key => Boolean(env[key]?.trim()));
     let revision = digest(original);
     if (request.action === 'write') {
         if (blocked) throw new Error('Speech settings are controlled by environment overrides');
-        if (!KOREAN_SPEECH_MODELS.some(model => model.id === request.model))
+        if (!models.some(model => model.id === request.model))
             throw new Error('Unsupported Korean local speech model');
         if (request.revision !== revision) throw new Error('Speech settings changed; refresh before saving');
         config.features ??= {};
@@ -63,7 +75,7 @@ export function handleSpeechSettings(request, env = process.env) {
         return (stt?.provider ?? 'local') === 'local'
             ? stt?.model ?? DEFAULT_KOREAN_SPEECH_MODEL : null;
     });
-    const model = selections[0] === selections[1] && KOREAN_SPEECH_MODELS.some(item => item.id === selections[0])
+    const model = selections[0] === selections[1] && models.some(item => item.id === selections[0])
         ? selections[0] : null;
-    return { model, revision, blocked, models: KOREAN_SPEECH_MODELS };
+    return { model, revision, blocked, models };
 }

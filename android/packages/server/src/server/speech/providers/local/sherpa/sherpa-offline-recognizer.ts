@@ -32,7 +32,7 @@ export type SherpaOfflineRecognizerModel =
 export interface SherpaOfflineRecognizerConfig {
   model: SherpaOfflineRecognizerModel;
   numThreads?: number;
-  provider?: "cpu";
+  provider?: "cpu" | "cuda";
   debug?: 0 | 1;
   sampleRate?: number;
   featureDim?: number;

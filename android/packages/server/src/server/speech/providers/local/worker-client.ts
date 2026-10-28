@@ -91,8 +91,15 @@ function resolveWorkerExecArgv(): string[] {
   ];
 }
 
-function forkLocalSpeechWorker(): LocalSpeechWorkerProcess {
-  const env = { ...process.env };
+function forkLocalSpeechWorker(config: LocalSpeechWorkerConfig): LocalSpeechWorkerProcess {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  delete env.PASEODOG_SPEECH_GPU;
+  if (
+    config.dictationSttModel === "whisper-turbo-cuda" ||
+    config.voiceSttModel === "whisper-turbo-cuda"
+  ) {
+    env.PASEODOG_SPEECH_GPU = "1";
+  }
   applySherpaLoaderEnv(env);
   return fork(fileURLToPath(resolveWorkerUrl()), [], {
     env,
@@ -196,7 +203,7 @@ export class LocalSpeechWorkerClient {
     this.logger = options.logger.child({ component: "local-speech-worker-client" });
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.idleTtlMs = options.idleTtlMs ?? DEFAULT_IDLE_TTL_MS;
-    this.forkWorker = options.forkWorker ?? forkLocalSpeechWorker;
+    this.forkWorker = options.forkWorker ?? (() => forkLocalSpeechWorker(options.config));
   }
 
   async synthesizeSpeech(text: string): Promise<SpeechStreamResult> {
