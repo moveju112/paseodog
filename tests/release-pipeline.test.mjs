@@ -630,6 +630,7 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
     const commit = 'f'.repeat(40), carried = 'v1.0.0-rc.7.11090', stale = 'e'.repeat(40);
     const calls = [];
     let assets = [], active = [{ status: 'running' }], updaterStarts = 0;
+    let pendingReceipt = null, verificationWaits = 0;
     const run = async (command, args) => {
         calls.push([command, ...args]);
         if (command === 'git' && args[0] === 'rev-parse') return commit + '\n';
@@ -660,7 +661,7 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
             const revision = updaterStarts === 1 ? stale : commit;
             // 업데이터는 전환 직후 종료하고, 검증 서비스가 잠시 뒤 applied로 바꾼다.
             await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'awaiting-verification', revision }));
-            setTimeout(() => void writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify({ phase: 'applied', revision })), 20);
+            pendingReceipt = { phase: 'applied', revision };
         }
         if (args.includes('diagnostic')) return '{"diagnostic":"Provider is available"}';
         return '';
@@ -680,7 +681,15 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
         checkWeb: async () => { throw new Error('web must not deploy'); },
         launchDesktop: async () => { throw new Error('desktop must not launch'); },
         installedRelease: async () => { throw new Error('desktop must not be read'); },
-        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, Math.min(ms, 10))),
+        sleep: async () => {
+            if (!pendingReceipt) return;
+            // 실제 업데이터의 원자적 게시처럼 읽는 중간에 빈 JSON을 노출하지 않는다.
+            // 타이머 대신 주입된 대기 경계에서 전환을 끝내고 쓰기 실패도 테스트로 전파한다.
+            assert.equal(JSON.parse(await readFile(join(updaterRoot, 'receipt.json'), 'utf8')).phase, 'awaiting-verification');
+            await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify(pendingReceipt));
+            pendingReceipt = null;
+            verificationWaits += 1;
+        },
     });
     const download = calls.find(row => row[0] === 'gh' && row[2] === 'download' && row.includes(join(config.workspace, 'carry')));
     assert.ok(download.includes('PaseoDog-1.0.0-rc.7.11090-amd64.deb') && download.includes('latest.yml'));
@@ -692,6 +701,7 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
     const updateAt = calls.findIndex(row => row[0] === 'systemctl');
     assert.ok(updateAt > 0);
     assert.equal(updaterStarts, 2);
+    assert.equal(verificationWaits, 2);
     // 데스크톱 없는 runtime 적용도 요청 턴이 종료 시점으로 삼는 idle 대기 문구를 남긴다.
     assert.equal(logs.mock.calls.filter(call => String(call.arguments[0]).includes('waiting for idle')).length, 1);
     // 업데이터가 플러그인과 사후 검증을 맡으므로 배포가 다시 로드하지 않는다.

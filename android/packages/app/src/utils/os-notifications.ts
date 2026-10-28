@@ -2,6 +2,7 @@ import { Asset } from "expo-asset";
 import { getDesktopHost } from "@/desktop/host";
 import { buildNotificationRoute, resolveNotificationTarget } from "./notification-routing";
 import { isNative } from "@/constants/platform";
+import { Platform } from "react-native";
 
 interface OsNotificationPayload {
   title: string;
@@ -91,6 +92,10 @@ async function ensureNotificationPermission(): Promise<boolean> {
 }
 
 export async function ensureOsNotificationPermission(): Promise<boolean> {
+  if (Platform.OS === "android") {
+    const { requestAndroidNotificationPermission } = await import("./android-notifications");
+    return requestAndroidNotificationPermission();
+  }
   if (isNative) {
     return false;
   }
@@ -164,7 +169,16 @@ function attachWebClickHandler(
 }
 
 export async function sendOsNotification(payload: OsNotificationPayload): Promise<boolean> {
-  // Mobile/native notifications should be remote push only.
+  if (Platform.OS === "android") {
+    try {
+      const { sendAndroidNotification } = await import("./android-notifications");
+      return await sendAndroidNotification(payload);
+    } catch (error) {
+      console.warn("[Notifications] Failed to show local notification", error);
+      return false;
+    }
+  }
+  // iOS retains its remote push path.
   if (isNative) {
     return false;
   }

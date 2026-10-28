@@ -33,8 +33,21 @@ export interface WorkRecordSession {
 
 // 원래 Markdown·도구 렌더러를 재사용하고 접기·답변 제목·끊김 후 이어서 진행만 표시 단계에 더한다.
 export function createWorkRecordRenderer(deps: RendererDependencies) {
-  // 웹 번들에도 함수 자체를 주입하므로 오류 상수는 이 함수 안에 둔다.
-  const CONNECTION_CLOSED_TEXT = "[System Error] Provider connection closed";
+  // 웹 번들에도 함수 자체를 주입하므로 판별에 필요한 값은 이 함수 안에 둔다.
+  // 엔진의 알려진 연결 오류만 허용한다. 인증·quota·정책 거절을 재시도로 바꾸지 않는다.
+  const resumableErrors = new Set([
+    "Provider connection closed",
+    "Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue.",
+    "Cursor connection timed out",
+    "Cursor request timed out",
+    "Cursor stream ended before turnEnded",
+    "Cursor stream closed before its end frame",
+  ]);
+  const resumableErrorPatterns = [
+    /^(?:terminated|socket hang up|other side closed|connection error\.?|fetch failed|failed to fetch|couldn'?t fetch\.?|load failed|network error)$/i,
+    /^(?:Connection to the provider was lost|Could not reach the provider|The provider did not respond in time|Provider is temporarily unavailable)(?: \([A-Z0-9_]+\))?\.$/,
+    /^(?:OpenAI(?: OAuth)?|xAI) WS (?:closed before response\.completed|handshake closed before open) \(code=(?:1000|1001|1005|1006|1011|1012)(?:, reason=[^\r\n]*)?\)$/,
+  ];
   const {
     React,
     View,
@@ -410,8 +423,8 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
     );
   }
 
-  // 연결 끊김으로 끝난 마지막 턴 아래 버튼 (누름 -> 같은 세션에 "이어서 진행" 새 메시지 1회 전송)
-  function ResumeAfterDisconnect({ session }: { session: WorkRecordSession }) {
+  // 복구 가능한 오류로 끝난 마지막 턴 아래 버튼. 원래 요청을 재전송하지 않는다.
+  function ResumeAfterInterruption({ session }: { session: WorkRecordSession }) {
     const copy = useCopy();
     const [sending, setSending] = React.useState(false);
     const resume = () => {
@@ -443,13 +456,21 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
     );
   }
 
-  // 대화 맨 끝이 연결 끊김 오류로 끝난 완료 턴인지 (이후 메시지가 생기면 버튼은 사라진다)
-  function endsWithDisconnect(layout: StreamLayoutItem): boolean {
+  // 대화 맨 끝의 완료 턴만 허용하며, 진단 부록에 인용된 오류 문구는 판별에 쓰지 않는다.
+  function endsWithResumableError(layout: StreamLayoutItem): boolean {
+    if (
+      layout.item.kind !== "assistant_message" ||
+      layout.belowItem !== null ||
+      layout.phase !== "complete"
+    )
+      return false;
+    const text = layout.item.text.trim();
+    const prefix = "[System Error] ";
+    if (!text.startsWith(prefix)) return false;
+    const message = text.slice(prefix.length).split("\n\n", 1)[0]!;
     return (
-      layout.item.kind === "assistant_message" &&
-      layout.item.text.trim() === CONNECTION_CLOSED_TEXT &&
-      layout.belowItem === null &&
-      layout.phase === "complete"
+      resumableErrors.has(message) ||
+      resumableErrorPatterns.some((pattern) => pattern.test(message))
     );
   }
 
@@ -461,12 +482,12 @@ export function createWorkRecordRenderer(deps: RendererDependencies) {
     if (layout.item.kind === "work_record")
       return React.createElement(WorkRecord, { layout: { ...layout, item: layout.item }, render });
     let content = render(layout);
-    if (session && endsWithDisconnect(layout))
+    if (session && endsWithResumableError(layout))
       content = React.createElement(
         View,
         null,
         content,
-        React.createElement(ResumeAfterDisconnect, { session }),
+        React.createElement(ResumeAfterInterruption, { session }),
       );
     if (layout.item.kind !== "assistant_message") return content;
     return layout.item.answerStart
