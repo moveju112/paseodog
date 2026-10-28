@@ -18,6 +18,12 @@ export type SherpaOfflineRecognizerModel =
       tokens: string;
     }
   | {
+      kind: "whisper";
+      encoder: string;
+      decoder: string;
+      tokens: string;
+    }
+  | {
       kind: "sense_voice";
       model: string;
       tokens: string;
@@ -65,7 +71,9 @@ export class SherpaOfflineRecognizerEngine {
     } else {
       assertFileExists(config.model.encoder, "offline encoder");
       assertFileExists(config.model.decoder, "offline decoder");
-      assertFileExists(config.model.joiner, "offline joiner");
+      if (config.model.kind === "nemo_transducer") {
+        assertFileExists(config.model.joiner, "offline joiner");
+      }
     }
     assertFileExists(config.model.tokens, "tokens");
 
@@ -85,14 +93,28 @@ export class SherpaOfflineRecognizerEngine {
                 useInverseTextNormalization: 1,
               },
             }
-          : {
+          : {}),
+        ...(config.model.kind === "whisper"
+          ? {
+              whisper: {
+                encoder: config.model.encoder,
+                decoder: config.model.decoder,
+                language: "ko",
+                task: "transcribe",
+                tailPaddings: -1,
+              },
+            }
+          : {}),
+        ...(config.model.kind === "nemo_transducer"
+          ? {
               transducer: {
                 encoder: config.model.encoder,
                 decoder: config.model.decoder,
                 joiner: config.model.joiner,
               },
               modelType: "nemo_transducer",
-            }),
+            }
+          : {}),
         tokens: config.model.tokens,
         numThreads: config.numThreads ?? 1,
         provider: config.provider ?? "cpu",

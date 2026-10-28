@@ -12,8 +12,11 @@ import { DAEMON_RELEASE } from './server/util.mjs';
 import { createDaemonUpdater } from './server/daemon-update.mjs';
 import { agentMessagePolicy } from './shared/message-policy.js';
 import { scheduleTurnRecovery } from './server/turn-recovery.mjs';
+import { speechSettings } from './shared/speech-settings.js';
+import { handleSpeechSettings } from './server/speech-settings.mjs';
 // 전용 엔진의 설정과 현재 세션 상태를 Paseo 플러그인 RPC에 연결한다.
 export default function contribute(server: PluginServerContext) {
+    server.handle(speechSettings, request => handleSpeechSettings(request));
     server.handle(daemonRelease, () => DAEMON_RELEASE);
     const updater = createDaemonUpdater({ versionCode: DAEMON_RELEASE.versionCode });
     server.handle(daemonUpdate, request => request.action === 'status' ? updater.status() : updater.request(request));

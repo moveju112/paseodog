@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
+import { withSpeechSettings, withoutSpeechSettings } from './paseo-speech-settings.mjs';
 
 // 앱과 고정 웹 번들이 같은 상세 UI를 사용하며 기존 진단·재생 동작은 유지한다.
 const detailsSource = stripTypeScriptTypes(readFileSync(new URL(
@@ -28,6 +29,7 @@ const edits = [
 ];
 
 export function withoutSettingsOrganization(source) {
+    source = withoutSpeechSettings(source);
     for (const [before, after] of [...edits].reverse()) source = source.replace(after, () => before);
     // 직전 릴리즈의 두 삽입 지점이 모두 일치할 때만 해제한다. 최종 원본 blob 검증은 유지한다.
     const previousComponent = `${messageComponent}const k=[{value:"none",label:`;
@@ -45,5 +47,5 @@ export function withSettingsOrganization(source) {
         if (source.split(before).length !== 2) throw new Error('Paseo settings organization anchor mismatch');
         source = source.replace(before, () => after);
     }
-    return source;
+    return withSpeechSettings(source);
 }
