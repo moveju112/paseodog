@@ -408,6 +408,9 @@ test('delivery defaults are explicit targets and detached execution is a service
     };
     assert.equal(validateReleaseConfig(input).metroWorkers, '2');
     assert.equal(validateReleaseConfig(input).targets, 'auto');
+    assert.equal(validateReleaseConfig(input).windowsBuildMode, 'host');
+    assert.equal(validateReleaseConfig({ ...input, windowsBuildMode: 'docker' }).windowsBuildMode, 'docker');
+    assert.throws(() => validateReleaseConfig({ ...input, windowsBuildMode: 'auto' }), /host or docker/);
     assert.equal(validateReleaseConfig({ ...input, updaterRoot: '/updater', updaterUnit: 'paseodog-update.service' }).updaterUnit,
         'paseodog-update.service');
     for (const patch of [{ workspace: '/' }, { workspace: input.cacheRoot, cacheRoot: input.cacheRoot },

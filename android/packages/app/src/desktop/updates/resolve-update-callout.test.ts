@@ -1,9 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import {
   resolveUpdateCalloutDescriptor,
   type ResolveUpdateCalloutInput,
 } from "./resolve-update-callout";
+
+const originalLanguage = i18n.language;
+// 영어 문구 검사는 앱 기본 언어와 분리하고, 다음 검사에 언어 상태를 남기지 않는다.
+beforeEach(async () => {
+  await i18n.changeLanguage("en");
+});
+afterEach(async () => {
+  await i18n.changeLanguage(originalLanguage);
+});
 
 function input(overrides: Partial<ResolveUpdateCalloutInput> = {}): ResolveUpdateCalloutInput {
   return {

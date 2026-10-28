@@ -39,12 +39,18 @@ Keep the JSON configuration in the unique release workspace, never in Git:
   "previousApk": "<absolute previously published signed APK>",
   "androidTools": "<absolute SDK build-tools version directory>",
   "metroWorkers": "2",
+  "windowsBuildMode": "host",
   "appTests": ["src/<affected behavior>.test.ts"],
   "repo": "moveju112/paseodog",
   "pagesProject": "paseodog",
   "webUrl": "https://paseodog.choondoggy.com/"
 }
 ```
+
+Windows 빌드는 `windowsBuildMode`로 선택한다. 기본 `host`는 기존 Wine을 사용한다.
+`docker`는 호스트에서 앱을 준비한 뒤 고정 digest의 Wine 이미지로 NSIS 설치기만 생성한다.
+Docker 사용 권한과 이미지 다운로드 연결이 필요하며 실패 시 다른 방식으로 자동 재시도하지 않는다.
+독립 빌드에서도 `--windows-build-mode host|docker`로 같은 설정을 전달한다.
 
 ## Executor boundary and completion
 

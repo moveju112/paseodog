@@ -5,6 +5,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import release from '../plugin/shared/release.json' with { type: 'json' };
+import { windowsBuildCommands, windowsBuildMode as validateWindowsBuildMode } from './windows-build.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -49,7 +50,8 @@ export async function runReleaseBuild(run, { android = true, desktop = true, web
 }
 // 고유 산출물 폴더와 재사용 캐시를 분리하고 플랫폼별 Metro 임시 경로를 고정한다.
 export async function buildRelease({ workspace, cacheRoot, signingInit, versionCode, version, metroWorkers, checkpoint, targets,
-    onBrowserReady }) {
+    onBrowserReady, windowsBuildMode = 'host' }) {
+    validateWindowsBuildMode(windowsBuildMode);
     for (const value of [workspace, cacheRoot, signingInit]) {
         if (!value || !isAbsolute(value)) throw new Error('workspace, cache-root and signing-init must be absolute');
     }
@@ -85,12 +87,17 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
         const temporary = join(cacheRoot, name);
         await mkdir(temporary, { recursive: true });
         const [cwd, command] = commands[name];
+        const steps = name === 'windows' ? windowsBuildCommands({
+            mode: windowsBuildMode, builder, root: resolve(root), workspace,
+            uid: process.getuid(), gid: process.getgid(),
+        }) : [command];
         const start = performance.now();
         const log = createWriteStream(join(workspace, `${name}.log`), { flags: checkpoint ? 'a' : 'wx' });
         console.log(`${new Date().toISOString()} ${name}: start`);
-        await new Promise((resolveRun, reject) => {
+        try {
+        for (const step of steps) await new Promise((resolveRun, reject) => {
             const child = spawn('systemd-run', ['--user', '--scope', '-q',
-                '-p', 'MemoryHigh=16G', '-p', 'MemorySwapMax=2G', ...command], {
+                '-p', 'MemoryHigh=16G', '-p', 'MemorySwapMax=2G', ...step], {
                 cwd,
                 env: { ...process.env, TMPDIR: temporary, CI: '1',
                     PASEODOG_BUILD_CACHE_ROOT: cacheRoot,
@@ -103,15 +110,17 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
             log.on('error', reject);
             child.stdout.pipe(log, { end: false });
             child.stderr.pipe(log, { end: false });
-            child.on('error', error => { log.end(); reject(error); });
+            child.on('error', reject);
             child.on('close', (code, signal) => {
-                log.end(() => {
                     console.log(`${new Date().toISOString()} ${name}: ${(performance.now() - start).toFixed(0)}ms exit=${code} signal=${signal}`);
                     if (code === 0) resolveRun();
                     else reject(new Error(`${name} failed (${signal ?? code}); see ${join(workspace, `${name}.log`)}`));
-                });
             });
         });
+        } finally {
+            // 두 단계의 로그를 한 파일에 보존하고 실패 시 다음 단계는 시작하지 않는다.
+            await new Promise(resolveLog => log.end(resolveLog));
+        }
         if (name === 'android') {
             await copyFile(join(cwd, 'app/build/outputs/apk/release/app-arm64-v8a-release.apk'),
                 join(workspace, `PaseoDog-${version}-arm64-v8a.apk`));
@@ -144,9 +153,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
             'signing-init': { type: 'string' }, 'version-code': { type: 'string' },
             version: { type: 'string' },
             'metro-workers': { type: 'string' },
+            'windows-build-mode': { type: 'string' },
         } });
         await buildRelease({ workspace: values.workspace, cacheRoot: values['cache-root'],
             signingInit: values['signing-init'], versionCode: values['version-code'], version: values.version,
-            metroWorkers: values['metro-workers'] });
+            metroWorkers: values['metro-workers'], windowsBuildMode: values['windows-build-mode'] });
     } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

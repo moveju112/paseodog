@@ -9,8 +9,18 @@ import type {
   FetchRecentProviderSessionEntry,
 } from "@getpaseo/client/internal/daemon-client";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
+import { i18n } from "@/i18n/i18next";
+
+const originalLanguage = i18n.language;
+// 화면 문구 검사의 언어를 고정해 기본 언어 변경이 조회·가져오기 검사를 깨뜨리지 않게 한다.
+beforeEach(async () => {
+  await i18n.changeLanguage("en");
+});
+afterEach(async () => {
+  await i18n.changeLanguage(originalLanguage);
+});
 
 const { theme } = vi.hoisted(() => ({
   theme: {

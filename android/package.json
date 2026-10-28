@@ -66,7 +66,7 @@
     "build:app-deps:clean": "npm run build:highlight:clean && npm run build:client:clean && npm run build:plugin:clean && npm run build --workspace=@getpaseo/expo-two-way-audio",
     "build:desktop-deps": "npm run build:highlight && npm run build:client && npm run build:plugin && npm run build --workspace=@getpaseo/expo-two-way-audio && npm run build --workspace=@getpaseo/server && npm run build --workspace=@getpaseo/cli",
     "build:desktop-runtime-deps": "npm run build --workspace=@getpaseo/server && npm run build --workspace=@getpaseo/cli",
-    "build:release-app-deps": "concurrently --kill-others-on-fail --names client,app-support \"npm run build:client\" \"npm run build:highlight && npm run build:plugin && npm run build --workspace=@getpaseo/expo-two-way-audio\"",
+    "build:release-app-deps": "concurrently --kill-others-on-fail --names client,highlight \"npm run build:client\" \"npm run build:highlight\" && npm run build:plugin && npm run build --workspace=@getpaseo/expo-two-way-audio",
     "watch:protocol": "npm run watch --workspace=@getpaseo/protocol",
     "watch:client": "tsc -p packages/client/tsconfig.json --watch --preserveWatchOutput",
     "typecheck": "npm run typecheck --workspaces --if-present",

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createHash } from 'node:crypto';
 import { buildRelease } from './build-release.mjs';
+import { windowsBuildMode } from './windows-build.mjs';
 import { buildWeb } from './build-web.mjs';
 import { insideWorkspace, openReleaseState, fileHash } from './release-state.mjs';
 import { runCommand } from './release-command.mjs';
@@ -38,6 +39,7 @@ export function validateReleaseConfig(input) {
         || config.appTests.some(path => !/^src\/[\w./-]+\.(test|spec)\.tsx?$/.test(path) || path.includes('..')))
         throw new Error('appTests must explicitly name affected app tests');
     config.targets = validateTargets(config.targets);
+    config.windowsBuildMode = windowsBuildMode(config.windowsBuildMode);
     if (config.prepareOnly !== undefined && typeof config.prepareOnly !== 'boolean')
         throw new Error('prepareOnly must be a boolean');
     // 데몬 업데이터는 호스트 프로필에 둘 다 있을 때만 배포가 직접 실행한다.

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { i18n } from "@/i18n/i18next";
 import type { FetchRecentProviderSessionEntry } from "@getpaseo/client/internal/daemon-client";
 import {
   aggregateSessionEntries,
@@ -19,6 +20,15 @@ import {
   type SessionsQueryResult,
   sumFilteredAlreadyImportedCount,
 } from "@/components/import-session-sheet-view-model";
+
+const originalLanguage = i18n.language;
+// 영어 기대값을 명시적으로 선택하되 앱의 한국어 기본값과 다른 검사의 상태는 유지한다.
+beforeEach(async () => {
+  await i18n.changeLanguage("en");
+});
+afterEach(async () => {
+  await i18n.changeLanguage(originalLanguage);
+});
 
 function entry(
   overrides: Partial<FetchRecentProviderSessionEntry> = {},
