@@ -138,10 +138,11 @@ export function noteRequestEffort(value) {
         `export ${previousRollupSource}`,
         `export ${readEffortUsage.toString()}`,
     ], [
-        'SUM(CASE WHEN duration_ms>0 AND output>0 THEN duration_ms ELSE 0 END) AS speed_ms',
+        'SUM(CASE WHEN duration_ms>0 AND output>0 THEN duration_ms ELSE 0 END) AS speed_ms\n            FROM usage_events',
         `SUM(CASE WHEN duration_ms>0 AND output>0 THEN duration_ms ELSE 0 END) AS speed_ms,
                 MIN(CASE WHEN duration_ms>0 AND output>0 THEN output*1000.0/duration_ms END) AS speed_min,
-                MAX(CASE WHEN duration_ms>0 AND output>0 THEN output*1000.0/duration_ms END) AS speed_max`,
+                MAX(CASE WHEN duration_ms>0 AND output>0 THEN output*1000.0/duration_ms END) AS speed_max
+            FROM usage_events`,
     ], [
         'g.duration_ms,g.speed_output,g.speed_ms',
         'g.duration_ms,g.speed_output,g.speed_ms,g.speed_min,g.speed_max',
