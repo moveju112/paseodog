@@ -56,7 +56,7 @@ for (const platform of ['app', 'web']) {
             const page = read('android/packages/app/src/screens/settings/ai-engine-page.tsx');
             Page = runInNewContext(compile(page.slice(page.indexOf('export function AiEnginePage('))
                 .replace('export function', 'function')) + ';AiEnginePage', {
-                ...common, React, AgentMessageSettings: Component, TurnDurationSettings: () => null,
+                ...common, React, AgentMessageSettings: Component, TurnDurationSettings: () => null, SpeechSettings: () => null,
                 useAiEngineSettings: () => ({ snapshot: null, connected: true, request() {} }),
                 layout: {}, Button: 'button',
             });
@@ -65,7 +65,7 @@ for (const platform of ['app', 'web']) {
             const end = bundle.indexOf(';function PaseodogBaseAiEnginePage', anchor);
             Page = runInNewContext('const _e={};' + bundle.slice(anchor, end) + ';_e.AiEnginePage', {
                 u: React, n: components, PaseodogAgentMessageSettings: Component, PaseodogTurnDurationSettings: () => null,
-                PaseodogBaseAiEnginePage: () => null,
+                PaseodogBaseAiEnginePage: () => null, PaseodogSpeechSettings: () => null,
             });
         }
         let tree;

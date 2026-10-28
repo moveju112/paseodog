@@ -27,7 +27,7 @@ const transducerWorkerModel = '                kind: "nemo_transducer",\n'
     + '                joiner: `${modelDir}/joiner.int8.onnx`,\n'
     + '                tokens: `${modelDir}/tokens.txt`,\n';
 
-export const LOCAL_STT_PATCHES = [
+const previousPatches = [
     { file: 'speech/providers/local/sherpa/model-catalog.js', blob: '93b486f50897bd7a71611a037836abcaf734e816', edits: [
         ['        description: "NVIDIA Parakeet TDT v2 (offline NeMo transducer, English).",\n        defaultFor: "stt",\n    },\n',
             '        description: "NVIDIA Parakeet TDT v2 (offline NeMo transducer, English).",\n    },\n'],
@@ -61,6 +61,39 @@ export const LOCAL_STT_PATCHES = [
     ] },
 ];
 
+const whisperCatalog = ['base', 'small', 'turbo'].map(name => `    "whisper-${name}-int8": {
+        kind: "stt-offline",
+        archiveUrl: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-${name}.tar.bz2",
+        extractedDir: "sherpa-onnx-whisper-${name}",
+        requiredFiles: ["${name}-encoder.int8.onnx", "${name}-decoder.int8.onnx", "${name}-tokens.txt"],
+        description: "Whisper ${name} (multilingual including Korean, CPU int8).",
+    },
+`).join('');
+const whisperEdits = [
+    [['    "kokoro-en-v0_19": {\n', whisperCatalog + '    "kokoro-en-v0_19": {\n']],
+    [
+        ['            assertFileExists(config.model.joiner, "offline joiner");',
+            '            if (config.model.kind === "nemo_transducer") assertFileExists(config.model.joiner, "offline joiner");'],
+        ['                    : {\n' + transducerModelConfig.replace(/^/gm, '        '),
+            '                    : config.model.kind === "whisper"\n'
+            + '                        ? { whisper: { encoder: config.model.encoder, decoder: config.model.decoder, language: "ko", task: "transcribe", tailPaddings: -1 } }\n'
+            + '                        : {\n' + transducerModelConfig.replace(/^/gm, '        ')],
+    ],
+    [
+        ['    const modelDir = getLocalSpeechModelDir(config.modelsDir, modelId);',
+            '    const modelDir = getLocalSpeechModelDir(config.modelsDir, modelId);\n'
+            + '    const whisper = { "whisper-base-int8": "base", "whisper-small-int8": "small", "whisper-turbo-int8": "turbo" }[modelId];'],
+        ['            : {\n' + transducerWorkerModel,
+            '            : whisper\n'
+            + '                ? { kind: "whisper", encoder: `${modelDir}/${whisper}-encoder.int8.onnx`, decoder: `${modelDir}/${whisper}-decoder.int8.onnx`, tokens: `${modelDir}/${whisper}-tokens.txt` }\n'
+            + '                : {\n' + transducerWorkerModel],
+        ['        numThreads: 2,\n', '        featureDim: whisper === "turbo" ? 128 : 80,\n        numThreads: 2,\n'],
+    ],
+];
+export const LOCAL_STT_PATCHES = previousPatches.map((spec, index) => ({
+    ...spec, previousEdits: spec.edits, edits: [...spec.edits, ...whisperEdits[index]],
+}));
+
 // 원본·완성된 패치만 받으며 파일별 정확한 blob과 유일한 앵커를 검증한다.
 export function patchedLocalSttSource(source, spec) {
     let original = source;
@@ -71,7 +104,10 @@ export function patchedLocalSttSource(source, spec) {
         if (result.split(before).length !== 2) throw new Error(`Paseo local-STT anchor mismatch: ${spec.file}`);
         result = result.replace(before, after);
     }
-    if (source !== original && source !== result) throw new Error(`Partial Paseo local-STT patch: ${spec.file}`);
+    let previous = original;
+    for (const [before, after] of spec.previousEdits) previous = previous.replace(before, after);
+    if (source !== original && source !== previous && source !== result)
+        throw new Error(`Partial Paseo local-STT patch: ${spec.file}`);
     return result;
 }
 

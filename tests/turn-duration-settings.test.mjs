@@ -61,7 +61,7 @@ for (const platform of ['app', 'web']) {
                 compilerOptions: { jsx: ts.JsxEmit.React, jsxFactory: 'React.createElement' },
             }).outputText;
             Page = runInNewContext(compiled + ';AiEnginePage', {
-                ...common, React, TurnDurationSettings: Component, AgentMessageSettings: () => null,
+                ...common, React, TurnDurationSettings: Component, AgentMessageSettings: () => null, SpeechSettings: () => null,
                 useAiEngineSettings: () => ({ snapshot: null, connected: true, request() {} }),
                 layout: {}, Button: 'button',
             });
@@ -70,7 +70,7 @@ for (const platform of ['app', 'web']) {
             const end = bundle.indexOf(';function PaseodogBaseAiEnginePage', anchor);
             Page = runInNewContext('const _e={};' + bundle.slice(anchor, end) + ';_e.AiEnginePage', {
                 u: React, n: components, PaseodogTurnDurationSettings: Component,
-                PaseodogAgentMessageSettings: () => null, PaseodogBaseAiEnginePage: () => null,
+                PaseodogAgentMessageSettings: () => null, PaseodogBaseAiEnginePage: () => null, PaseodogSpeechSettings: () => null,
             });
         }
         let tree;
