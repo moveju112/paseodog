@@ -26,11 +26,14 @@ export async function loadNativeModules() {
         import('mixdog/src/runtime/agent/orchestrator/session/manager/ask-turn-auto-effort.mjs'),
         import('mixdog/src/runtime/agent/orchestrator/providers/effort-configuration.mjs'),
         import('mixdog/src/runtime/agent/orchestrator/providers/registry.mjs'),
-        import('mixdog/src/runtime/shared/worktrees/manager.mjs'),
+        import('mixdog/src/runtime/shared/worktrees/registry.mjs'),
     ]);
     if (typeof createMixdogSessionRuntime !== 'function' || typeof cfg.loadConfig !== 'function') throw new Error('Mixdog native API mismatch');
     return { createMixdogSessionRuntime, loadConfig: () => cfg.loadConfig({ secrets: true }),
-        getSessionWorktree: worktrees.getSessionWorktree,
+        async getWorktree(id) {
+            const record = await worktrees.getRecord(id);
+            return record ? worktrees.entryView(record) : null;
+        },
         // 네이티브의 모듈 활성화·플랫폼 지원과 현재 모델의 실제 노력도 변경 경로를 함께 확인한다.
         autoEffortAvailable(session) {
             return autoEffort.autoEffortMode() === 'on'
@@ -124,7 +127,7 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
             if (!samePath(resumed.cwd, config.cwd)) {
                 // 프로젝트 정체성은 고정하고 이 세션이 소유한 관리형 worktree만 실행 경로로 허용한다.
                 const workspace = readSessionWorkspace(runtime.session);
-                const entry = workspace?.worktreeId ? await native.getSessionWorktree(resumed.id) : null;
+                const entry = workspace?.worktreeId ? await native.getWorktree(workspace.worktreeId) : null;
                 if (!entry || runtime.session.id !== resumed.id
                     || workspace.transition.state !== 'idle' || entry.state !== 'ready'
                     || entry.id !== workspace.worktreeId || entry.ownerSessionId !== resumed.id
