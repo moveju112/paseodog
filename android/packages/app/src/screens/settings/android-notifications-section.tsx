@@ -44,8 +44,8 @@ export function AndroidNotificationsSection() {
           <View style={settingsStyles.rowContent}>
             <Text style={settingsStyles.rowTitle}>백그라운드 알림</Text>
             <Text style={settingsStyles.rowHint}>
-              작업 중에만 연결 유지 알림이 표시됩니다. 홈 화면이나 다른 앱에서도 완료·확인 요청
-              알림을 받습니다. 강제 종료·깊은 절전·방해 금지에서는 제한될 수 있습니다.
+              소리·진동 알림은 완료·확인 요청에만 울립니다. 작업 중 연결 유지 상태는 무음으로
+              표시됩니다. 강제 종료·깊은 절전·방해 금지에서는 제한될 수 있습니다.
             </Text>
           </View>
           <Switch
