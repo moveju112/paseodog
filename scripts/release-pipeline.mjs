@@ -10,11 +10,12 @@ import { runCommand } from './release-command.mjs';
 import { releaseArtifacts, verifyReleaseArtifacts, verifyRemoteAssets } from './release-artifacts.mjs';
 import { carriedAssets, deliveryPlan, describePlan, recordDeployment, validateTargets } from './release-targets.mjs';
 import { verifyReleaseWeb } from './release-web-check.mjs';
-import { root, scratchRoot } from './paths.mjs';
+import { root, scratchRoot, journalRoot } from './paths.mjs';
 import { restartDesktop } from './release-apply.mjs';
 import { verifyReleaseSource } from './release-verification.mjs';
 import { releasePreflight } from './release-preflight.mjs';
 import release from '../plugin/shared/release.json' with { type: 'json' };
+import { registerDeliveryReport, settleDeliveryReport, validateDeliveryAgentId } from '../plugin/server/delivery-notifications.mjs';
 
 const self = fileURLToPath(import.meta.url);
 const phases = ['verify', 'build', 'artifacts', 'github-draft', 'github-upload',
@@ -38,6 +39,7 @@ export function validateReleaseConfig(input) {
         || config.appTests.some(path => !/^src\/[\w./-]+\.(test|spec)\.tsx?$/.test(path) || path.includes('..')))
         throw new Error('appTests must explicitly name affected app tests');
     config.targets = validateTargets(config.targets);
+    if (config.notifyAgentId !== undefined) validateDeliveryAgentId(config.notifyAgentId);
     // 데몬 업데이터는 호스트 프로필에 둘 다 있을 때만 배포가 직접 실행한다.
     if ((config.updaterRoot === undefined) !== (config.updaterUnit === undefined)
         || (config.updaterRoot !== undefined && (!isAbsolute(config.updaterRoot)
@@ -71,6 +73,37 @@ export function detachedCommand(configPath, workspace) {
     for (const key of ['PATH', 'ANDROID_HOME', 'DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY', 'DBUS_SESSION_BUS_ADDRESS'])
         if (process.env[key]) args.push(`--setenv=${key}=${process.env[key]}`);
     return ['systemd-run', [...args, process.execPath, self, '--config', configPath, '--execute']];
+}
+
+export async function startDelivery(configPath, config, { run = runCommand, reportRoot = journalRoot,
+    agentId = config.notifyAgentId } = {}) {
+    await mkdir(config.workspace, { recursive: true, mode: 0o700 });
+    if (agentId) {
+        const report = await registerDeliveryReport(reportRoot, { workspace: config.workspace, agentId });
+        console.log(`Delivery result report registered: ${report.id}`);
+    }
+    const [command, args] = detachedCommand(configPath, config.workspace);
+    try { await run(command, args); }
+    catch (error) {
+        try { await settleDeliveryReport(reportRoot, config.workspace, 'failed'); }
+        catch (reportError) { throw new AggregateError([error, reportError], 'Delivery start and result persistence failed'); }
+        throw error;
+    }
+}
+
+export async function executeDelivery(config, { preflight = releasePreflight, deliver = deliverRelease,
+    reportRoot = journalRoot, retryStage } = {}) {
+    let result;
+    try {
+        await preflight(config);
+        result = await deliver(config, { retryStage });
+    } catch (error) {
+        try { await settleDeliveryReport(reportRoot, config.workspace, 'failed'); }
+        catch (reportError) { throw new AggregateError([error, reportError], 'Delivery and result persistence failed'); }
+        throw error;
+    }
+    await settleDeliveryReport(reportRoot, config.workspace, 'complete');
+    return result;
 }
 
 export async function unlockStoppedDelivery(workspace) {
@@ -309,6 +342,7 @@ if (process.argv[1] && resolve(process.argv[1]) === self) {
             config: { type: 'string' }, execute: { type: 'boolean' }, start: { type: 'boolean' },
             status: { type: 'boolean' }, 'retry-stage': { type: 'string' }, 'unlock-stopped': { type: 'boolean' },
             'verify-only': { type: 'boolean' },
+            'notify-agent': { type: 'string' },
         } });
         if (!values.config || !isAbsolute(values.config)) throw new Error('--config requires an absolute JSON path');
         const config = validateReleaseConfig(JSON.parse(await readFile(values.config, 'utf8')));
@@ -320,12 +354,11 @@ if (process.argv[1] && resolve(process.argv[1]) === self) {
         else if (values.status) console.log(await readFile(join(config.workspace, 'release-state.json'), 'utf8'));
         else if (values.start) {
             if (values.execute || values['retry-stage']) throw new Error('Start and direct execute/retry are separate operations');
-            await mkdir(config.workspace, { recursive: true, mode: 0o700 });
-            const [command, args] = detachedCommand(values.config, config.workspace);
-            await runCommand(command, args);
+            await startDelivery(values.config, config, {
+                agentId: values['notify-agent'] ?? config.notifyAgentId ?? process.env.PASEO_AGENT_ID,
+            });
         } else if (values.execute) {
-            await releasePreflight(config);
-            await deliverRelease(config, { retryStage: values['retry-stage'] });
+            await executeDelivery(config, { retryStage: values['retry-stage'] });
         }
         else console.log(JSON.stringify({ version: config.version, phases,
             note: 'Plan only. --start or --execute performs authorized publication and idle-only apply.' }, null, 2));
