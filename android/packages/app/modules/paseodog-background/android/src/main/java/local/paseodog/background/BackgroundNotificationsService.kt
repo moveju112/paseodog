@@ -15,14 +15,23 @@ class BackgroundNotificationsService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     val manager = getSystemService(NotificationManager::class.java)
-    val channelId = "paseodog-background"
-    manager.createNotificationChannel(NotificationChannel(
-      channelId, "작업 중 연결 유지", NotificationManager.IMPORTANCE_LOW
-    ))
+    // 기존 채널의 소리·진동 설정은 변경할 수 없으므로 별도 무음 채널을 사용한다.
+    val channelId = "paseodog-background-silent"
+    val channel = NotificationChannel(
+      channelId, "백그라운드 연결 상태 (무음)", NotificationManager.IMPORTANCE_LOW
+    ).apply {
+      setSound(null, null)
+      enableVibration(false)
+      setShowBadge(false)
+    }
+    manager.createNotificationChannel(channel)
     val notification = Notification.Builder(this, channelId)
       .setSmallIcon(applicationInfo.icon)
-      .setContentTitle("PaseoDog 작업 진행 중")
-      .setContentText("다른 앱을 사용하는 동안에도 완료 알림을 받을 수 있도록 연결을 유지합니다.")
+      .setContentTitle("PaseoDog 연결 유지")
+      .setContentText("완료 알림을 받기 위해 백그라운드 연결을 유지합니다.")
+      .setDefaults(0)
+      .setSound(null)
+      .setVibrate(null)
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setCategory(Notification.CATEGORY_SERVICE)
