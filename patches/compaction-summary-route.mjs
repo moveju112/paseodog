@@ -1,7 +1,7 @@
 // 명시한 요약 모델은 upstream의 자동 선택 정책보다 우선하고 다른 모델로 폴백하지 않는다.
 export const COMPACTION_SUMMARY_ROUTE_PATCH = {
     file: 'src/runtime/agent/orchestrator/session/loop/fresh-context.mjs',
-    blob: '06f24d49b71be3140742811fa83a734948ede005',
+    blob: '78455fa5186d648b6c4d52442066ddfe020b46f2',
     previousEditCount: 1,
     edits: [[
         '  const mode = normalizeCompactionSummaryMode(config.compaction);',

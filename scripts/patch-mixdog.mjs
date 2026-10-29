@@ -8,7 +8,7 @@ import { COMPACTION_SUMMARY_ROUTE_PATCH } from '../patches/compaction-summary-ro
 import { SESSION_TITLE_ROUTE_PATCH } from '../patches/session-title-route.mjs';
 import { BUILTIN_AGENT_FILES, BUILTIN_AGENT_PATCHES, SOLO_BASIC_ROLE_IDS } from '../patches/builtin-agents.mjs';
 import { AGENT_ROUTE_SAFETY_EDITS, AGENT_EDITOR_SAFETY_PATCHES } from '../patches/agent-editor-safety.mjs';
-export const PIN = '1.3.5';
+export const PIN = '1.4.1';
 export const ORIGINAL_BLOB = '3adfd3eeb9f354198de89d6651647d8f9afc6321';
 export const ANCHOR = '      const turnContext = await dispatchPromptSubmit(turn, session0, prompt, options);';
 export const ADDITION = '\n      // PaseoDog host-policy boundary v1 (local Apache-2.0 modification).\n      if (typeof options.beforeSessionAsk === \'function\') {\n        await options.beforeSessionAsk(session0);\n      }';
@@ -20,6 +20,15 @@ export const AGENT_PATCHES = [
     ...BUILTIN_AGENT_PATCHES,
     ...EFFORT_USAGE_PATCHES,
     ...DEFAULT_OUTPUT_STYLE_PATCHES,
+    {
+        // 전역 설정을 직접 읽는 warmer도 막는다. 캐시 재사용 수정은 그대로 유지한다.
+        file: 'src/runtime/agent/orchestrator/session/cache-warm.mjs',
+        blob: 'fa75993c1e2012cb9a8ee1ae35aa3622d20b8d96',
+        edits: [[
+            '  return config?.promptCacheWarming !== false;',
+            '  // PaseoDog: 선제 유료 호출은 이번 엔진 업그레이드 범위가 아니다.\n  void config;\n  return false;',
+        ]],
+    },
     {
         // 보안 수정된 Zod 4의 오류 필드를 사용하고 공개한 URL 개수 제한을 검증한다.
         file: 'src/runtime/web-search/index.mjs',
@@ -44,7 +53,7 @@ export const AGENT_PATCHES = [
     {
         // local: 같은 모델의 컨텍스트 변경도 네이티브 세션·영속 기록에 즉시 반영한다.
         file: 'src/session-runtime/model-route/set-route.mjs',
-        blob: '818452668b601bd4a3ed6b5fa432951abba92ced',
+        blob: '299f5bac9c8a2b6ca9a05bed055b870b55474a01',
         edits: [[
             '      persist.applySessionTuning();\n      refreshSessionFallbacks(deps, session);',
             '      persist.applySessionTuning();\n      // 컨텍스트 선택도 기존 네이티브 경로 갱신·저장 함수를 사용한다.\n      if (session && (route.contextPercent !== session.contextPercent\n        || (route.contextTokens || null) !== (session.contextTokens || null)\n        || route.selectedContextWindow !== session.selectedContextWindow)) {\n        updateSessionInPlace(deps, session);\n      }\n      refreshSessionFallbacks(deps, session);',
@@ -106,7 +115,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/config.mjs',
-        blob: '4ac0ebe7a262e91ff9282992aab4d3392be3d8e6',
+        blob: 'b15a710f64398776ebf00fe4a77d3eb0caed4259',
         edits: [
             [
                 "    disabledAgents: [...DEFAULT_DISABLED_AGENT_ROSTER],\n    workflow: { active: 'default' },",
@@ -191,7 +200,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/tool-policy/policy-stage.mjs',
-        blob: '7a7dc01062c33bbd1a3da4aed4d12caaed0ebe62',
+        blob: '59e2d89b8672d189f2cb91af924e5175ccafea03',
         edits: [[
             '  async function stagePolicy(session, identity, config, { conversation = false } = {}) {',
             '  async function stagePolicy(session, identity, config, { conversation = false, workflowOnly = false } = {}) {',
@@ -207,15 +216,15 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/boot/providers.mjs',
-        blob: 'f1920df6a285ff24c91d4cfa8f1f93772e8ed465',
+        blob: 'be981cb0728496e198be1aa9dda5ab92c7f894f7',
         edits: [[
             '    resolveRoute,\n    cfgMod,\n    sharedCfgMod,',
-            '    resolveRoute,\n    // 최신 설정을 읽되 호스트의 MCP·자동 실행 제한을 유지한다.\n    cfgMod: boot.params.initialConfig ? { ...cfgMod, loadConfig: (...args) => { const latest = cfgMod.loadConfig(...args); return { ...latest, mcpServers: boot.params.initialConfig.mcpServers, heartbeat: false, update: { ...latest.update, auto: false } }; } } : cfgMod,\n    sharedCfgMod,',
+            '    resolveRoute,\n    // 최신 설정을 읽되 호스트의 MCP·자동 실행 제한을 유지한다.\n    cfgMod: boot.params.initialConfig ? { ...cfgMod, loadConfig: (...args) => { const latest = cfgMod.loadConfig(...args); return { ...latest, mcpServers: boot.params.initialConfig.mcpServers, heartbeat: false, promptCacheWarming: false, update: { ...latest.update, auto: false } }; } } : cfgMod,\n    sharedCfgMod,',
         ]],
     },
     {
         file: 'src/runtime/shared/profile-config.cjs',
-        blob: '5b287f59843d119b76681d47939a38ccf083a97d',
+        blob: 'ffe9b69a5ae1d1ae08de45d91e0ee18383c3be94',
         edits: [[
             "  { id: 'expert', label: 'Expert' },",
             "  { id: 'senior', label: 'Senior' },\n  { id: 'expert', label: 'Expert' },",
@@ -226,7 +235,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/turn/turn-run/ask-callbacks.mjs',
-        blob: '8cfc5ed66535e233581861995d93d9776b608036',
+        blob: '45652738b961bfa0e0e3e916ade7d117fda845bb',
         edits: [[
             '      beforeToolExecution: () => turn.snapshot.promise || Promise.resolve(),',
             '      hostManagedCompletions: options.hostManagedCompletions === true,\n      hostSteering: options.hostSteering === true,\n      beforeToolExecution: () => turn.snapshot.promise || Promise.resolve(),',
@@ -234,7 +243,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/session/manager/ask-session.mjs',
-        blob: '905882d22e0555c629cd331d5280a1c307a56b0d',
+        blob: 'a9597af7309fb1279b434254be4ab307dee7a7a7',
         edits: [[
             '  const kickFollowUpAsk = () => {',
             '  const kickFollowUpAsk = () => {\n    if (askOpts.hostManagedCompletions === true) return;',
@@ -250,7 +259,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/boot/tools.mjs',
-        blob: '44c706cf7c706f3fd9a7294a71e4f82faead409f',
+        blob: 'e13345f923048c6e3ebe5884650b0f17d0e4d732',
         edits: [[
             '    // SubagentStart/SubagentStop: bridge internal worker spawn/finish to the',
             '    sessionSurface: params.agentSessionSurface?.({ mgr, getAgentTool: () => boot.routedAgentTool }),\n    // SubagentStart/SubagentStop: bridge internal worker spawn/finish to the',
@@ -261,13 +270,10 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/settings-compaction-api.mjs',
-        blob: '3cca7cd6f5febaea72271209a36e0066e064308d',
+        blob: 'd48169235e4b190a679375040585df88643b2eff',
         edits: [[
             '  if (hasOwn(input, \'onModelChange\')) next.onModelChange = input.onModelChange !== false;',
             '  if (hasOwn(input, \'onModelChange\')) next.onModelChange = input.onModelChange !== false;\n  if (hasOwn(input, \'summaryModel\')) {\n    if (input.summaryModel) next.summaryModel = String(input.summaryModel).trim();\n    else delete next.summaryModel;\n  }',
-        ], [
-            "const SESSION_COMPACTION_KEYS = [\n",
-            "const SESSION_COMPACTION_KEYS = [\n  'summaryModel',\n",
         ]],
     },
     {
@@ -298,7 +304,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/session/manager/session-prompt-composition.mjs',
-        blob: '961f27afcb8cdc378264a7110c71689a501e73ee',
+        blob: '59f1ad88272b79245fd2dbe25d6d2e2f3e1cd567',
         edits: [
             [
                 '        : loadInstructionFilesContext({ mode: configuredInstructionFilesMode(), cwd }),',
@@ -312,7 +318,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/boot/apis.mjs',
-        blob: '8de983eab6765243bcf765d3b6729a870c4401e1',
+        blob: 'ef4d2de7c3862c4021ae07e0d74c752eee88a6f2',
         edits: [[
             '        : loadInstructionFilesContext({ mode: rt.config?.instructionFiles, cwd: session.cwd }),',
             '        : loadInstructionFilesContext({ mode: rt.config?.instructionFiles, cwd: session.cwd, provider: rt.route?.provider || session?.provider, model: rt.route?.model || session?.model }),',
@@ -328,7 +334,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/session-runtime/workflow-agents-api/agent-route.mjs',
-        blob: 'ac4a9ba8eb8ff0af8b71cd735388681b1018ee13',
+        blob: '49d9f0b7cd41327f5a098aa30e4e4acfc2619192',
         edits: [
             [
                 "    const inherited = normalizeWorkflowRoute(resolveRoute(getConfig(), {}));\n    // The bot's chats follow Main from their next turn (unless they already do).\n    if (inherited && !sameRoute(before, inherited)) await publishAgentRouteChange(id, inherited);\n    return { ...(inherited || {}), inherited: true };",
@@ -358,7 +364,7 @@ export const AGENT_PATCHES = [
     },
     {
         file: 'src/runtime/agent/orchestrator/context/skill-catalog.mjs',
-        blob: '7abd98fd470adc5915f61dc0b1f86c67524c14d6',
+        blob: '11ae4e7434c91b9c181e1189472277d93abae1f4',
         edits: [
             [
                 'function followsBuiltinFeature(skill) {\n  return skill?.source === \'builtin\' && Array.isArray(skill.requires) && skill.requires.length > 0;\n}',

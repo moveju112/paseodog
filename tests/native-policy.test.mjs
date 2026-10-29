@@ -241,7 +241,8 @@ test('native session owned by a raw Mixdog process is not remotely forwarded pas
 // 엔진 설정 유지 및 자동 업데이트 차단을 검증한다.
 test('Mixdog retains native compaction and model settings without staging engine updates', async () => {
     const base = { compaction: { enabled: true }, models: { saved: { autoEffort: true } },
-        update: { auto: true }, mcpServers: { hidden: { type: 'stdio', command: 'hidden' } } };
+        update: { auto: true }, promptCacheWarming: true,
+        mcpServers: { hidden: { type: 'stdio', command: 'hidden' } } };
     let options;
     const runtime = { ask() {}, abort() {}, close() {}, resume() {}, compact() {} };
     const engine = await createNativeEngine({ config: { cwd: '/work', mcpServers: {} } }, {
@@ -253,6 +254,8 @@ test('Mixdog retains native compaction and model settings without staging engine
     assert.deepEqual(options.initialConfig.compaction, base.compaction);
     assert.deepEqual(options.initialConfig.models, base.models);
     assert.equal(options.initialConfig.update.auto, false);
+    assert.equal(options.initialConfig.promptCacheWarming, false);
+    assert.equal(base.promptCacheWarming, true);
     assert.equal(base.update.auto, true);
     assert.deepEqual(Object.keys(options.initialConfig.mcpServers), []);
     await engine.close('done');
