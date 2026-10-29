@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { scratchPath } from '../scripts/paths.mjs';
 import { registerDeliveryReport, readDeliveryReport, settleDeliveryReport, dispatchDeliveryReports,
-    scheduleDeliveryReports, deliveryReportPrompt } from '../plugin/server/delivery-notifications.mjs';
+    scheduleDeliveryReports } from '../plugin/server/delivery-notifications.mjs';
 import { sendDeliveryReport } from '../scripts/delivery-notify.mjs';
 import { startDelivery, executeDelivery } from '../scripts/release-pipeline.mjs';
 
@@ -98,8 +98,7 @@ for (const outcome of ['complete', 'failed', 'preflight']) {
         assert.equal(calls, outcome === 'preflight' ? 0 : 1);
         const report = await readDeliveryReport(f.stateRoot, registered.id);
         assert.equal(report.result.status, outcome === 'complete' ? 'complete' : 'failed');
-        assert.doesNotMatch(deliveryReportPrompt(report), /secret daemon error/);
-        assert.match(deliveryReportPrompt(report), /재실행하지 마/);
+        assert.doesNotMatch(JSON.stringify(report), /secret daemon error/);
         assert.equal(report.deliveredEventId, null);
     });
 }
@@ -115,7 +114,8 @@ test('plugin restart and repeated scans deliver a completed result only once to 
     assert.deepEqual(await dispatchDeliveryReports({ ...options }), []);
     assert.equal(sent.length, 1);
     assert.equal(sent[0].agentId, agentId);
-    assert.equal((await readDeliveryReport(f.stateRoot, registered.id)).deliveredEventId, sent[0].eventId);
+    assert.equal((await readDeliveryReport(f.stateRoot, registered.id)).journalSavedEventId, sent[0].eventId);
+    assert.equal((await readDeliveryReport(f.stateRoot, registered.id)).deliveredEventId, null);
 });
 
 test('lost ACK retries reuse the same persistent message ID instead of creating duplicate reports', async t => {
@@ -141,7 +141,7 @@ test('lost ACK retries reuse the same persistent message ID instead of creating 
     assert.equal(ids[0], ids[1]);
 });
 
-test('an uncertain server receipt is retained for reconciliation and never replayed under a new ID', async t => {
+test('an uncertain report retries only the same idempotent journal write, never a model or remote command', async t => {
     const f = await fixture(t);
     const registered = await f.register();
     await settleDeliveryReport(f.stateRoot, f.workspace, 'failed');
@@ -152,7 +152,7 @@ test('an uncertain server receipt is retained for reconciliation and never repla
     } };
     await dispatchDeliveryReports(options);
     await dispatchDeliveryReports({ ...options });
-    assert.equal(sends, 1);
+    assert.equal(sends, 2);
     const report = await readDeliveryReport(f.stateRoot, registered.id);
     assert.equal(report.blockedEventId, report.eventId);
     assert.equal(report.deliveredEventId, null);
@@ -211,7 +211,7 @@ test('result data remains available after the disposable delivery workspace is r
     assert.equal((await readDeliveryReport(f.stateRoot, registered.id)).result.status, 'complete');
 });
 
-test('the dedicated authenticated client sends a stable ID, never interrupts, and closes after failures', async t => {
+test('the dedicated authenticated client saves results during active turns and model errors without inference', async t => {
     const f = await fixture(t);
     const registered = await f.register();
     await settleDeliveryReport(f.stateRoot, f.workspace, 'complete');
@@ -219,23 +219,28 @@ test('the dedicated authenticated client sends a stable ID, never interrupts, an
     const messages = [];
     const client = {
         fetchAgent: async () => ({ agent: { provider: 'paseodog', status: state, pendingPermissions: [] } }),
-        sendAgentMessage: async (...args) => { messages.push(args); if (fail) throw new Error('ACK lost'); },
+        sendAgentMessage: async () => assert.fail('Result reporting must never start inference'),
+        invokePluginRpc: async (...args) => {
+            messages.push(args); if (fail) throw new Error('ACK lost');
+            return { journalSaved: true };
+        },
         close: async () => { closed++; },
     };
     const options = { stateRoot: f.stateRoot, home: f.paseoHome, connect: async request => {
         assert.deepEqual(request, { target: { kind: 'instance', home: f.paseoHome } });
         return client;
     } };
-    assert.equal(await sendDeliveryReport(registered.id, options), false);
-    assert.equal(messages.length, 0);
-    state = 'idle';
-    assert.equal(await sendDeliveryReport(registered.id, options), true);
+    assert.deepEqual(await sendDeliveryReport(registered.id, options),
+        { journalSaved: true, clientReceived: null, ai: 'not-requested' });
+    assert.equal(messages.length, 1);
+    state = 'error';
+    assert.equal((await sendDeliveryReport(registered.id, options)).journalSaved, true);
     fail = true;
     await assert.rejects(sendDeliveryReport(registered.id, options), /ACK lost/);
     assert.equal(closed, 3);
-    assert.equal(messages[0][0], agentId);
-    assert.equal(messages[0][2].activeTurnBehavior, 'steer');
-    assert.equal(messages[0][2].messageId, messages[1][2].messageId);
+    assert.equal(messages[0][0], 'paseodog-provider');
+    assert.equal(messages[0][2].agentId, agentId);
+    assert.equal(messages[0][2].eventId, messages[1][2].eventId);
 });
 
 test('missing or malformed recipients are rejected without creating a report', async t => {

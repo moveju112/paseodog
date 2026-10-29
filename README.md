@@ -23,6 +23,29 @@
 Linux는 `systemd --user`, Windows는 .NET Framework 4.x(Windows 10/11 기본 포함)가 필요합니다.
 기존 수동 설치 데몬·계정 설정이 있으면 그대로 사용합니다.
 
+## 장시간 작업 결과
+
+일반 background shell의 종료 결과는 모델 호출 없이 원래 세션의 채팅에 저장됩니다.
+daemon 재시작으로 감시 결과를 확인할 수 없으면 **결과 불명**으로 표시하며 명령을 재실행하지 않습니다.
+로컬 shell 성공은 원격 작업 성공을 뜻하지 않습니다. 채팅 저장과 앱 수신·열람도 별개입니다.
+
+원격 서비스가 읽기 전용 HTTPS 상태 API를 제공하면 작업 ID를 명시적으로 등록할 수 있습니다.
+API 응답은 `{"jobId":"job-123","status":"running"}` 형식이며,
+`status`는 `running`, `completed`, `failed`, `canceled` 중 하나여야 합니다.
+등록한 URL에만 GET을 수행하고 redirect·원격 변경·임의 명령 실행은 하지 않습니다.
+URL·상태 응답에 자격증명이나 개인정보를 넣지 마세요.
+
+```bash
+paseodog background register --agent <원래-agent-UUID> --job job-123 --url https://example.com/jobs/job-123/status --confirmed
+paseodog background status --agent <원래-agent-UUID>
+paseodog background cancel --agent <원래-agent-UUID> --job job-123
+```
+
+`--confirmed`는 해당 상태 조회가 승인된 작업 범위임을 확인하는 옵션입니다.
+세션 중단·명시적 종료·승인 거부 후에는 등록된 원격 조회를 재개하지 않습니다.
+감시 취소는 원격 작업 취소가 아닙니다. 서버 무응답은 실패가 아닌 결과 불명으로 표시하고 제한된 간격으로 상태만 재조회합니다.
+배포 결과도 먼저 채팅에 저장하며 자동 AI 턴은 시작하지 않습니다. 추가 분석은 사용자가 요청할 때 실행합니다.
+
 ## 휴대폰 연결
 
 Android APK를 설치하고, 실행 중인 PC 앱의 호스트 설정에서 **Pair Device**로 연결합니다.

@@ -28,6 +28,7 @@ const RULES = [
     [/^android\/(package\.json|package-lock\.json|patches\/|scripts\/)/, CLIENTS],
     [/^(plugin|engine)\//, ['runtime', 'desktop']],
     [/^scripts\/patch-mixdog\.mjs$/, ['runtime', 'desktop']],
+    [/^scripts\/(background-results|delivery-notify)\.mjs$/, ['runtime', 'desktop']],
     [/^(bin|tools|patches|config)\//, ['runtime']],
     [/^scripts\/(patch-paseo-(?!android)[\w-]+|install|configure|service)\.(mjs|sh)$/, ['runtime']],
     [/^(package\.json|package-lock\.json)$/, ['runtime', 'desktop']],

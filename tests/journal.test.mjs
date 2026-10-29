@@ -51,7 +51,8 @@ test('summary listings retain only metadata and do not reload unchanged journals
     let reads = 0;
     store.load = (id) => { reads++; return load(id); };
     const expected = [{ id: 'a', cwd: '/work', createdAt: record.createdAt,
-        updatedAt: record.updatedAt, title: 'first request', description: 'first request' }];
+        updatedAt: record.updatedAt, nativeSessionId: null, backgroundTracked: false,
+        title: 'first request', description: 'first request' }];
     const first = store.listSummaries();
     assert.deepEqual(first, expected);
     assert.equal(reads, 2);

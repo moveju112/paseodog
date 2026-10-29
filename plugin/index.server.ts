@@ -13,6 +13,9 @@ import { createDaemonUpdater } from './server/daemon-update.mjs';
 import { agentMessagePolicy } from './shared/message-policy.js';
 import { scheduleTurnRecovery } from './server/turn-recovery.mjs';
 import { scheduleDeliveryReports } from './server/delivery-notifications.mjs';
+import { createBackgroundResults } from './server/background-results.mjs';
+import { backgroundResults } from './shared/background-results.js';
+import { join } from 'node:path';
 import { speechSettings } from './shared/speech-settings.js';
 import { handleSpeechSettings } from './server/speech-settings.mjs';
 // 전용 엔진의 설정과 현재 세션 상태를 Paseo 플러그인 RPC에 연결한다.
@@ -22,6 +25,13 @@ export default function contribute(server: PluginServerContext) {
     const updater = createDaemonUpdater({ versionCode: DAEMON_RELEASE.versionCode });
     server.handle(daemonUpdate, request => request.action === 'status' ? updater.status() : updater.request(request));
     const controls = createEngineControls({ execCommand, spawnProcess, terminateProcess });
+    const resultService = process.env.PASEODOG_STATE_DIR && process.env.PASEO_HOME && process.env.MIXDOG_HOME
+        ? createBackgroundResults({ stateRoot: process.env.PASEODOG_STATE_DIR, paseoHome: process.env.PASEO_HOME,
+            dataRoot: process.env.MIXDOG_DATA_DIR || join(process.env.MIXDOG_HOME, 'data'), controls }) : null;
+    server.handle(backgroundResults, request => {
+        if (!resultService) throw new Error('Dedicated background result service is unavailable');
+        return resultService.request(request);
+    });
     server.handle(agentMessagePolicy, ({ action, ...request }) =>
         controls.read({ ...request, action: 'messagePolicy', operation: action }));
     const clientErrorCollector = createClientErrorCollector();
@@ -47,5 +57,6 @@ export default function contribute(server: PluginServerContext) {
     // 데몬 재시작으로 중단된 턴은 시작 후 한 번만 이어가기 지시를 보낸다.
     const stopRecovery = scheduleTurnRecovery();
     const stopDeliveryReports = scheduleDeliveryReports();
-    return () => { stopRecovery(); stopDeliveryReports(); controls.close(); void clientErrorCollector.close(); };
+    const stopResults = resultService?.start();
+    return () => { stopResults?.(); stopRecovery(); stopDeliveryReports(); controls.close(); void clientErrorCollector.close(); };
 }

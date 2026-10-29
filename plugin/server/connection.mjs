@@ -7,6 +7,7 @@ import { agentMessageSource } from './agent-message.mjs';
 import { compactionNotice, projectCompaction } from './compaction.mjs';
 import { readTurnMinutes } from './turn-duration.mjs';
 import { sessionDescription } from './journal.mjs';
+import { revokeBackgroundWork } from './background-results.mjs';
 
 export const CAPABILITIES = ['prompt.message', 'prompt.image', 'prompt.command', 'prompt.steer', 'session.configure', 'session.persistence', 'session.list',
     'session.revert.conversation', 'permission'];
@@ -126,6 +127,11 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         }, flushMs);
     }
     function flush(session) { clearTimeout(session.flushTimer); session.flushTimer = null; store.save(session.record); }
+    function revokeBackground(session) {
+        revokeBackgroundWork(session.record);
+        try { flush(session); }
+        catch (error) { containAfterJournalFailure(session, error); }
+    }
     function notice(session, id, title, severity = 'warning') {
         emit({ type: 'session.notice', sessionId: session.id, notice: { id, title, severity } });
     }
@@ -425,6 +431,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                 if (response.selectedActionId || response.updatedPermissions) throw new Error('Unsupported question response');
                 answer = { approved: true, answers: questionAnswers(pending.questions, response.updatedInput) };
             }
+            if (!answer.approved) revokeBackground(session);
             clearTimeout(pending.timer); session.permissions.delete(input.permissionId);
             pending.resolve(answer);
             emit({ type: 'session.permission_resolved', sessionId: session.id, permissionId: input.permissionId });
@@ -432,6 +439,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             return;
         }
         const validAllow = response.behavior === 'allow' && (!response.selectedActionId || response.selectedActionId === 'allow-once') && !response.updatedInput && !response.updatedPermissions;
+        if (!validAllow) revokeBackground(session);
         clearTimeout(pending.timer); session.permissions.delete(input.permissionId);
         pending.resolve(validAllow ? { approved: true } : { approved: false, reason: response.message || 'Denied or unsupported permission change' });
         emit({ type: 'session.permission_resolved', sessionId: session.id, permissionId: input.permissionId });
@@ -877,8 +885,9 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         } finally { session.configuring = false; }
         emit({ type: 'request.completed', requestId: input.requestId });
     }
-    async function interrupt(session, reason = 'User interrupted') {
+    async function interrupt(session, reason = 'User interrupted', revoke = true) {
         if (!session) throw new Error('Session not found');
+        if (revoke) revokeBackground(session);
         const turn = session.active;
         if (!turn) return;
         turn.canceled = true; releaseApprovals(session, reason);
@@ -893,13 +902,13 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         }
         if (session.record.receipts[turn.receiptKey]) finishTurn(session, turn, 'canceled');
     }
-    async function closeSession(session) {
+    async function closeSession(session, revoke = true) {
         clearTimeout(session?.resumeTimer);
         if (session.closePromise) return session.closePromise;
         session.closing = true; session.bootController.abort(new Error('Session closing'));
         session.closePromise = (async () => {
             try {
-                await interrupt(session, 'Session closing');
+                await interrupt(session, 'Session closing', revoke);
                 let engine = session.engine;
                 if (!engine && session.enginePromise) engine = await deadline(session.enginePromise.catch(() => null), stopMs).catch(() => null);
                 if (engine) await deadline(Promise.resolve(engine.close('paseodog-session-close')), stopMs).catch(() => engine.kill?.());
@@ -948,6 +957,26 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
     return {
         version: 1, capabilities: selected,
         hasSession(id) { return sessions.has(id); },
+        backgroundRecord(bridgeId, mutate) {
+            const session = [...sessions.values()].find(value => value.record.id === bridgeId);
+            if (!session) return undefined;
+            if (session.closed || session.closing) throw new Error('Background journal owner unavailable');
+            const record = structuredClone(session.record);
+            const result = mutate(record);
+            if (result.changed) {
+                // 영속 저장 성공 전에 사용자에게 보고 완료 이벤트를 내보내지 않는다.
+                store.save(record);
+                // 진행 중인 steer/turn이 잡고 있는 기존 receipt 참조는 교체하지 않는다.
+                session.record.items = record.items;
+                session.record.backgroundTasks = record.backgroundTasks;
+                session.record.updatedAt = record.updatedAt;
+                session.record.historyTruncated = record.historyTruncated;
+                for (const [key, receipt] of Object.entries(record.receipts))
+                    if (!session.record.receipts[key]) session.record.receipts[key] = receipt;
+                for (const row of result.rows || []) publishItem(session, row);
+            }
+            return { value: result.value };
+        },
         sessionAction,
         // 현재 연결이 소유한 세션만 조회하고 종료된 프로세스는 오류 상태로 구분한다.
         async engineStatus() {
@@ -982,7 +1011,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             closing = true;
             closingPromise = (async () => {
                 for (const session of sessions.values()) clearTimeout(session.resumeTimer);
-                await Promise.allSettled([...sessions.values()].map(closeSession));
+                await Promise.allSettled([...sessions.values()].map(session => closeSession(session, false)));
                 sessions.clear(); closed = true; listeners.clear();
             })(); return closingPromise;
         },
