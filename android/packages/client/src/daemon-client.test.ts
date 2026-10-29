@@ -2071,7 +2071,9 @@ test("foreground verification replaces a silently broken socket without waiting 
   await connection;
 
   client.ensureConnected({ verify: true });
-  await vi.advanceTimersByTimeAsync(3_000);
+  await vi.advanceTimersByTimeAsync(14_999);
+  expect(attempts).toBe(1);
+  await vi.advanceTimersByTimeAsync(1);
   expect(attempts).toBe(2);
   second.openConnection();
   expect(client.getConnectionState()).toEqual({ status: "connected" });
@@ -2080,7 +2082,7 @@ test("foreground verification replaces a silently broken socket without waiting 
 test("foreground verification preserves a healthy socket and deduplicates simultaneous checks", async () => {
   useHeartbeatClock();
   const daemon = new FakeDaemon();
-  daemon.daemonAnswersPingsAfter("0.1s");
+  daemon.daemonAnswersPingsAfter("5.5s");
   const client = new DaemonClient({
     url: "ws://test",
     clientId: "healthy-resume",
@@ -2093,10 +2095,36 @@ test("foreground verification preserves a healthy socket and deduplicates simult
   await connection;
   client.ensureConnected({ verify: true });
   client.ensureConnected({ verify: true });
-  await vi.advanceTimersByTimeAsync(3_000);
+  await vi.advanceTimersByTimeAsync(5_500);
   expect(client.getConnectionState()).toEqual({ status: "connected" });
   expect(daemon.pingTimestamps()).toEqual(["0s"]);
   expect(daemon.closesFromClient()).toEqual([]);
+});
+
+test("foreground verification replaces suspended heartbeat deadlines without closing the socket", async () => {
+  useHeartbeatClock();
+  const daemon = new FakeDaemon();
+  daemon.daemonGoesSilent();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "suspended-heartbeat",
+    logger: noopLogger,
+    transportFactory: () => daemon.transport,
+  });
+  clients.push(client);
+  const connection = client.connect();
+  daemon.openConnection();
+  await connection;
+
+  // One missed heartbeat followed by an in-flight probe whose old deadline is near.
+  await vi.advanceTimersByTimeAsync(49_000);
+  daemon.daemonAnswersPingsAfter("5.5s");
+  client.ensureConnected({ verify: true });
+  await vi.advanceTimersByTimeAsync(5_500);
+  expect(client.getConnectionState()).toEqual({ status: "connected" });
+  expect(daemon.closesFromClient()).toEqual([]);
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(daemon.pingTimestamps()).toEqual(["10s", "35s", "49s", "64.5s"]);
 });
 
 test("an obsolete foreground probe cannot close a replacement connection", async () => {
@@ -2119,7 +2147,7 @@ test("an obsolete foreground probe cannot close a replacement connection", async
   first.daemonClosesWith("network changed");
   client.ensureConnected();
   second.openConnection();
-  await vi.advanceTimersByTimeAsync(3_000);
+  await vi.advanceTimersByTimeAsync(15_000);
   expect(attempts).toBe(2);
   expect(client.getConnectionState()).toEqual({ status: "connected" });
   expect(second.closesFromClient()).toEqual([]);
