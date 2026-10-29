@@ -44,6 +44,7 @@ let script,argv,nodeOptions=[];
 if(command==='desktop-update'){script=join(root,'scripts/desktop-release.mjs');argv=args;}
 else if(command==='doctor'){script=join(root,'scripts/doctor.mjs');argv=args;}
 else if(command==='delivery-notify'){script=join(root,'scripts/delivery-notify.mjs');argv=args;}
+else if(command==='background'){script=join(root,'scripts/background-results.mjs');argv=args;}
 else if(command==='live-test'){script=join(root,'scripts/live-smoke.mjs');argv=args;}
 else if(command==='auth'){script=nativeBin;argv=args;}
 else{

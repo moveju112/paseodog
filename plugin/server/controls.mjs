@@ -190,6 +190,13 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
             connections.add(connection);
             return () => { connections.delete(connection); statusRows.delete(connection); };
         },
+        backgroundRecord(bridgeId, mutate) {
+            for (const connection of connections) {
+                const result = connection.backgroundRecord(bridgeId, mutate);
+                if (result !== undefined) return result;
+            }
+            return undefined;
+        },
         // 세션 ID가 유일한 연결에만 전달하고 실패·시간 초과 요청은 재시도하지 않는다.
         sessionAction(request) {
             const owners = [...connections].filter((connection) => connection.hasSession(request.sessionId));

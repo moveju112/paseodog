@@ -508,6 +508,8 @@ test('path classification separates platforms and falls back to every target for
     assert.deepEqual(pathTargets('android/packages/app/android/app/build.gradle'), ['android']);
     assert.deepEqual(pathTargets('android/packages/desktop/src/main.ts'), ['desktop']);
     assert.deepEqual(pathTargets('plugin/server/connection.mjs'), ['runtime', 'desktop']);
+    assert.deepEqual(pathTargets('scripts/background-results.mjs'), ['runtime', 'desktop']);
+    assert.deepEqual(pathTargets('scripts/delivery-notify.mjs'), ['runtime', 'desktop']);
     assert.deepEqual(pathTargets('patches/paseo-usage-donut.mjs'), ['runtime']);
     for (const path of ['docs/ai-rules/tasks/RELEASE.md', 'tests/journal.test.mjs', 'CHANGELOG.md',
         'plugin/shared/release.json', 'android/packages/app/src/polyfills/diagnostics-channel.test.ts',

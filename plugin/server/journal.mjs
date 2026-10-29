@@ -18,6 +18,7 @@ export function sessionDescription(row) {
 function sessionSummary(row) {
     if (!row.items.length) return null;
     return { id: row.id, cwd: row.cwd, createdAt: row.createdAt, updatedAt: row.updatedAt,
+        nativeSessionId: row.nativeSessionId, backgroundTracked: Object.keys(row.backgroundTasks || {}).length > 0,
         ...sessionDescription(row) };
 }
 function pidIdentity(pid) {
