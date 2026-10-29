@@ -40,7 +40,7 @@ export async function readOAuthUsage(runtime, provider = 'anthropic-oauth') {
 
 const metricKeys = ['turns', 'tokens', 'input', 'output', 'cacheRead', 'cacheWrite', 'cacheHitRate',
     'costUsd', 'costBilled', 'costEstimated', 'costUnpricedTurns', 'outputTokensPerSecond',
-    'minOutputTokensPerSecond', 'maxOutputTokensPerSecond', 'share'];
+    'low10OutputTokensPerSecond', 'high10OutputTokensPerSecond', 'share'];
 const visibleOAuthProviders = { 'anthropic-oauth': 'Claude', 'openai-oauth': 'Codex' };
 
 // 원본 통계에서 수치 필드만 선택해 경로·세션·인증정보가 UI로 새지 않게 한다.
@@ -86,22 +86,21 @@ export async function readUsageMetrics(runtime, request = {}) {
         fromMs: stats.range.fromMs, toMs: stats.range.toMs,
     }) || [];
     // 요청별 속도의 단순 평균 대신 측정된 출력과 시간을 합산한다.
-    const speedOf = (rows) => {
+    const speedOf = (rows, scope) => {
         const output = rows.reduce((sum, row) => sum + (row.speedOutput || 0), 0);
         const ms = rows.reduce((sum, row) => sum + (row.speedMs || 0), 0);
-        const minimums = rows.map((row) => row.minOutputTokensPerSecond).filter(Number.isFinite);
-        const maximums = rows.map((row) => row.maxOutputTokensPerSecond).filter(Number.isFinite);
+        const tails = rows[0]?.speedTailMeans?.[scope];
         return {
             outputTokensPerSecond: ms > 0 ? Math.round(output * 10000 / ms) / 10 : null,
-            minOutputTokensPerSecond: minimums.length ? Math.min(...minimums) : null,
-            maxOutputTokensPerSecond: maximums.length ? Math.max(...maximums) : null,
+            low10OutputTokensPerSecond: tails?.low10OutputTokensPerSecond ?? null,
+            high10OutputTokensPerSecond: tails?.high10OutputTokensPerSecond ?? null,
         };
     };
     return {
         generatedAt: stats.generatedAt,
         ...(quotaError ? { quotaError } : {}),
         range: { fromMs: stats.range.fromMs, toMs: stats.range.toMs },
-        totals: { ...metricProjection(stats.totals), ...speedOf(efforts) },
+        totals: { ...metricProjection(stats.totals), ...speedOf(efforts, 'total') },
         efforts: efforts.map((row) => ({
             provider: row.provider, model: row.model,
             agent: row.agent || null, effort: row.effort || null,
@@ -110,7 +109,7 @@ export async function readUsageMetrics(runtime, request = {}) {
         providers: stats.providers.map((row) => ({
             provider: row.provider, providerKind: row.providerKind,
             label: visibleOAuthProviders[row.provider] || row.provider, ...metricProjection(row),
-            ...speedOf(efforts.filter((effort) => effort.provider === row.provider)),
+            ...speedOf(efforts.filter((effort) => effort.provider === row.provider), 'provider'),
             models: row.models.map((model) => ({ model: model.model, ...metricProjection(model) })),
         })),
         series: (stats.hourly || stats.daily).map((row) => ({

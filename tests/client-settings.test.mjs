@@ -507,10 +507,10 @@ test('compact usage switches Codex and Claude with provider tabs', async (t) => 
         range: { fromMs: 1, toMs: 2 }, totals: { tokens: 300, turns: 3 }, series: [],
         providers: [
             { provider: 'anthropic-oauth', providerKind: 'oauth', label: 'Claude', tokens: 200, turns: 1, outputTokensPerSecond: 61.5,
-                minOutputTokensPerSecond: 21.2, maxOutputTokensPerSecond: 91.8,
+                low10OutputTokensPerSecond: 21.2, high10OutputTokensPerSecond: 91.8,
                 models: [{ model: 'claude-model', tokens: 200, turns: 1 }] },
             { provider: 'openai-oauth', providerKind: 'oauth', label: 'Codex', tokens: 100, turns: 2, outputTokensPerSecond: 12.5,
-                minOutputTokensPerSecond: 8.3, maxOutputTokensPerSecond: 18.6,
+                low10OutputTokensPerSecond: 8.3, high10OutputTokensPerSecond: 18.6,
                 models: [{ model: 'codex-model', tokens: 100, turns: 2 }] },
         ],
         quotas: [
@@ -526,7 +526,7 @@ test('compact usage switches Codex and Claude with provider tabs', async (t) => 
     // Codex가 먼저 선택되고 Claude 지표는 숨긴다.
     assert.equal(button('Codex 사용량').props.accessibilityState.selected, true);
     assert.ok(content().includes('12.5 tok/s') && content().includes('41%'));
-    assert.ok(content().includes('최저 응답 속도') && content().includes('최고 응답 속도'));
+    assert.ok(content().includes('하위 10% 평균 속도') && content().includes('상위 10% 평균 속도'));
     assert.ok(content().includes('8.3 tok/s') && content().includes('18.6 tok/s'));
     assert.ok(!content().includes('21.2 tok/s') && !content().includes('91.8 tok/s'));
     assert.ok(!content().includes('61.5 tok/s') && !content().includes('77%'));

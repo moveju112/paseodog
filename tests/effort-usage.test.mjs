@@ -51,13 +51,13 @@ test('fast on, off and unrecorded remain separate with duration-weighted measure
         assert.equal(groups.length, 5);
         const high = groups.filter(row => row.model === 'test' && row.effort === 'high');
         assert.equal(high.find(row => row.fast === true).outputTokensPerSecond, 40);
-        assert.equal(high.find(row => row.fast === true).minOutputTokensPerSecond, 300 / 9);
-        assert.equal(high.find(row => row.fast === true).maxOutputTokensPerSecond, 100);
+        assert.equal(high.find(row => row.fast === true).low10OutputTokensPerSecond, 300 / 9);
+        assert.equal(high.find(row => row.fast === true).high10OutputTokensPerSecond, 100);
         assert.equal(high.find(row => row.fast === true).output, 9400);
         assert.equal(high.find(row => row.fast === false).outputTokensPerSecond, 20);
         assert.equal(high.find(row => row.fast === null).outputTokensPerSecond, null);
-        assert.equal(high.find(row => row.fast === null).minOutputTokensPerSecond, null);
-        assert.equal(high.find(row => row.fast === null).maxOutputTokensPerSecond, null);
+        assert.equal(high.find(row => row.fast === null).low10OutputTokensPerSecond, null);
+        assert.equal(high.find(row => row.fast === null).high10OutputTokensPerSecond, null);
         const result = await readUsageMetrics({
             getUsageStats: async () => ({ range: { fromMs: ts, toMs: ts }, totals: {}, providers: [], daily: [] }),
             getUsageDashboard: async () => ({ rows: [] }),
@@ -65,10 +65,76 @@ test('fast on, off and unrecorded remain separate with duration-weighted measure
         });
         // 535 measured output tokens / 14 seconds, not an average of group rates.
         assert.equal(result.totals.outputTokensPerSecond, 38.2);
-        assert.equal(result.totals.minOutputTokensPerSecond, 20);
-        assert.equal(result.totals.maxOutputTokensPerSecond, 100);
+        assert.equal(result.totals.low10OutputTokensPerSecond, 20);
+        assert.equal(result.totals.high10OutputTokensPerSecond, 100);
         assert.equal(result.efforts.reduce((sum, row) => sum + row.turns, 0), 8);
         assert.doesNotMatch(JSON.stringify(result), /speedOutput|speedMs/);
+    } finally { ledger.close(); }
+});
+
+test('speed tails average the lowest and highest ten percent of eligible responses in each scope', async () => {
+    const ledger = new UsageLedger(':memory:');
+    try {
+        const ts = Date.now();
+        const common = { ts, model: 'test', inputTokens: 10, effort: 'low' };
+        const rows = [
+            ...Array.from({ length: 21 }, (_, index) => {
+                const rate = index + 1, durationMs = rate % 2 ? 1000 : 10000;
+                return makeUsageRecord({ ...common, id: `codex-${rate}`, provider: 'openai-oauth',
+                    agent: rate < 3 ? 'worker' : 'advisor', fast: rate < 3,
+                    outputTokens: rate * durationMs / 1000, durationMs });
+            }),
+            ...Array.from({ length: 11 }, (_, index) => makeUsageRecord({
+                ...common, id: `claude-${index}`, provider: 'anthropic-oauth', agent: 'worker',
+                outputTokens: 100 + index, durationMs: 1000,
+            })),
+            makeUsageRecord({ ...common, id: 'untimed', provider: 'openai-oauth', outputTokens: 999999 }),
+            makeUsageRecord({ ...common, id: 'empty', provider: 'openai-oauth', outputTokens: 0, durationMs: 1000 }),
+            makeUsageRecord({ ...common, id: 'outside', ts: ts - 1, provider: 'openai-oauth',
+                outputTokens: 999999, durationMs: 1 }),
+        ];
+        ledger.record(rows);
+        ledger.record(rows);
+        const api = createUsageStatsApi({ ledger: () => ledger });
+        const result = await readUsageMetrics({
+            getUsageStats: async () => ({ range: { fromMs: ts, toMs: ts }, totals: {}, daily: [],
+                providers: ['openai-oauth', 'anthropic-oauth'].map(provider => ({ provider, models: [] })) }),
+            getUsageDashboard: async () => ({ rows: [] }),
+            getEffortUsageStats: api.getEffortUsageStats,
+        });
+        assert.deepEqual(result.providers.map(row => [
+            row.low10OutputTokensPerSecond, row.high10OutputTokensPerSecond,
+        ]), [[2, 20], [100.5, 109.5]]);
+        assert.equal(result.totals.low10OutputTokensPerSecond, 2.5);
+        assert.equal(result.totals.high10OutputTokensPerSecond, 108.5);
+        const worker = result.efforts.find(row => row.provider === 'openai-oauth' && row.agent === 'worker');
+        const advisor = result.efforts.find(row => row.agent === 'advisor');
+        assert.equal(worker.low10OutputTokensPerSecond, 1);
+        assert.equal(worker.high10OutputTokensPerSecond, 2);
+        assert.equal(advisor.low10OutputTokensPerSecond, 3.5);
+        assert.equal(advisor.high10OutputTokensPerSecond, 20.5);
+        assert.doesNotMatch(JSON.stringify(result), /speedTailMeans|speed_samples|minOutputTokensPerSecond|maxOutputTokensPerSecond/);
+    } finally { ledger.close(); }
+});
+
+test('tail sample rounding and arithmetic means span day and route buckets without changing usage amounts', async () => {
+    const ledger = new UsageLedger(':memory:');
+    try {
+        const ts = Date.now();
+        ledger.record(Array.from({ length: 11 }, (_, index) => makeUsageRecord({
+            ts: index % 2 ? ts : ts - 86400000, id: `day-${index}`,
+            provider: 'openai', model: 'test', sourceType: 'lead', agent: 'worker', effort: 'low',
+            inputTokens: 10, outputTokens: index + 1, durationMs: 1000, costUsd: 1,
+        })));
+        const api = createUsageStatsApi({ ledger: () => ledger });
+        const rows = await api.getEffortUsageStats({ fromMs: ts - 86400000, toMs: ts });
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].turns, 11);
+        assert.equal(rows[0].tokens, 176);
+        assert.equal(rows[0].costUsd, 11);
+        assert.equal(rows[0].outputTokensPerSecond, 6);
+        assert.equal(rows[0].low10OutputTokensPerSecond, 1.5);
+        assert.equal(rows[0].high10OutputTokensPerSecond, 10.5);
     } finally { ledger.close(); }
 });
 
@@ -190,16 +256,22 @@ test('metrics split response speed per provider with Codex and Claude labels', a
         getUsageDashboard: async () => ({ rows: [] }),
         getEffortUsageStats: async () => [
             { provider: 'openai-oauth', model: 'sol', speedOutput: 100, speedMs: 1000,
-                minOutputTokensPerSecond: 50, maxOutputTokensPerSecond: 150 },
+                low10OutputTokensPerSecond: 50, high10OutputTokensPerSecond: 150, speedTailMeans: {
+                    provider: { low10OutputTokensPerSecond: 50, high10OutputTokensPerSecond: 150 },
+                    total: { low10OutputTokensPerSecond: 50, high10OutputTokensPerSecond: 400 },
+                } },
             { provider: 'anthropic-oauth', model: 'haiku', speedOutput: 300, speedMs: 1000,
-                minOutputTokensPerSecond: 200, maxOutputTokensPerSecond: 400 },
+                low10OutputTokensPerSecond: 200, high10OutputTokensPerSecond: 400, speedTailMeans: {
+                    provider: { low10OutputTokensPerSecond: 200, high10OutputTokensPerSecond: 400 },
+                    total: { low10OutputTokensPerSecond: 50, high10OutputTokensPerSecond: 400 },
+                } },
         ],
     });
     assert.deepEqual(result.providers.map(({ provider, label, outputTokensPerSecond }) => [provider, label, outputTokensPerSecond]),
         [['openai-oauth', 'Codex', 100], ['anthropic-oauth', 'Claude', 300], ['gemini', 'gemini', null]]);
     assert.equal(result.totals.outputTokensPerSecond, 200);
-    assert.deepEqual(result.providers.map(row => [row.minOutputTokensPerSecond, row.maxOutputTokensPerSecond]),
+    assert.deepEqual(result.providers.map(row => [row.low10OutputTokensPerSecond, row.high10OutputTokensPerSecond]),
         [[50, 150], [200, 400], [null, null]]);
-    assert.equal(result.totals.minOutputTokensPerSecond, 50);
-    assert.equal(result.totals.maxOutputTokensPerSecond, 400);
+    assert.equal(result.totals.low10OutputTokensPerSecond, 50);
+    assert.equal(result.totals.high10OutputTokensPerSecond, 400);
 });

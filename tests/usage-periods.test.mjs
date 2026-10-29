@@ -65,7 +65,7 @@ for (const scenario of [
             assert.deepEqual(runtime.calls.efforts, [result.range]);
             assert.deepEqual(runtime.calls.dashboard, [{ refresh: true, refreshSetup: false }]);
             assert.deepEqual(result.totals, { tokens: 42, outputTokensPerSecond: null,
-                minOutputTokensPerSecond: null, maxOutputTokensPerSecond: null });
+                low10OutputTokensPerSecond: null, high10OutputTokensPerSecond: null });
             assert.equal(result.series[0].tokens, 42);
         });
     }
