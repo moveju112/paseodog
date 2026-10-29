@@ -1,0 +1,6 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": ["local.paseodog.notifications.BackgroundNotificationsModule"]
+  }
+}

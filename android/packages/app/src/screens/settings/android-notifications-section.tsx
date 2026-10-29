@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { ensureOsNotificationPermission, sendOsNotification } from "@/utils/os-notifications";
 import { settingsStyles } from "@/styles/settings";
 
+function openAndroidAppSettings() {
+  void Linking.openSettings();
+}
+
 export function AndroidNotificationsSection() {
   const { settings, isLoading, updateSettings } = useAppSettings();
   const [busy, setBusy] = useState(false);
@@ -44,8 +48,10 @@ export function AndroidNotificationsSection() {
           <View style={settingsStyles.rowContent}>
             <Text style={settingsStyles.rowTitle}>백그라운드 알림</Text>
             <Text style={settingsStyles.rowHint}>
-              앱이 결과를 받으면 완료·확인 요청만 알립니다. 작업 진행 알림은 표시하지 않습니다.
-              Android가 백그라운드 연결을 중지하면 알림이 늦거나 누락될 수 있습니다.
+              홈화면에서도 연결을 유지해 앱이 직접 완료·확인 요청을 알립니다. 연결 유지용 상시
+              알림이 표시되고 배터리를 추가로 사용합니다. 앱 강제 종료·최근 앱에서 제거·배터리 제한
+              시 수신이 중단될 수 있습니다. 화면을 꺼도 받으려면 Android 앱 설정에서 배터리 사용을
+              제한 없음으로 설정해 주세요.
             </Text>
           </View>
           <Switch
@@ -61,6 +67,9 @@ export function AndroidNotificationsSection() {
           onPress={sendTest}
         >
           알림 테스트
+        </Button>
+        <Button variant="outline" onPress={openAndroidAppSettings}>
+          Android 앱 설정 열기
         </Button>
       </View>
     </SettingsSection>
