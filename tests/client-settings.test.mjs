@@ -195,13 +195,13 @@ test('usage groups effort rows by agent then provider model without repeating he
     const rows = (group) => group.findAllByType('view').filter((node) => node.props.accessibilityLabel?.endsWith(' 사용량')
         && !node.props.accessibilityLabel.endsWith(' 에이전트 사용량'));
     assert.deepEqual(rows(groups[0]).map((row) => texts(row)), [
-        ['openai · gpt', 'low', '미기록', '—', '1', '10', '$0.10'],
-        ['', 'high', '미기록', '—', '2', '20', '$0.20'],
-        ['azure · gpt', 'low', '미기록', '—', '3', '30', '$0.30'],
-        ['openai · mini', '미기록', '미기록', '—', '5', '50', '미확인'],
+        ['openai · gpt', 'low', '미기록', '—', '1', '10'],
+        ['', 'high', '미기록', '—', '2', '20'],
+        ['azure · gpt', 'low', '미기록', '—', '3', '30'],
+        ['openai · mini', '미기록', '미기록', '—', '5', '50'],
     ]);
-    assert.deepEqual(rows(groups[1]).map((row) => texts(row)), [['openai · gpt', 'high', '미기록', '—', '4', '40', '$0.40']]);
-    assert.deepEqual(rows(groups[2]).map((row) => texts(row)), [['openai · gpt', '미기록', '미기록', '—', '6', '60', '$0.60']]);
+    assert.deepEqual(rows(groups[1]).map((row) => texts(row)), [['openai · gpt', 'high', '미기록', '—', '4', '40']]);
+    assert.deepEqual(rows(groups[2]).map((row) => texts(row)), [['openai · gpt', '미기록', '미기록', '—', '6', '60']]);
     assert.deepEqual(rows(groups[0]).map((row) => row.props.accessibilityLabel).slice(0, 2),
         ['worker openai gpt low Fast 미기록 사용량', 'worker openai gpt high Fast 미기록 사용량']);
     // 표 머리글은 에이전트 묶음마다 한 번만 표시한다.
@@ -231,7 +231,7 @@ test('usage dashboard preserves metrics, quota percentages and period refresh co
         calls.push({ input, name });
         return {
             range: { fromMs: 1, toMs: 2 },
-            totals: { costUsd: 14.55, costBilled: 0, tokens: 1000, turns: 12, cacheHitRate: 0.9,
+            totals: { costUsd: 14.55, costBilled: 0, costUnpricedTurns: 2, tokens: 1000, turns: 12, cacheHitRate: 0.9,
                 input: 50, output: 50, cacheRead: 900, cacheWrite: 0 },
             series: [{ label: '10:00', tokens: 1000 }, { label: '11:00', tokens: 0 }],
             providers: [{ provider: 'openai-oauth', providerKind: 'oauth', label: 'Codex', share: 1, costUsd: 14.55,
@@ -251,8 +251,9 @@ test('usage dashboard preserves metrics, quota percentages and period refresh co
     await act(async () => button('AI 사용량·에이전트 분석').props.onPress());
     await showUsageDetails(tree);
     const content = tree.root.findAllByType('text').map((node) => node.children.join('')).join('\n');
-    for (const value of ['환산액', '$14.55', '$0.00', '90.0%', 'test-model', '68%', '미연결',
+    for (const value of ['90.0%', 'test-model', '68%', '미연결',
         '리셋 티켓 3개 남음', '10:00', '입력']) assert.ok(content.includes(value), value);
+    assert.doesNotMatch(content, /환산액|API 비용|\$|가격 미확인|비용 합계/);
     assert.ok(tree.root.findAllByType('view').some((node) => node.props.style?.width === '68%'));
     const period = (label) => tree.root.findAllByType('pressable').find((node) =>
         node.props.accessibilityRole === 'tab' && node.findByType('text').children.join('') === label);
@@ -298,8 +299,8 @@ test('model usage metrics share columns across models and providers without wrap
     assert.equal(rows.length, 3);
     const cells = rows.map((row) => row.findAllByType('text'));
     const header = tree.root.findAllByType('view').find((node) => node.props.accessibilityLabel === 'openai-oauth 모델별 사용량')
-        .findAllByType('text').slice(0, 9).map((node) => node.children.join(''));
-    assert.deepEqual(header, ['모델', '호출', 'TOK/S', '토큰', '입력', '출력', '캐시', '적중', '환산액']);
+        .findAllByType('text').slice(0, 8).map((node) => node.children.join(''));
+    assert.deepEqual(header, ['모델', '호출', 'TOK/S', '토큰', '입력', '출력', '캐시', '적중']);
     for (const row of cells) {
         assert.equal(row.length, header.length);
         assert.deepEqual(row.map((cell) => cell.props.style.width), cells[0].map((cell) => cell.props.style.width));
@@ -359,7 +360,7 @@ function screenHelpers(tree) {
     const labels = () => tree.root.findAllByType('pressable').map((node) => node.findByType('text').children.join(''));
     const press = async (label) => {
         const element = tree.root.findAllByType('pressable').find((node) =>
-            node.props.accessibilityLabel === label || node.findByType('text').children.join('') === label);
+            node.props.accessibilityLabel === label || node.findAllByType('text').some((text) => text.children.join('') === label));
         assert.ok(element, `button ${label}`);
         await act(async () => element.props.onPress());
     };
@@ -538,6 +539,100 @@ test('compact usage switches Codex and Claude with provider tabs', async (t) => 
     assert.ok(content().includes('claude-model') && !content().includes('codex-model'));
     assert.ok(content().includes('모든 제공자 합계'));
 });
+
+test('wide usage summary compares providers in aligned rows without cost metrics', async (t) => {
+    const { footer, renderScreen } = await loadClient(t, { compact: false });
+    globalThis.__paseodogTestRpc = async () => ({
+        range: { fromMs: 1, toMs: 2 }, totals: { costUsd: 265.45, costBilled: 9, costUnpricedTurns: 1 },
+        series: [], quotas: [],
+        providers: [
+            { provider: 'openai-oauth', label: 'Codex', tokens: 176862097, turns: 1772,
+                outputTokensPerSecond: 26.7, low10OutputTokensPerSecond: 8, high10OutputTokensPerSecond: 50.4,
+                cacheHitRate: 0.968, costUsd: 223.86, costBilled: 9, models: [] },
+            { provider: 'anthropic-oauth', label: 'Claude', tokens: 90299833, turns: 427,
+                outputTokensPerSecond: 112, low10OutputTokensPerSecond: 69.2, high10OutputTokensPerSecond: 139.5,
+                cacheHitRate: 0.976, costUsd: 41.59, costBilled: 0, models: [] },
+        ],
+    });
+    const { tree, press } = await renderScreen(footer);
+    await press('AI 사용량·에이전트 분석');
+    const summary = tree.root.findAllByType('view').find((node) => node.props.accessibilityLabel === '제공자별 사용량 요약');
+    const rows = summary.findAllByType('view').filter((node) => ['Codex 요약', 'Claude 요약'].includes(node.props.accessibilityLabel));
+    const cells = rows.map((row) => row.findAllByType('text'));
+    assert.deepEqual(cells.map((row) => row.map((cell) => cell.children.join(''))), [
+        ['Codex', '26.7 tok/s', '8.0 tok/s', '50.4 tok/s', '176,862,097', '1,772', '96.8%'],
+        ['Claude', '112.0 tok/s', '69.2 tok/s', '139.5 tok/s', '90,299,833', '427', '97.6%'],
+    ]);
+    assert.deepEqual(cells[0].map((cell) => cell.props.style.width), cells[1].map((cell) => cell.props.style.width));
+    assert.ok(cells.flat().every((cell) => cell.props.numberOfLines === 1));
+    for (const mode of ['사용량 요약', '사용량 자세히']) {
+        await press(mode);
+        const content = tree.root.findAllByType('text').map((node) => node.children.join('')).join('\n');
+        assert.doesNotMatch(content, /환산액|API 비용|\$|가격 미확인|비용 합계/);
+    }
+});
+
+for (const compact of [false, true]) {
+    test(`usage remembers selections after closing and remounting (${compact ? 'compact' : 'wide'})`, async (t) => {
+        const { footer, renderScreen } = await loadClient(t, { compact });
+        const calls = [];
+        globalThis.__paseodogTestRpc = async (input, name) => {
+            calls.push({ input, name });
+            if (name === 'engine-status') return { sessions: [] };
+            return { range: { fromMs: 1, toMs: 2 }, totals: {}, series: [], quotas: [], providers: [
+                { provider: 'openai-oauth', label: 'Codex', models: [] },
+                { provider: 'anthropic-oauth', label: 'Claude', models: [] },
+            ] };
+        };
+        let screen = await renderScreen(footer);
+        const button = (label) => screen.tree.root.findAllByType('pressable').find((node) =>
+            node.props.accessibilityLabel === label || node.findAllByType('text').some((text) => text.children.join('') === label));
+        const field = (label) => screen.tree.root.findAllByType('input').find((node) => node.props.accessibilityLabel === label);
+        await screen.press('AI 사용량·에이전트 분석');
+        await screen.press('지난 8시간');
+        await screen.press('사용량 자세히');
+        if (compact) await screen.press('Claude 사용량');
+        await screen.press('사용량 새로고침');
+        assert.deepEqual(calls.at(-1).input, { view: '8h', refresh: 'force' });
+        await screen.press('분석 모달 닫기');
+        const closedCalls = calls.length;
+        assert.equal(screen.tree.root.findAllByType('scroll').length, 0);
+        await screen.press('AI 사용량·에이전트 분석');
+        assert.equal(calls.length, closedCalls + 1);
+        assert.deepEqual(calls.at(-1), { input: { view: '8h', refresh: 'auto' }, name: 'engine-metrics' });
+        assert.equal(button('지난 8시간').props.accessibilityState.selected, true);
+        assert.equal(button('사용량 자세히').props.accessibilityState.selected, true);
+        if (compact) assert.equal(button('Claude 사용량').props.accessibilityState.selected, true);
+        await screen.press('에이전트 실행');
+        await screen.press('사용량·한도');
+        assert.deepEqual(calls.at(-1).input, { view: '8h', refresh: 'auto' });
+        assert.equal(button('사용량 자세히').props.accessibilityState.selected, true);
+        if (compact) assert.equal(button('Claude 사용량').props.accessibilityState.selected, true);
+        await screen.press('사용자 지정');
+        await act(async () => field('사용량 시작일').props.onChangeText('2026-10-01'));
+        const incompleteCalls = calls.length;
+        await screen.press('분석 모달 바깥 닫기');
+        await screen.press('AI 사용량·에이전트 분석');
+        assert.equal(calls.length, incompleteCalls);
+        assert.equal(field('사용량 시작일').props.value, '2026-10-01');
+        assert.equal(field('사용량 종료일').props.value, '');
+        await act(async () => field('사용량 종료일').props.onChangeText('2026-10-02'));
+        await act(async () => screen.tree.unmount());
+        screen = await renderScreen(footer);
+        await screen.press('AI 사용량·에이전트 분석');
+        assert.deepEqual(calls.at(-1), { name: 'engine-metrics',
+            input: { view: 'custom', startDay: '2026-10-01', endDay: '2026-10-02', refresh: 'auto' } });
+        assert.equal(button('사용자 지정').props.accessibilityState.selected, true);
+        assert.equal(button('사용량 자세히').props.accessibilityState.selected, true);
+        assert.equal(field('사용량 시작일').props.value, '2026-10-01');
+        assert.equal(field('사용량 종료일').props.value, '2026-10-02');
+        if (compact) {
+            assert.equal(button('Claude 사용량').props.accessibilityState.selected, true);
+            const summary = screen.tree.root.findAllByType('view').find((node) => node.props.accessibilityLabel === 'Claude 요약');
+            assert.equal(summary.findAllByType('text').length, 14);
+        }
+    });
+}
 
 // 분석 모달은 다른 모달처럼 바깥 영역을 누르면 닫힌다.
 test('analysis modal closes when the backdrop is pressed', async (t) => {
