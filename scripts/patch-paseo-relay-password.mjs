@@ -4,6 +4,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitBlob } from './patch-mixdog.mjs';
+import { CLIENT_SESSION_RECOVERY_EDITS } from '../patches/paseo-session-recovery.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const sourceRoot = resolve(root, 'android/packages');
@@ -37,7 +38,7 @@ export const RELAY_PASSWORD_PATCHES = [
                 + '        }\n        catch (error) {\n            this.logger.error({ err: error }, "Failed to handle daemon pairing offer request");\n',
         ]] },
     { package: 'server', file: 'dist/server/server/websocket-server.js',
-        blob: 'd2faa2c4fbddfe3264a604a36e5b09802386d69c', legacyEditCounts: [3], edits: [[
+        blob: 'd2faa2c4fbddfe3264a604a36e5b09802386d69c', legacyEditCounts: [3, 4], edits: [[
             'import { resolveSessionAdmission } from "./session-admission-auth.js";',
             'import { resolveSessionAdmission } from "./session-admission-auth.js";\nimport { readRelayPasswordHash } from "./relay-password.js";',
         ], [
@@ -49,6 +50,9 @@ export const RELAY_PASSWORD_PATCHES = [
         ], [
             '                relayPasswordHash: pending.identity.transport === "relay" ? readRelayPasswordHash(this.paseoHome) : undefined,\n',
             '                relayPasswordHash: pending.identity.transport === "relay" ? readRelayPasswordHash(this.paseoHome) : undefined,\n                paseoHome: this.paseoHome,\n',
+        ], [
+            'const EXTERNAL_SESSION_DISCONNECT_GRACE_MS = 90000;',
+            'const EXTERNAL_SESSION_DISCONNECT_GRACE_MS = 30 * 60000;',
         ]] },
     { package: 'protocol', file: 'dist/messages.js',
         blob: '7bd464871d7543be7cb4d352511bb62bd3a1d5a2', legacyEditCounts: [2], edits: [[
@@ -62,13 +66,13 @@ export const RELAY_PASSWORD_PATCHES = [
             '    password: z.string().min(1).max(72).optional(),\n    reset: z.boolean().optional(),',
         ]] },
     { package: 'client', file: 'dist/daemon-client.js',
-        blob: 'bbec9f5e4cad7d6f8a809c8e7222e93b8f900e3c', legacyEditCounts: [1], edits: [[
+        blob: 'bbec9f5e4cad7d6f8a809c8e7222e93b8f900e3c', legacyEditCounts: [1, 2], edits: [[
             '                type: "daemon.get_pairing_offer.request",',
             '                type: "daemon.get_pairing_offer.request",\n                ...(options?.password !== undefined ? { password: options.password } : {}),',
         ], [
             '                ...(options?.password !== undefined ? { password: options.password } : {}),',
             '                ...(options?.password !== undefined ? { password: options.password } : {}),\n                ...(options?.reset ? { reset: true } : {}),',
-        ]] },
+        ], ...CLIENT_SESSION_RECOVERY_EDITS] },
 ];
 
 // 작은 인증 모듈은 공유 TypeScript 원본에서 타입만 제거해 동일한 동작으로 배포한다.

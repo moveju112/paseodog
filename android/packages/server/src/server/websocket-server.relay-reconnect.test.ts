@@ -659,7 +659,7 @@ describe("relay external socket reconnect behavior", () => {
     const session = sessionMock.instances[0];
 
     socket1.emit("close", 1006, "");
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(30 * 60_000 - 10_000);
     expect(session.cleanup).not.toHaveBeenCalled();
 
     const socket2 = new MockSocket();
@@ -672,6 +672,13 @@ describe("relay external socket reconnect behavior", () => {
 
     await vi.advanceTimersByTimeAsync(20_000);
     expect(session.cleanup).not.toHaveBeenCalled();
+
+    // A later disconnect gets a fresh grace period, not the original deadline.
+    socket2.emit("close", 1006, "");
+    await vi.advanceTimersByTimeAsync(30 * 60_000 - 1);
+    expect(session.cleanup).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(session.cleanup).toHaveBeenCalledTimes(1);
 
     await server.close();
   });
@@ -1162,7 +1169,7 @@ describe("relay external socket reconnect behavior", () => {
     expect(session.cleanup).not.toHaveBeenCalled();
 
     relaySocket.emit("close", 1006, "");
-    await vi.advanceTimersByTimeAsync(90_000);
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
     expect(session.cleanup).toHaveBeenCalledTimes(1);
 
     await server.close();
@@ -1182,8 +1189,14 @@ describe("relay external socket reconnect behavior", () => {
     const session = sessionMock.instances[0];
 
     socket1.emit("close", 1006, "");
-    await vi.advanceTimersByTimeAsync(90_000);
+    await vi.advanceTimersByTimeAsync(30 * 60_000 - 1);
+    expect(session.cleanup).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
     expect(session.cleanup).toHaveBeenCalledTimes(1);
+
+    const socket2 = new MockSocket();
+    await attachRelayAndHello({ server, socket: socket2, clientId });
+    expect(sessionMock.instances).toHaveLength(2);
 
     await server.close();
   });

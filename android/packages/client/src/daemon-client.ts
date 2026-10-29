@@ -1583,9 +1583,12 @@ export class DaemonClient {
     const transport = this.transport;
     if (!transport || this.connectionVerification === transport) return;
     this.connectionVerification = transport;
+    this.stopLivenessHeartbeat();
+    this.rejectPingProbe(new Error("Connection verification started"));
+    this.consecutiveLivenessFailures = 0;
     // A session probe has its own deadline, independent of a heartbeat that the OS
     // may have suspended. A successful response also proves the session can serve RPCs.
-    void this.ping({ timeoutMs: 3_000 })
+    void this.ping({ timeoutMs: LIVENESS_HEARTBEAT_TIMEOUT_MS })
       .catch((error: unknown) => {
         if (this.transport !== transport || this.connectionState.status !== "connected") return;
         this.disposeTransport(1001, "Connection verification failed");
@@ -1597,7 +1600,10 @@ export class DaemonClient {
         this.ensureConnected();
       })
       .finally(() => {
-        if (this.connectionVerification === transport) this.connectionVerification = null;
+        if (this.connectionVerification === transport) {
+          this.connectionVerification = null;
+          if (this.transport === transport) this.scheduleNextLivenessHeartbeat();
+        }
       });
   }
 
@@ -2247,7 +2253,11 @@ export class DaemonClient {
   }
 
   private scheduleNextLivenessHeartbeat(): void {
-    if (this.connectionState.status !== "connected" || this.livenessHeartbeatTimer) {
+    if (
+      this.connectionState.status !== "connected" ||
+      this.connectionVerification === this.transport ||
+      this.livenessHeartbeatTimer
+    ) {
       return;
     }
     this.livenessHeartbeatTimer = setTimeout(() => {
