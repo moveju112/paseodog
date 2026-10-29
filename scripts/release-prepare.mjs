@@ -9,12 +9,15 @@ import { withTestLock } from './test.mjs';
 import { advanceReleaseVersion } from './release-version.mjs';
 import { desktopRootPids } from './release-apply.mjs';
 import { deliveryPlan, describePlan, validateTargets } from './release-targets.mjs';
+import { validateDeliveryAgentId } from '../plugin/server/delivery-notifications.mjs';
 
 // 준비된 전용 worktree만 전진시킨다. 의존성/Gradle/Metro 복사나 사용자 트리 정리는 하지 않는다.
 export async function prepareRelease(profile, commit, { run = runCommand, adopt = false, start = false, nextVersion = false,
-    reconcileDesktopExit = false, reconcilePluginReload = false, reconcileRuntimeUpdate = false, targets = profile.targets } = {}) {
+    reconcileDesktopExit = false, reconcilePluginReload = false, reconcileRuntimeUpdate = false, targets = profile.targets,
+    notifyAgentId } = {}) {
     const requestStartedAt = new Date().toISOString();
     if (nextVersion && !start) throw new Error('--next-version requires --start');
+    if (notifyAgentId !== undefined) validateDeliveryAgentId(notifyAgentId);
     if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('An exact pushed commit is required');
     targets = validateTargets(targets);
     if (!isAbsolute(profile.sourceRoot || '') || !isAbsolute(profile.cacheRoot || ''))
@@ -156,7 +159,7 @@ export async function prepareRelease(profile, commit, { run = runCommand, adopt 
             env: { ...env, CI: '1', APP_VARIANT: 'production' } });
         if (reconciliation) await writeFile(join(workspace, reconciliationFile),
             JSON.stringify(reconciliation, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
-        const config = { ...profile, workspace, requestStartedAt, targets };
+        const config = { ...profile, workspace, requestStartedAt, targets, notifyAgentId };
         const path = join(workspace, 'config.json');
         await writeFile(path, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
         await writeFile(marker, JSON.stringify({ source, common, workspace }), { mode: 0o600 });
@@ -172,12 +175,14 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         const { values } = parseArgs({ options: { config: { type: 'string' }, commit: { type: 'string' },
             adopt: { type: 'boolean' }, start: { type: 'boolean' }, 'next-version': { type: 'boolean' },
             targets: { type: 'string' },
+            'notify-agent': { type: 'string' },
             'reconcile-desktop-exit': { type: 'boolean' }, 'reconcile-plugin-reload': { type: 'boolean' },
             'reconcile-runtime-update': { type: 'boolean' } } });
         if (!isAbsolute(values.config || '')) throw new Error('--config requires an absolute host profile');
         const profile = JSON.parse(await readFile(values.config, 'utf8'));
         console.log(JSON.stringify(await prepareRelease(profile, values.commit,
             { adopt: values.adopt, start: values.start, nextVersion: values['next-version'],
+                notifyAgentId: values['notify-agent'] ?? process.env.PASEO_AGENT_ID,
                 reconcileDesktopExit: values['reconcile-desktop-exit'], reconcilePluginReload: values['reconcile-plugin-reload'],
                 reconcileRuntimeUpdate: values['reconcile-runtime-update'],
                 // auto(기본)·full 또는 쉼표로 구분한 대상 목록

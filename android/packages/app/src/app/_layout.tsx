@@ -15,7 +15,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { AppState, useWindowDimensions, View } from "react-native";
+import { AppState, Platform, useWindowDimensions, View } from "react-native";
 import { GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -225,11 +225,11 @@ function PushNotificationRouter() {
 
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        // When the app is open, don't show OS banners.
-        shouldShowAlert: false,
-        shouldShowBanner: false,
-        shouldShowList: false,
-        shouldPlaySound: false,
+        // Android local notifications are already filtered by focused conversation.
+        shouldShowAlert: Platform.OS === "android",
+        shouldShowBanner: Platform.OS === "android",
+        shouldShowList: Platform.OS === "android",
+        shouldPlaySound: Platform.OS === "android",
         shouldSetBadge: false,
       }),
     });

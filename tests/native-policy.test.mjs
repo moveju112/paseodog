@@ -146,7 +146,7 @@ test('host-boundary source patch is hash-locked, idempotent and fails on upstrea
     assert.ok(patched.includes(MARKER));assert.equal(patchedSource(patched,expected),patched);assert.throws(()=>patchedSource(original+'//drift',expected),/hash mismatch/);
 });
 // 저장된 프로젝트와 소유권이 일치하는 worktree만 복원하고 실행 경로를 바꾸지 않는다.
-test('native restore accepts the owned managed worktree, including subfolder projects', async () => {
+test('native restore selects its bound worktree among retained worktrees, including subfolder projects', async () => {
     for (const projectSubdir of ['', 'packages/app']) {
         const cwd = `/managed/restore${projectSubdir ? `/${projectSubdir}` : ''}`;
         const projectPath = `/work${projectSubdir ? `/${projectSubdir}` : ''}`;
@@ -156,17 +156,22 @@ test('native restore accepts the owned managed worktree, including subfolder pro
         let closed = 0, asked = 0, lookedUp;
         const runtime = { id: session.id, session, resume: async () => ({ id: session.id, cwd }),
             ask() { asked++; }, abort() {}, compact() {}, close() { closed++; } };
+        const entries = [
+            { id: 'previous', path: '/managed/previous', projectPath, projectSubdir,
+                repoCommonDir: '/work/.git', ownerSessionId: session.id, branch: 'fix/previous', state: 'ready' },
+            { id: 'restore', path: '/managed/restore', projectPath, projectSubdir,
+                repoCommonDir: '/work/.git', ownerSessionId: session.id, branch: 'fix/restore', state: 'ready' },
+        ];
         const engine = await createNativeEngine({
             config: { cwd: projectPath, mcpServers: {} }, nativeSessionId: session.id,
         }, { modules: {
             loadConfig: () => ({}), createMixdogSessionRuntime: async () => runtime,
-            getSessionWorktree: async (id) => {
+            getWorktree: async (id) => {
                 lookedUp = id;
-                return { id: 'restore', path: '/managed/restore', projectPath, projectSubdir,
-                    repoCommonDir: '/work/.git', ownerSessionId: session.id, branch: 'fix/restore', state: 'ready' };
+                return entries.find((entry) => entry.id === id) ?? null;
             },
         } });
-        assert.equal(lookedUp, session.id);
+        assert.equal(lookedUp, workspace.worktreeId);
         assert.equal(engine.id, session.id);
         assert.equal(runtime.session.cwd, cwd);
         assert.equal(runtime.session.workspace, workspace);
@@ -204,7 +209,7 @@ test('native worktree restore rejects mismatched identity, ownership and workspa
                 session, resume: async () => ({ id: 'sess1', cwd: workspace.cwd }),
                 ask() { asked++; }, abort() {}, compact() {}, close() { closed++; },
             }),
-            getSessionWorktree: async () => invalid.entry === null ? null : { ...entry, ...invalid.entry },
+            getWorktree: async () => invalid.entry === null ? null : { ...entry, ...invalid.entry },
         } }), invalid.remoteAttached ? /another live/ : /cwd differs/);
         assert.equal(asked, 0);
         assert.equal(closed, 1);
@@ -223,7 +228,7 @@ test('native worktree restore still rejects a changed model route', async () => 
             session, resume: async () => ({ id: 'sess1', cwd: session.cwd, model: 'other' }),
             ask() { assert.fail('restore must not infer'); }, abort() {}, compact() {}, close() { closed++; },
         }),
-        getSessionWorktree: async () => ({ id: 'restore', path: '/managed/restore', projectSubdir: '',
+        getWorktree: async () => ({ id: 'restore', path: '/managed/restore', projectSubdir: '',
             projectPath: '/work', repoCommonDir: '/work/.git', branch: 'fix/restore',
             ownerSessionId: 'sess1', state: 'ready' }),
     } }), /model differs/);

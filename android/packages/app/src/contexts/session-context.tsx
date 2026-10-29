@@ -5,6 +5,7 @@ import { observeOpenWorkspaceAgentIds } from "@/stores/workspace-layout-store";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useClientActivity } from "@/hooks/use-client-activity";
+import { useDismissViewedAndroidNotifications } from "@/hooks/use-dismiss-viewed-android-notifications";
 import { useAppVisible } from "@/hooks/use-app-visible";
 import { startPushNotifications } from "@/push-notifications";
 import {
@@ -234,6 +235,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
   const focusedTerminalId = useSessionStore(
     (state) => state.sessions[serverId]?.focusedTerminalId ?? null,
   );
+  useDismissViewedAndroidNotifications(serverId, focusedAgentId);
   const _sessionStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attentionNotifiedRef = useRef<Map<string, number>>(new Map());
   const appStateRef = useRef(AppState.currentState);

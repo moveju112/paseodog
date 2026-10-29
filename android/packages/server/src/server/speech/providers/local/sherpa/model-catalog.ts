@@ -50,6 +50,38 @@ export const SHERPA_ONNX_MODEL_CATALOG = {
     description: "Kokoro TTS (higher quality; larger).",
     defaultFor: "tts",
   },
+  "whisper-base-int8": {
+    kind: "stt-offline",
+    archiveUrl:
+      "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-base.tar.bz2",
+    extractedDir: "sherpa-onnx-whisper-base",
+    requiredFiles: ["base-encoder.int8.onnx", "base-decoder.int8.onnx", "base-tokens.txt"],
+    description: "Whisper Base (multilingual including Korean, CPU int8).",
+  },
+  "whisper-small-int8": {
+    kind: "stt-offline",
+    archiveUrl:
+      "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-small.tar.bz2",
+    extractedDir: "sherpa-onnx-whisper-small",
+    requiredFiles: ["small-encoder.int8.onnx", "small-decoder.int8.onnx", "small-tokens.txt"],
+    description: "Whisper Small (multilingual including Korean, CPU int8).",
+  },
+  "whisper-turbo-int8": {
+    kind: "stt-offline",
+    archiveUrl:
+      "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-turbo.tar.bz2",
+    extractedDir: "sherpa-onnx-whisper-turbo",
+    requiredFiles: ["turbo-encoder.int8.onnx", "turbo-decoder.int8.onnx", "turbo-tokens.txt"],
+    description: "Whisper Large-v3 Turbo (multilingual including Korean, CPU int8).",
+  },
+  "whisper-turbo-cuda": {
+    kind: "stt-offline",
+    archiveUrl:
+      "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-turbo.tar.bz2",
+    extractedDir: "sherpa-onnx-whisper-turbo",
+    requiredFiles: ["turbo-encoder.int8.onnx", "turbo-decoder.int8.onnx", "turbo-tokens.txt"],
+    description: "Whisper Large-v3 Turbo (multilingual including Korean, NVIDIA CUDA).",
+  },
 } as const satisfies Record<string, SherpaOnnxCatalogEntry>;
 
 export type SherpaOnnxModelId = keyof typeof SHERPA_ONNX_MODEL_CATALOG;

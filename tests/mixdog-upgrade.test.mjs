@@ -256,7 +256,7 @@ test('Anthropic receives no internal attachment metadata and PDF upload remains 
     assert.ok(part.attachmentReference);
     assert.throws(() => promptText({ clientMessageId: 'fixture-pdf', input: { type: 'message',
         content: [{ type: 'file', mimeType: 'application/pdf', data: 'JVBERg==' }],
-    } }), /Only text and images are supported/);
+    } }), /unsupported attachments are not discarded/);
 });
 
 test('persisted context retains late MCP tools while dropping transient turn aliases', () => {
@@ -272,6 +272,25 @@ test('persisted context retains late MCP tools while dropping transient turn ali
     assert.deepEqual(restored.pendingDeferredToolDelta, session.pendingDeferredToolDelta);
     assert.equal(Object.hasOwn(restored, 'liveTurnMessages'), false);
     assert.equal(Object.hasOwn(restored, '_providerPrefixGuardState'), false);
+});
+
+// 같은 세션에 보관된 이전 worktree가 앞에 있어도 저장된 ID로 현재 항목을 고른다.
+test('native adapter resolves the requested retained worktree by ID, not its session owner', async () => {
+    const entries = Object.fromEntries(['previous', 'current'].map((id) => [id, {
+        id, path: `/managed/${id}`, projectPath: '/work', repoCommonDir: '/work/.git',
+        branch: `fix/${id}`, ownerSessionId: 'retained-session', state: 'ready',
+        createdAt: 1, baseCommit: null,
+    }]));
+    writeJsonAtomicSync(join(home, 'data', 'worktrees-v1', 'registry.json'), { version: 1, entries });
+    const modules = await loadNativeModules();
+    for (const id of ['current', 'previous']) {
+        const entry = await modules.getWorktree(id);
+        assert.equal(entry.id, id);
+        assert.equal(entry.path, entries[id].path);
+        assert.equal(entry.ownerSessionId, 'retained-session');
+        assert.equal(entry.projectSubdir, '');
+    }
+    assert.equal(await modules.getWorktree('missing'), null);
 });
 
 test('the actual pinned native runtime opens and closes through the adapter without model inference', async () => {

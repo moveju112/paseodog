@@ -117,6 +117,13 @@ async function install(argv) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-    try { await install(process.argv.slice(2)); }
+    try {
+        const argv = process.argv.slice(2);
+        if (argv.includes('--engine-dependencies-only')) {
+            for (const step of engineInstallSteps()) run(step);
+        } else {
+            await install(argv);
+        }
+    }
     catch (error) { console.error(error.message); process.exitCode = 1; }
 }

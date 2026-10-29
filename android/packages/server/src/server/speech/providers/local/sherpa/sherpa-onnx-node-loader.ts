@@ -103,6 +103,12 @@ export function loadSherpaOnnxNode(): SherpaOnnxNodeModule {
 
   const require = createRequire(import.meta.url);
   const attempts: LoadAttempt[] = [];
+  if (process.env.PASEODOG_SPEECH_GPU === "1") {
+    const gpu = resolveSherpaLoaderEnv();
+    if (!gpu?.modulePath) throw new Error("Verified GPU speech runtime required");
+    cached = require(gpu.modulePath) as SherpaOnnxNodeModule;
+    return cached;
+  }
 
   // Pass through upstream support matrix first.
   const direct = loadWithRequire(require, "sherpa-onnx-node", attempts);

@@ -192,7 +192,7 @@ test('work record renderer is collapsed by default, expands on press and collaps
     delete globalThis.IS_REACT_ACT_ENVIRONMENT;
 });
 
-test('a turn that ended on a closed provider connection offers one explicit continue request', async () => {
+for (const surface of ['app', 'web']) test(`${surface}: recoverable interruptions offer one explicit continue request`, async () => {
     const req = createRequire(new URL('../plugin/package.json', import.meta.url));
     const React = req('react');
     const { create, act } = req('react-test-renderer');
@@ -202,22 +202,88 @@ test('a turn that ended on a closed provider connection offers one explicit cont
     const sent = [];
     let fail = false;
     const client = { sendAgentMessage: async (agentId, text, options) => { sent.push([agentId, text, options]); if (fail) throw new Error('offline'); } };
-    const render = createRenderer({ React, View: 'view', Text: 'text', Image: 'image', Pressable: 'pressable',
+    const deps = { React, View: 'view', Text: 'text', Image: 'image', Pressable: 'pressable',
         StyleSheet: { create: (make) => make(theme) }, useTranslation: () => ({ i18n: { language: 'ko' } }),
-        useAssistantNickname: () => 'Dog', useAssistantIcon: () => '', useAssistantPhoto: () => '', getClient: (serverId) => (serverId === 'srv' ? client : null) });
+        useAssistantNickname: () => 'Dog', useAssistantIcon: () => '', useAssistantPhoto: () => '', getClient: (serverId) => (serverId === 'srv' ? client : null) };
+    let render;
+    if (surface === 'app') render = createRenderer(deps);
+    else {
+        // 실제 웹 주입문을 독립 실행해 모듈 바깥 값에 의존하지 않는지 함께 검사한다.
+        const code = WORK_RECORD_EDITS.find(([before]) => before.startsWith('function ae('))[1];
+        const prefix = code.slice(0, code.indexOf('function ae('));
+        render = new Function('h', 'f', 'l', 'y', 'F', 'k', prefix + ';return pdRenderWorkRecord;')(
+            React, { withUnistyles: component => component, StyleSheet: deps.StyleSheet }, deps,
+            { useTranslation: deps.useTranslation },
+            { useSettings: selector => selector({ assistantNickname: 'Dog', assistantIcon: '', assistantPhoto: '' }) },
+            { useSessionStore: { getState: () => ({ sessions: { srv: { client } } }) } },
+        );
+    }
     const body = (layout) => React.createElement('body', { id: layout.item.id }, layout.item.text);
     const error = { kind: 'assistant_message', id: 'e', text: '[System Error] Provider connection closed', answerStart: true };
     const session = { serverId: 'srv', agentId: 'agent-1' };
     const button = (tree) => tree.root.findAll((node) => node.type === 'pressable' && node.props.testID === 'assistant-resume-after-disconnect');
     let tree;
-    // 대화 끝이 아니거나, 진행 중이거나, 세션 정보가 없거나(읽기 전용), 다른 오류면 버튼이 없다.
-    for (const [row, target] of [[{ item: error, belowItem: { kind: 'user_message' }, phase: 'complete' }, session],
-        [{ item: error, belowItem: null, phase: 'streaming' }, session], [{ item: error, belowItem: null, phase: 'complete' }, undefined],
-        [{ item: { ...error, text: '[System Error] Usage limit' }, belowItem: null, phase: 'complete' }, session]]) {
-        await act(async () => { tree = create(render(row, body, target)); });
+    const recoverableMessages = [
+        'Provider connection closed',
+        'Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue.',
+        'Cursor connection timed out',
+        'Cursor request timed out',
+        'Cursor stream ended before turnEnded',
+        'Cursor stream closed before its end frame',
+        'terminated', 'socket hang up', 'other side closed', 'Connection error.',
+        'fetch failed', 'Failed to fetch', "Couldn't fetch.", 'Load failed', 'Network Error',
+        'Connection to the provider was lost.',
+        'Connection to the provider was lost (ECONNRESET).',
+        'Could not reach the provider (EAI_AGAIN).',
+        'The provider did not respond in time (ETIMEDOUT).',
+        'Provider is temporarily unavailable (503).',
+        'OpenAI OAuth WS closed before response.completed (code=1006)',
+        'OpenAI WS handshake closed before open (code=1012, reason=service restart)',
+        'xAI WS closed before response.completed (code=1011, reason=internal error)',
+        'Provider connection closed\n\ncode: ECONNRESET\n\nConnection diagnostic',
+    ];
+    for (const message of recoverableMessages) {
+        const item = { ...error, text: `[System Error] ${message}` };
+        await act(async () => { tree = create(render({ item, belowItem: null, phase: 'complete' }, body, session)); });
+        assert.equal(button(tree).length, 1, message);
+        await act(async () => tree.unmount());
+        // 과거 턴·진행 중·읽기 전용에서는 복구 버튼을 표시하지 않는다.
+        for (const [row, target] of [
+            [{ item, belowItem: { kind: 'user_message' }, phase: 'complete' }, session],
+            [{ item, belowItem: null, phase: 'streaming' }, session],
+            [{ item, belowItem: null, phase: 'complete' }, undefined],
+        ]) {
+            await act(async () => { tree = create(render(row, body, target)); });
+            assert.equal(button(tree).length, 0, message);
+            await act(async () => tree.unmount());
+        }
+    }
+    const nonRecoverableMessages = [
+        '[System Error] Usage limit',
+        '[System Error] Quota exceeded. Check your plan and billing details.',
+        '[System Error] Invalid API key',
+        '[System Error] Permission denied',
+        '[System Error] content_filter',
+        '[System Error] Context window exceeded',
+        '[System Error] User interrupted',
+        '[System Error] Approval timed out; no action was authorized',
+        '[System Error] Journal persistence failed; execution outcome is uncertain',
+        '[System Error] Provider TLS certificate check failed (CERT_HAS_EXPIRED).',
+        '[System Error] OpenAI OAuth WS closed before response.completed (code=1008, reason=policy violation)',
+        '[System Error] OpenAI OAuth WS closed before response.completed (code=4401, reason=unauthorized)',
+        '[System Error] Unknown error\n\ncode: ECONNRESET\n\nProvider connection closed',
+        '[System Error] Permission denied: fetch failed',
+        '[System Error] A shell job terminated by signal',
+        'Provider connection closed',
+        'Example: [System Error] Provider connection closed',
+        '[System Error] Provider connection closed; review partial file changes before retrying',
+    ];
+    for (const text of nonRecoverableMessages) {
+        await act(async () => { tree = create(render({ item: { ...error, text }, belowItem: null, phase: 'complete' }, body, session)); });
         assert.equal(button(tree).length, 0);
         await act(async () => tree.unmount());
     }
+    assert.equal(sent.length, 0, 'rendering errors never sends a continuation automatically');
     await act(async () => { tree = create(render({ item: error, belowItem: null, phase: 'complete' }, body, session)); });
     const [resume] = button(tree);
     assert.deepEqual(resume.findAllByType('text').map((node) => node.props.children), ['이어서 진행하기']);

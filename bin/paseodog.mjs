@@ -43,6 +43,7 @@ if(!command||['help','--help','-h'].includes(command) || (before.length === 1 &&
 let script,argv,nodeOptions=[];
 if(command==='desktop-update'){script=join(root,'scripts/desktop-release.mjs');argv=args;}
 else if(command==='doctor'){script=join(root,'scripts/doctor.mjs');argv=args;}
+else if(command==='delivery-notify'){script=join(root,'scripts/delivery-notify.mjs');argv=args;}
 else if(command==='live-test'){script=join(root,'scripts/live-smoke.mjs');argv=args;}
 else if(command==='auth'){script=nativeBin;argv=args;}
 else{

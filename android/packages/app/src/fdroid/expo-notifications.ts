@@ -38,3 +38,9 @@ export function addNotificationResponseReceivedListener() {
 export async function getLastNotificationResponseAsync() {
   return null;
 }
+
+export async function getPresentedNotificationsAsync() {
+  return [];
+}
+
+export async function dismissNotificationAsync(_notificationIdentifier: string): Promise<void> {}

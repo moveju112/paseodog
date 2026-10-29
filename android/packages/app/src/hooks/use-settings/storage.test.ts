@@ -924,12 +924,10 @@ describe("saveAppSettings", () => {
       deps,
     });
 
-    expect(deps.storage.entries.get(APP_SETTINGS_KEY)).toBe(
-      JSON.stringify({
-        ...DEFAULT_CLIENT_SETTINGS,
-        terminalScrollbackLines: 42_000,
-      }),
-    );
+    expect(JSON.parse(deps.storage.entries.get(APP_SETTINGS_KEY) ?? "null")).toEqual({
+      ...DEFAULT_CLIENT_SETTINGS,
+      terminalScrollbackLines: 42_000,
+    });
   });
 
   it("normalizes a legacy cached settings shape before saving", async () => {
