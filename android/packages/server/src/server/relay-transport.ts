@@ -56,6 +56,7 @@ type ControlMessage =
 const CONTROL_PING_INTERVAL_MS = 10_000;
 const CONTROL_STALE_TIMEOUT_MS = 30_000;
 const CONTROL_READY_TIMEOUT_MS = 8_000;
+const DATA_RECONNECT_MAX_ATTEMPTS = 3;
 const RELAY_WEBSOCKET_OPTIONS = { handshakeTimeout: 10_000, perMessageDeflate: false } as const;
 
 function createDefaultRelayWebSocket(url: string): RelayWebSocketLike {
@@ -122,13 +123,24 @@ export function startRelayTransport({
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempt = 0;
   const dataSockets = new Map<string, RelayWebSocketLike>(); // connectionId -> ws
+  const dataReconnects = new Map<string, ReturnType<typeof setTimeout>>();
   let controlKeepaliveInterval: ReturnType<typeof setInterval> | null = null;
   let controlReadyTimeout: ReturnType<typeof setTimeout> | null = null;
   let controlLastSeenAt = 0;
   let controlConnectionSeq = 0;
 
+  const cancelDataReconnect = (connectionId: string): void => {
+    const timeout = dataReconnects.get(connectionId);
+    if (timeout === undefined) return;
+    clearTimeout(timeout);
+    dataReconnects.delete(connectionId);
+  };
+
   const stop = async (): Promise<void> => {
     stopped = true;
+    for (const connectionId of dataReconnects.keys()) {
+      cancelDataReconnect(connectionId);
+    }
     if (reconnectTimeout) {
       clearTimeout(reconnectTimeout);
       reconnectTimeout = null;
@@ -266,6 +278,9 @@ export function startRelayTransport({
         "relay_control_disconnected",
       );
       controlWs = null;
+      for (const clientConnectionId of dataReconnects.keys()) {
+        cancelDataReconnect(clientConnectionId);
+      }
       if (controlKeepaliveInterval) {
         clearInterval(controlKeepaliveInterval);
         controlKeepaliveInterval = null;
@@ -317,14 +332,15 @@ export function startRelayTransport({
         return;
       }
       if (msg.type === "disconnected") {
+        cancelDataReconnect(msg.connectionId);
         const existing = dataSockets.get(msg.connectionId);
         if (existing) {
+          dataSockets.delete(msg.connectionId);
           try {
             existing.close(1001, "Client disconnected");
           } catch {
             // ignore
           }
-          dataSockets.delete(msg.connectionId);
         }
       }
     });
@@ -342,10 +358,12 @@ export function startRelayTransport({
     }, delayMs);
   };
 
-  const ensureClientDataSocket = (connectionId: string): void => {
+  const ensureClientDataSocket = (connectionId: string, attempt = 0): void => {
     if (stopped) return;
     if (!connectionId) return;
     if (dataSockets.has(connectionId)) return;
+    if (dataReconnects.has(connectionId)) return;
+    const controlSocket = controlWs;
 
     const url = buildRelayWebSocketUrl({
       endpoint: relayEndpoint,
@@ -400,6 +418,35 @@ export function startRelayTransport({
       );
       if (dataSockets.get(connectionId) === socket) {
         dataSockets.delete(connectionId);
+        // 열린 소켓이나 E2EE 채널은 재생하지 않고, 최초 연결의 일시 실패만 짧게 재시도한다.
+        if (
+          !stopped &&
+          !attached &&
+          code === 1006 &&
+          attempt < DATA_RECONNECT_MAX_ATTEMPTS &&
+          controlWs === controlSocket &&
+          controlSocket?.readyState === WebSocket.OPEN
+        ) {
+          const nextAttempt = attempt + 1;
+          const delayMs = 1_000 * nextAttempt;
+          const timeout = setTimeout(() => {
+            if (dataReconnects.get(connectionId) !== timeout) return;
+            dataReconnects.delete(connectionId);
+            if (
+              stopped ||
+              controlWs !== controlSocket ||
+              controlSocket?.readyState !== WebSocket.OPEN
+            ) {
+              return;
+            }
+            ensureClientDataSocket(connectionId, nextAttempt);
+          }, delayMs);
+          dataReconnects.set(connectionId, timeout);
+          relayLogger.info(
+            { connectionId, attempt: nextAttempt, delayMs },
+            "relay_data_reconnect_scheduled",
+          );
+        }
       }
     });
 

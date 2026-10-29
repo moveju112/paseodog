@@ -146,6 +146,210 @@ describe("relay-transport control lifecycle", () => {
     vi.useRealTimers();
   });
 
+  test("retries a data connection that fails before opening without another control message", async () => {
+    vi.useFakeTimers();
+    const attachedSockets: unknown[] = [];
+    const controller = startRelayTransport({
+      logger: pino({ level: "silent" }),
+      attachSocket: async (socket) => {
+        attachedSockets.push(socket);
+      },
+      relayEndpoint: "relay.paseo.sh:443",
+      relayUseTls: true,
+      serverId: "srv_test",
+      createWebSocket: relay.createWebSocket,
+    });
+    controllers.push(controller);
+    const control = relay.sockets[0];
+    control.open();
+    control.message(JSON.stringify({ type: "sync", connectionIds: ["retry"] }));
+    const failed = relay.sockets[1];
+    failed.close(1006, "");
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(relay.sockets).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(relay.sockets).toHaveLength(3);
+    const replacement = relay.sockets[2];
+    expect(replacement.url).toBe(failed.url);
+    replacement.open();
+    expect(attachedSockets).toEqual([replacement]);
+    expect(control.terminateCalls).toBe(0);
+  });
+
+  test("bounds data retries and does not duplicate them on repeated control notifications", async () => {
+    vi.useFakeTimers();
+    const controller = startRelayTransport({
+      logger: pino({ level: "silent" }),
+      attachSocket: async () => {},
+      relayEndpoint: "relay.paseo.sh:443",
+      relayUseTls: true,
+      serverId: "srv_test",
+      createWebSocket: relay.createWebSocket,
+    });
+    controllers.push(controller);
+    const control = relay.sockets[0];
+    control.open();
+    const connected = JSON.stringify({ type: "connected", connectionId: "retry" });
+    control.message(connected);
+
+    for (const delayMs of [1_000, 2_000, 3_000]) {
+      const attempts = relay.sockets.length;
+      relay.sockets.at(-1)?.close(1006, "");
+      control.message(connected);
+      expect(relay.sockets).toHaveLength(attempts);
+      await vi.advanceTimersByTimeAsync(delayMs);
+      expect(relay.sockets).toHaveLength(attempts + 1);
+    }
+    relay.sockets.at(-1)?.close(1006, "");
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(relay.sockets).toHaveLength(5);
+  });
+
+  test.each(["disconnected", "stop"] as const)(
+    "cancels a pending data retry on %s",
+    async (event) => {
+      vi.useFakeTimers();
+      const controller = startRelayTransport({
+        logger: pino({ level: "silent" }),
+        attachSocket: async () => {},
+        relayEndpoint: "relay.paseo.sh:443",
+        relayUseTls: true,
+        serverId: "srv_test",
+        createWebSocket: relay.createWebSocket,
+      });
+      controllers.push(controller);
+      const control = relay.sockets[0];
+      control.open();
+      control.message(JSON.stringify({ type: "connected", connectionId: "retry" }));
+      relay.sockets[1].close(1006, "");
+      if (event === "stop") {
+        await controller.stop();
+      } else {
+        control.message(JSON.stringify({ type: "disconnected", connectionId: "retry" }));
+      }
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(relay.sockets).toHaveLength(2);
+    },
+  );
+
+  test("waits for control synchronization instead of retrying an unknown client", async () => {
+    vi.useFakeTimers();
+    const controller = startRelayTransport({
+      logger: pino({ level: "silent" }),
+      attachSocket: async () => {},
+      relayEndpoint: "relay.paseo.sh:443",
+      relayUseTls: true,
+      serverId: "srv_test",
+      createWebSocket: relay.createWebSocket,
+    });
+    controllers.push(controller);
+    const control = relay.sockets[0];
+    control.open();
+    control.message(JSON.stringify({ type: "connected", connectionId: "retry" }));
+    relay.sockets[1].close(1006, "");
+    control.close(1006, "");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(relay.sockets).toHaveLength(3);
+    const nextControl = relay.sockets[2];
+    expect(new URL(nextControl.url).searchParams.has("connectionId")).toBe(false);
+    nextControl.open();
+    nextControl.message(JSON.stringify({ type: "sync", connectionIds: [] }));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(relay.sockets).toHaveLength(3);
+  });
+
+  test("does not retry an established data socket after it closes", async () => {
+    vi.useFakeTimers();
+    const controller = startRelayTransport({
+      logger: pino({ level: "silent" }),
+      attachSocket: async () => {},
+      relayEndpoint: "relay.paseo.sh:443",
+      relayUseTls: true,
+      serverId: "srv_test",
+      createWebSocket: relay.createWebSocket,
+    });
+    controllers.push(controller);
+    const control = relay.sockets[0];
+    control.open();
+    control.message(JSON.stringify({ type: "connected", connectionId: "established" }));
+    relay.sockets[1].open();
+    relay.sockets[1].close(1006, "");
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(relay.sockets).toHaveLength(2);
+  });
+
+  test("does not retry an old in-flight data socket after control ownership changes", async () => {
+    vi.useFakeTimers();
+    const controller = startRelayTransport({
+      logger: pino({ level: "silent" }),
+      attachSocket: async () => {},
+      relayEndpoint: "relay.paseo.sh:443",
+      relayUseTls: true,
+      serverId: "srv_test",
+      createWebSocket: relay.createWebSocket,
+    });
+    controllers.push(controller);
+    const control = relay.sockets[0];
+    control.open();
+    control.message(JSON.stringify({ type: "connected", connectionId: "old-client" }));
+    const oldData = relay.sockets[1];
+    control.close(1006, "");
+    await vi.advanceTimersByTimeAsync(1_000);
+    const nextControl = relay.sockets[2];
+    nextControl.open();
+    nextControl.message(JSON.stringify({ type: "sync", connectionIds: [] }));
+    oldData.close(1006, "");
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(relay.sockets).toHaveLength(3);
+  });
+
+  test("ignores a stale socket close after its data replacement starts", async () => {
+    vi.useFakeTimers();
+    const controller = startRelayTransport({
+      logger: pino({ level: "silent" }),
+      attachSocket: async () => {},
+      relayEndpoint: "relay.paseo.sh:443",
+      relayUseTls: true,
+      serverId: "srv_test",
+      createWebSocket: relay.createWebSocket,
+    });
+    controllers.push(controller);
+    const control = relay.sockets[0];
+    control.open();
+    control.message(JSON.stringify({ type: "connected", connectionId: "retry" }));
+    const failed = relay.sockets[1];
+    failed.close(1006, "");
+    await vi.advanceTimersByTimeAsync(1_000);
+    const replacement = relay.sockets[2];
+    failed.close(1006, "");
+    control.message(JSON.stringify({ type: "connected", connectionId: "retry" }));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(relay.sockets).toHaveLength(3);
+    replacement.open();
+    expect(replacement.readyState).toBe(FakeRelayWebSocket.OPEN);
+  });
+
+  test("does not retry a pending data socket explicitly closed by a client departure", async () => {
+    vi.useFakeTimers();
+    const controller = startRelayTransport({
+      logger: pino({ level: "silent" }),
+      attachSocket: async () => {},
+      relayEndpoint: "relay.paseo.sh:443",
+      relayUseTls: true,
+      serverId: "srv_test",
+      createWebSocket: relay.createWebSocket,
+    });
+    controllers.push(controller);
+    const control = relay.sockets[0];
+    control.open();
+    control.message(JSON.stringify({ type: "connected", connectionId: "departed" }));
+    control.message(JSON.stringify({ type: "disconnected", connectionId: "departed" }));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(relay.sockets).toHaveLength(2);
+    expect(relay.sockets[1].readyState).toBe(FakeRelayWebSocket.CLOSED);
+  });
+
   test("releases a stalled encrypted data connection without restarting control", async () => {
     vi.useFakeTimers();
     let attachments = 0;
