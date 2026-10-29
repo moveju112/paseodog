@@ -256,7 +256,7 @@ test('Anthropic receives no internal attachment metadata and PDF upload remains 
     assert.ok(part.attachmentReference);
     assert.throws(() => promptText({ clientMessageId: 'fixture-pdf', input: { type: 'message',
         content: [{ type: 'file', mimeType: 'application/pdf', data: 'JVBERg==' }],
-    } }), /Only text and images are supported/);
+    } }), /unsupported attachments are not discarded/);
 });
 
 test('persisted context retains late MCP tools while dropping transient turn aliases', () => {
