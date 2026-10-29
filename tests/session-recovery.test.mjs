@@ -7,7 +7,7 @@ import { RELAY_PASSWORD_PATCHES, patchedRelayPasswordSource } from '../scripts/p
 import { withSessionRecovery, withoutSessionRecovery } from '../patches/paseo-session-recovery.mjs';
 
 const packages = new URL('../tools/node_modules/@getpaseo/', import.meta.url);
-const bundle = readFileSync(new URL(`server/${COMPOSER_FILE}`, packages), 'utf8');
+const bundle = withoutSessionRecovery(readFileSync(new URL(`server/${COMPOSER_FILE}`, packages), 'utf8'));
 const readPatched = (file) => {
     const spec = RELAY_PASSWORD_PATCHES.find((entry) => entry.file === file);
     return patchedRelayPasswordSource(readFileSync(new URL(`${spec.package}/${file}`, packages), 'utf8'), spec);
