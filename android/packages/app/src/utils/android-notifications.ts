@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { loadAppSettingsFromStorage } from "@/hooks/use-settings";
+import { resolveNotificationTarget } from "./notification-routing";
 
 const CHANNEL_ID = "paseodog-completion";
 
@@ -31,4 +32,21 @@ export async function sendAndroidNotification(payload: {
     trigger: { channelId: CHANNEL_ID },
   });
   return true;
+}
+
+export async function dismissAndroidSessionNotifications(
+  serverId: string,
+  agentId: string,
+): Promise<void> {
+  const notifications = await Notifications.getPresentedNotificationsAsync();
+  await Promise.all(
+    notifications
+      .filter((notification) => {
+        const target = resolveNotificationTarget(notification.request.content.data);
+        return target.serverId === serverId && target.agentId === agentId;
+      })
+      .map((notification) =>
+        Notifications.dismissNotificationAsync(notification.request.identifier),
+      ),
+  );
 }

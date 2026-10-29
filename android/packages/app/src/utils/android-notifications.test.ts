@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   request: vi.fn(),
   channel: vi.fn(),
   schedule: vi.fn(),
+  presented: vi.fn(),
+  dismiss: vi.fn(),
 }));
 vi.mock("@/hooks/use-settings", () => ({ loadAppSettingsFromStorage: mocks.load }));
 vi.mock("expo-notifications", () => ({
@@ -13,10 +15,13 @@ vi.mock("expo-notifications", () => ({
   requestPermissionsAsync: mocks.request,
   setNotificationChannelAsync: mocks.channel,
   scheduleNotificationAsync: mocks.schedule,
+  getPresentedNotificationsAsync: mocks.presented,
+  dismissNotificationAsync: mocks.dismiss,
   AndroidImportance: { HIGH: 4 },
   AndroidNotificationVisibility: { PRIVATE: 0 },
 }));
 import {
+  dismissAndroidSessionNotifications,
   requestAndroidNotificationPermission,
   sendAndroidNotification,
 } from "./android-notifications";
@@ -26,6 +31,8 @@ describe("Android local notifications", () => {
     vi.resetAllMocks();
     mocks.load.mockResolvedValue({ backgroundNotificationsEnabled: true });
     mocks.permissions.mockResolvedValue({ granted: true, canAskAgain: true });
+    mocks.presented.mockResolvedValue([]);
+    mocks.dismiss.mockResolvedValue(undefined);
   });
   it("sends a sounding local notification with its navigation target", async () => {
     const payload = { title: "Done", data: { serverId: "s", agentId: "a" } };
@@ -67,5 +74,50 @@ describe("Android local notifications", () => {
     mocks.permissions.mockResolvedValue({ granted: false, canAskAgain: false });
     expect(await requestAndroidNotificationPermission()).toBe(false);
     expect(mocks.request).not.toHaveBeenCalled();
+  });
+
+  it("dismisses every notification for the viewed session, preserving other sessions and hosts", async () => {
+    const notification = (identifier: string, data: Record<string, unknown> | null) => ({
+      request: { identifier, content: { data } },
+    });
+    mocks.presented.mockResolvedValue([
+      notification("finished", { serverId: "host", agentId: "agent" }),
+      notification("permission", { serverId: "host", agentId: "agent" }),
+      notification("other-session", { serverId: "host", agentId: "other" }),
+      notification("other-host", { serverId: "other", agentId: "agent" }),
+      notification("terminal", { serverId: "host", terminalId: "terminal" }),
+      notification("background-service", null),
+      notification("test", {}),
+      notification("missing-host", { agentId: "agent" }),
+    ]);
+
+    await dismissAndroidSessionNotifications("host", "agent");
+
+    expect(mocks.dismiss.mock.calls).toEqual([["finished"], ["permission"]]);
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+
+  it("can clear existing notifications even after notifications are disabled", async () => {
+    mocks.load.mockResolvedValue({ backgroundNotificationsEnabled: false });
+    mocks.permissions.mockResolvedValue({ granted: false });
+    mocks.presented.mockResolvedValue([
+      { request: { identifier: "old", content: { data: { serverId: "s", agentId: "a" } } } },
+    ]);
+
+    await dismissAndroidSessionNotifications("s", "a");
+
+    expect(mocks.dismiss).toHaveBeenCalledWith("old");
+    expect(mocks.load).not.toHaveBeenCalled();
+    expect(mocks.permissions).not.toHaveBeenCalled();
+  });
+
+  it("leaves an empty notification tray unchanged", async () => {
+    await dismissAndroidSessionNotifications("host", "agent");
+    expect(mocks.dismiss).not.toHaveBeenCalled();
+  });
+
+  it("propagates dismissal failures to the caller", async () => {
+    mocks.presented.mockRejectedValue(new Error("tray unavailable"));
+    await expect(dismissAndroidSessionNotifications("s", "a")).rejects.toThrow("tray unavailable");
   });
 });

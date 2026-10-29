@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { createProcessScope } from '../plugin/server/process-scope.mjs';
 import { createWindowsJobScope, ensureWindowsJobHelper, windowsCompilerPath, windowsJobHelperPath } from '../plugin/server/windows-job.mjs';
 import { engineInstallSteps, installSteps, launcherScript } from '../scripts/install.mjs';
+import { scratchRoot } from '../scripts/paths.mjs';
 
 const launchFor = (stateDir) => ({ command: 'C:\\Program Files\\nodejs\\node.exe', args: ['C:\\pd\\engine.mjs'],
     env: { PASEODOG_STATE_DIR: stateDir } });
@@ -108,6 +111,38 @@ test('engine installation completes every pinned child hook before the pruning h
     assert.deepEqual([...hooks].sort(), required.sort());
     assert.equal(hooks.at(-1), 'node_modules/mixdog');
     for (const path of hooks.slice(0, -1)) assert.ok(path.startsWith('node_modules/mixdog/node_modules/'));
+});
+
+test('engine dependency-only CLI runs the shared recipe and stops immediately on a failed hook', {
+    skip: process.platform === 'win32',
+}, (t) => {
+    const directory = mkdtempSync(join(scratchRoot, 'paseodog-engine-deps-test-'));
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    writeFileSync(join(directory, 'npm'), `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = process.env.ENGINE_INSTALL_TEST_LOG;
+fs.appendFileSync(path, JSON.stringify(process.argv.slice(2)) + '\\n');
+const count = fs.readFileSync(path, 'utf8').trim().split('\\n').length;
+if (String(count) === process.env.ENGINE_INSTALL_TEST_FAIL_AT) process.exit(23);
+`, { mode: 0o755 });
+    const expected = engineInstallSteps().map(({ args }) => args);
+    for (const failAt of [0, 3]) {
+        const logPath = join(directory, `commands-${failAt}.jsonl`);
+        const result = spawnSync(process.execPath, [
+            fileURLToPath(new URL('../scripts/install.mjs', import.meta.url)),
+            '--engine-dependencies-only',
+        ], {
+            env: { ...process.env, PATH: `${directory}${delimiter}${process.env.PATH}`,
+                ENGINE_INSTALL_TEST_LOG: logPath, ENGINE_INSTALL_TEST_FAIL_AT: String(failAt) },
+            encoding: 'utf8',
+            timeout: 10_000,
+        });
+        assert.equal(result.error, undefined);
+        assert.equal(result.status, failAt ? 1 : 0, result.stderr);
+        const commands = readFileSync(logPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+        assert.deepEqual(commands, failAt ? expected.slice(0, failAt) : expected);
+        if (failAt) assert.match(result.stderr, /Install step failed \(23\)/);
+    }
 });
 
 test('launchers preserve paths with spaces and special characters', () => {
