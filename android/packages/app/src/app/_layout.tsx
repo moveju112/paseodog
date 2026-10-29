@@ -3,7 +3,6 @@ import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { PortalProvider } from "@gorhom/portal";
 import { LucideProvider } from "lucide-react-native";
 import * as Notifications from "expo-notifications";
-import { BackgroundNotifications } from "@/components/background-notifications";
 import { Stack, useNavigationContainerRef, usePathname, useRouter } from "expo-router";
 import {
   createContext,
@@ -673,7 +672,6 @@ function ProvidersWrapper({ children }: { children: ReactNode }) {
         <DesktopWindowControlsSync />
         <OfferLinkListener />
         <HostSessionManager />
-        <BackgroundNotifications />
         <FaviconStatusSync />
         {children}
       </VoiceProvider>
