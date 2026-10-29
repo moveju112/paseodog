@@ -11,7 +11,7 @@ const autoRefreshMs = 120000;
 type Metric = { turns?: number; tokens?: number; input?: number; output?: number; cacheRead?: number;
     cacheWrite?: number; cacheHitRate?: number | null; costUsd?: number; costBilled?: number;
     costEstimated?: number; costUnpricedTurns?: number; outputTokensPerSecond?: number | null;
-    minOutputTokensPerSecond?: number | null; maxOutputTokensPerSecond?: number | null; share?: number | null };
+    low10OutputTokensPerSecond?: number | null; high10OutputTokensPerSecond?: number | null; share?: number | null };
 type Metrics = {
     efforts?: (Metric & { provider: string; model: string; agent: string | null; effort: string | null; fast?: boolean | null })[];
     range: { fromMs: number; toMs: number }; totals: Metric; quotaError?: string;
@@ -244,8 +244,10 @@ export function UsageMonitor({ theme, layout }: PluginSurfaceProps) {
                 {!narrow && <Text selectable style={{ ...text, fontWeight: '600' }}>{row.label || row.provider}</Text>}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                     <StatTile colors={colors} label="평균 응답 속도" value={`${speed(row.outputTokensPerSecond)} tok/s`} />
-                    <StatTile colors={colors} label="최저 응답 속도" value={`${speed(row.minOutputTokensPerSecond)} tok/s`} />
-                    <StatTile colors={colors} label="최고 응답 속도" value={`${speed(row.maxOutputTokensPerSecond)} tok/s`} />
+                    <StatTile colors={colors} label="하위 10% 평균 속도" value={`${speed(row.low10OutputTokensPerSecond)} tok/s`}
+                        hint="느린 호출 10% · 표본 수 올림, 최소 1개" />
+                    <StatTile colors={colors} label="상위 10% 평균 속도" value={`${speed(row.high10OutputTokensPerSecond)} tok/s`}
+                        hint="빠른 호출 10% · 표본 수 올림, 최소 1개" />
                     <StatTile colors={colors} label="토큰" value={number(row.tokens)} />
                     <StatTile colors={colors} label="호출" value={number(row.turns)} />
                     {details && <>
