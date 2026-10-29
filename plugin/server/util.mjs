@@ -131,7 +131,25 @@ export function promptText(prompt) {
     if (prompt.input?.type !== 'message' || !Array.isArray(content) || !content.length) throw new Error('Text message required');
     const parts = content.map((part) => {
         if (part?.type === 'text' && typeof part.text === 'string') return { type: 'text', text: part.text };
-        if (part?.type !== 'image') throw new Error('Only text and images are supported; unsupported attachments are not discarded.');
+        if (part?.type === 'forge_change_request' || part?.type === 'github_pr') {
+            const legacy = part.type === 'github_pr';
+            const forge = legacy || part.forge === undefined ? 'github' : part.forge;
+            const fields = legacy ? ['body', 'baseRefName', 'headRefName']
+                : ['body', 'projectPath', 'baseRefName', 'headRefName'];
+            if (part.mimeType !== (legacy ? 'application/github-pr' : 'application/paseo-forge-change-request')
+                || !Number.isSafeInteger(part.number) || part.number <= 0
+                || typeof part.title !== 'string' || typeof part.url !== 'string' || typeof forge !== 'string'
+                || (!legacy && part.projectPath !== undefined && typeof part.projectPath !== 'string')
+                || fields.some((key) => part[key] != null && typeof part[key] !== 'string'))
+                throw new Error('Invalid pull request attachment');
+            const reference = { forge, number: part.number, title: part.title, url: part.url };
+            for (const key of fields) {
+                if (typeof part[key] === 'string') reference[key] = part[key];
+            }
+            // 외부 PR 메타데이터는 명령이 아닌 참조 컨텍스트로 넘기고 원문 필드를 보존한다.
+            return { type: 'text', text: `Pull request attachment (reference context):\n${JSON.stringify(reference, null, 2)}` };
+        }
+        if (part?.type !== 'image') throw new Error('Only text, images and PR attachments are supported; unsupported attachments are not discarded.');
         if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(part.mimeType)
             || typeof part.data !== 'string' || !part.data.length
             || part.data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(part.data))
