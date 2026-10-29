@@ -48,6 +48,22 @@ test('prepared worktree preserves dependency bytes, reuses its registration and 
     assert.ok(patches[1] < calls.findIndex(row => row.includes('--start')));
 });
 
+test('the preparer persists the explicit original report recipient in the detached delivery config', async t => {
+    const profile = await fixture(t);
+    const commit = 'a'.repeat(40), notifyAgentId = '11111111-1111-4111-8111-111111111111';
+    const run = async (command, args) => {
+        if (command === 'git') {
+            if (args[0] === 'rev-parse') return '/repo/common\n';
+            if (args[0] === 'ls-remote') return commit + '\trefs/heads/main\n';
+        }
+        return '';
+    };
+    const result = await prepareRelease(profile, commit, { run, adopt: true, start: true, notifyAgentId });
+    t.after(() => rm(result.workspace, { recursive: true, force: true }));
+    const saved = JSON.parse(await readFile(join(result.workspace, 'config.json'), 'utf8'));
+    assert.equal(saved.notifyAgentId, notifyAgentId);
+});
+
 test('native patch rejection stops preparation before versioning or starting delivery', async t => {
     const profile = await fixture(t);
     const commit = 'd'.repeat(40);
