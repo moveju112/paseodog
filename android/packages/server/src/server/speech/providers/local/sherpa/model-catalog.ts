@@ -82,6 +82,13 @@ export const SHERPA_ONNX_MODEL_CATALOG = {
     requiredFiles: ["turbo-encoder.int8.onnx", "turbo-decoder.int8.onnx", "turbo-tokens.txt"],
     description: "Whisper Large-v3 Turbo (multilingual including Korean, NVIDIA CUDA).",
   },
+  "whisper-medium-komix-v2-cuda": {
+    kind: "stt-offline",
+    archiveUrl: "local:whisper-medium-komix-v2",
+    extractedDir: "sherpa-onnx-whisper-medium-komix-v2",
+    requiredFiles: ["medium-encoder.int8.onnx", "medium-decoder.int8.onnx", "medium-tokens.txt"],
+    description: "Whisper Medium KoMix-v2 (Korean, NVIDIA CUDA; locally converted installation).",
+  },
 } as const satisfies Record<string, SherpaOnnxCatalogEntry>;
 
 export type SherpaOnnxModelId = keyof typeof SHERPA_ONNX_MODEL_CATALOG;

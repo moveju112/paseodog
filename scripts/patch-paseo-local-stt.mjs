@@ -122,7 +122,7 @@ const gpuResolution = `    if (env.PASEODOG_SPEECH_GPU === "1") {
             packageName: "sherpa-onnx-linux-x64", modulePath: path.join(root, "node_modules", "sherpa-onnx-node") };
     }
 `;
-export const LOCAL_STT_PATCHES = [
+const legacyGpuPatches = [
     ...cpuPatches.map((spec, index) => ({
         ...spec, cpuEdits: spec.edits, edits: [...spec.edits, ...gpuEdits[index]],
     })),
@@ -153,6 +153,41 @@ export const LOCAL_STT_PATCHES = [
         ] },
 ];
 
+const komixEdits = {
+    'speech/providers/local/sherpa/model-catalog.js': [[
+        '    "kokoro-en-v0_19": {\n',
+        `    "whisper-medium-komix-v2-cuda": {
+        kind: "stt-offline",
+        archiveUrl: "local:whisper-medium-komix-v2",
+        extractedDir: "sherpa-onnx-whisper-medium-komix-v2",
+        requiredFiles: ["medium-encoder.int8.onnx", "medium-decoder.int8.onnx", "medium-tokens.txt"],
+        description: "Whisper Medium KoMix-v2 (Korean, NVIDIA CUDA; locally converted installation).",
+    },
+    "kokoro-en-v0_19": {
+`,
+    ]],
+    'speech/providers/local/worker-process.js': [
+        ['"whisper-turbo-cuda": "turbo" }[modelId]', '"whisper-turbo-cuda": "turbo", "whisper-medium-komix-v2-cuda": "medium" }[modelId]'],
+        ['provider: modelId === "whisper-turbo-cuda" ? "cuda" : "cpu",',
+            'provider: (modelId === "whisper-turbo-cuda" || modelId === "whisper-medium-komix-v2-cuda") ? "cuda" : "cpu",'],
+    ],
+    'speech/providers/local/worker-client.js': [[
+        'config.dictationSttModel === "whisper-turbo-cuda" || config.voiceSttModel === "whisper-turbo-cuda"',
+        '["whisper-turbo-cuda", "whisper-medium-komix-v2-cuda"].some(model => config.dictationSttModel === model || config.voiceSttModel === model)',
+    ]],
+};
+export const LOCAL_STT_PATCHES = [
+    ...legacyGpuPatches.map(spec => ({
+        ...spec, gpuEdits: spec.edits, edits: [...spec.edits, ...(komixEdits[spec.file] ?? [])],
+    })),
+    { file: 'speech/providers/local/sherpa/model-downloader.js', blob: 'ac6fe68aca4eb61bcda6e9111a01bf2ebbbccab5',
+        previousEdits: [], edits: [[
+            '    logger.info({ modelsDir: options.modelsDir }, "Starting model download");',
+            '    if (spec.archiveUrl.startsWith("local:")) throw new Error("KoMix-v2 requires a verified local model installation");\n'
+                + '    logger.info({ modelsDir: options.modelsDir }, "Starting model download");',
+        ]] },
+];
+
 // 원본·완성된 패치만 받으며 파일별 정확한 blob과 유일한 앵커를 검증한다.
 export function patchedLocalSttSource(source, spec) {
     let original = source;
@@ -167,7 +202,9 @@ export function patchedLocalSttSource(source, spec) {
     for (const [before, after] of spec.previousEdits) previous = previous.replace(before, after);
     let cpu = original;
     for (const [before, after] of spec.cpuEdits ?? []) cpu = cpu.replace(before, after);
-    if (source !== original && source !== previous && source !== cpu && source !== result)
+    let gpu = original;
+    for (const [before, after] of spec.gpuEdits ?? []) gpu = gpu.replace(before, after);
+    if (source !== original && source !== previous && source !== cpu && source !== gpu && source !== result)
         throw new Error(`Partial Paseo local-STT patch: ${spec.file}`);
     return result;
 }

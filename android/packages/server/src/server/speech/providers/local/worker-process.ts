@@ -91,6 +91,7 @@ function getSttEngine(
     "whisper-small-int8": "small",
     "whisper-turbo-int8": "turbo",
     "whisper-turbo-cuda": "turbo",
+    "whisper-medium-komix-v2-cuda": "medium",
   };
   const whisper = whisperModels[modelId];
   let recognizerModel: SherpaOfflineRecognizerModel;
@@ -120,7 +121,10 @@ function getSttEngine(
     {
       model: recognizerModel,
       featureDim: whisper === "turbo" ? 128 : 80,
-      provider: modelId === "whisper-turbo-cuda" ? "cuda" : "cpu",
+      provider:
+        modelId === "whisper-turbo-cuda" || modelId === "whisper-medium-komix-v2-cuda"
+          ? "cuda"
+          : "cpu",
       numThreads: 2,
       debug: 0,
     },

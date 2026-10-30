@@ -29,3 +29,9 @@ export const GPU_SPEECH_MODEL = {
     description: '한국어 지원 다국어 모델 · 호스트 NVIDIA GPU에서 로컬 처리',
     warning: 'CUDA GPU 전용이에요. GPU 메모리·전력 사용량이 늘고 다른 GPU 작업이 느려질 수 있어요. GPU 초기화 실패 시 CPU나 유료 API로 자동 전환하지 않아요.',
 };
+
+export const KOMIX_SPEECH_MODEL = {
+    ...GPU_SPEECH_MODEL,
+    id: 'whisper-medium-komix-v2-cuda', label: 'Whisper Medium KoMix-v2',
+    description: '한국어 특화 · 호스트 NVIDIA GPU에서 로컬 처리 · 별도 모델 설치 필요',
+};

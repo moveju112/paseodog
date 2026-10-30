@@ -6,7 +6,7 @@ import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import { scratchRoot } from '../scripts/paths.mjs';
 import { handleSpeechSettings } from '../plugin/server/speech-settings.mjs';
-import { KOREAN_SPEECH_MODELS, GPU_SPEECH_MODEL } from '../plugin/shared/speech-models.mjs';
+import { KOREAN_SPEECH_MODELS, GPU_SPEECH_MODEL, KOMIX_SPEECH_MODEL } from '../plugin/shared/speech-models.mjs';
 import { installedComposerFixture } from './composer-fixture.mjs';
 import { withSpeechSettings, withoutSpeechSettings } from '../patches/paseo-speech-settings.mjs';
 
@@ -92,7 +92,7 @@ for (const platform of ['app', 'web']) {
         const calls = [];
         const values = { one: KOREAN_SPEECH_MODELS[0].id, two: KOREAN_SPEECH_MODELS[1].id };
         const snapshot = host => ({ model: values[host], revision: 'a'.repeat(64), blocked: false,
-            models: [...KOREAN_SPEECH_MODELS, GPU_SPEECH_MODEL] });
+            models: [...KOREAN_SPEECH_MODELS, GPU_SPEECH_MODEL, KOMIX_SPEECH_MODEL] });
         const clients = Object.fromEntries(Object.keys(values).map(host => [host, {
             async invokePluginRpc(plugin, method, request) {
                 assert.equal(plugin, 'paseodog-provider');
@@ -125,7 +125,7 @@ for (const platform of ['app', 'web']) {
         const refresh = () => radio('음성인식 설정 새로고침');
         const warning = () => radio('Whisper Large-v3 Turbo 연산 경고');
         const warnings = () => tree.root.findAll(node => node.type === 'text' && node.props.children === KOREAN_SPEECH_MODELS[3].warning);
-        assert.equal(tree.root.findAll(node => node.type === 'pressable' && node.props.accessibilityRole === 'radio').length, 5);
+        assert.equal(tree.root.findAll(node => node.type === 'pressable' && node.props.accessibilityRole === 'radio').length, 6);
         assert.equal(warnings().length, 0);
         for (const [open, close] of [['onHoverIn', 'onHoverOut'], ['onFocus', 'onBlur'], ['onPress', 'onPress']]) {
             await act(async () => warning().props[open]());
@@ -138,6 +138,8 @@ for (const platform of ['app', 'web']) {
         assert.match(JSON.stringify(tree.toJSON()), /GPU 메모리·전력/);
         await act(async () => radio(GPU_SPEECH_MODEL.label).props.onPress());
         assert.equal(values.one, 'whisper-turbo-cuda');
+        await act(async () => radio(KOMIX_SPEECH_MODEL.label).props.onPress());
+        assert.equal(values.one, 'whisper-medium-komix-v2-cuda');
         await act(async () => radio('Whisper Small').props.onPress());
         assert.equal(values.one, 'whisper-small-int8');
         assert.match(JSON.stringify(tree.toJSON()), /재시작한 뒤 적용/);
