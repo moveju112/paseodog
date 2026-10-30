@@ -27,6 +27,7 @@ This is the canonical project rule file; `AGENTS.md` and `CLAUDE.md` link here. 
 
 ## Safety invariants
 
+- Supported daemon environments include Linux x86_64 workstations and Linux ARM64 servers. Architecture-dependent behavior and tests must cover both, without requiring x86_64-only features on ARM64.
 - Use pinned upstream versions and version/blob-hash-gated patches. Never hand-edit installed dependencies, runtime profiles or installed app bundles, and never bypass a hash gate.
 - Keep ask-mode defaults, deny/block enforcement, ownership checks and persisted receipts. Never replay uncertain mutations or advertise unsupported capabilities.
 - Target only the dedicated PaseoDog runtime. Do not interrupt active turns, replace signing keys, expose secrets, mutate personal/stock profiles or run billable tests without specific authorization.
