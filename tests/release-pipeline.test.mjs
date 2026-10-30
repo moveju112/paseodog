@@ -632,7 +632,7 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
     const commit = 'f'.repeat(40), carried = 'v1.0.0-rc.7.11090', stale = 'e'.repeat(40);
     const calls = [];
     let assets = [], active = [{ status: 'running' }], updaterStarts = 0;
-    let pendingReceipt = null, verificationWaits = 0;
+    let pendingReceipt = null, verificationWaits = 0, cleanupActive = false, cleanupWaits = 0;
     const run = async (command, args) => {
         calls.push([command, ...args]);
         if (command === 'git' && args[0] === 'rev-parse') return commit + '\n';
@@ -657,7 +657,12 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
             if (args.at(-1) === stale) throw new Error('git failed (1)');
         }
         if (command === 'systemctl') {
+            if (args.includes('show')) {
+                if (args.includes('--property=OnSuccess')) return 'paseodog-update-verify.service\n';
+                return `ActiveState=${cleanupActive || pendingReceipt ? 'activating' : 'inactive'}\nResult=success\n`;
+            }
             assert.deepEqual(active, [], 'daemon update must wait for idle');
+            assert.equal(cleanupActive, false, 'applied receipt must not bypass the verifier lock');
             updaterStarts += 1;
             // 첫 실행은 미리 준비된 이전 리비전을 적용하고, 두 번째 실행이 배포 커밋까지 따라잡는다.
             const revision = updaterStarts === 1 ? stale : commit;
@@ -684,12 +689,18 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
         launchDesktop: async () => { throw new Error('desktop must not launch'); },
         installedRelease: async () => { throw new Error('desktop must not be read'); },
         sleep: async () => {
+            if (cleanupActive) {
+                cleanupActive = false;
+                cleanupWaits += 1;
+                return;
+            }
             if (!pendingReceipt) return;
             // 실제 업데이터의 원자적 게시처럼 읽는 중간에 빈 JSON을 노출하지 않는다.
             // 타이머 대신 주입된 대기 경계에서 전환을 끝내고 쓰기 실패도 테스트로 전파한다.
             assert.equal(JSON.parse(await readFile(join(updaterRoot, 'receipt.json'), 'utf8')).phase, 'awaiting-verification');
             await writeFile(join(updaterRoot, 'receipt.json'), JSON.stringify(pendingReceipt));
             pendingReceipt = null;
+            cleanupActive = true;
             verificationWaits += 1;
         },
     });
@@ -704,6 +715,7 @@ test('APK and runtime delivery carries desktop assets, updates the daemon after 
     assert.ok(updateAt > 0);
     assert.equal(updaterStarts, 2);
     assert.equal(verificationWaits, 2);
+    assert.equal(cleanupWaits, 2);
     // 데스크톱 없는 runtime 적용도 요청 턴이 종료 시점으로 삼는 idle 대기 문구를 남긴다.
     assert.equal(logs.mock.calls.filter(call => String(call.arguments[0]).includes('waiting for idle')).length, 1);
     // 업데이터가 플러그인과 사후 검증을 맡으므로 배포가 다시 로드하지 않는다.
