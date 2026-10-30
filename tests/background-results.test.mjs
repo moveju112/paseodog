@@ -39,7 +39,8 @@ test('result notices identify the origin and outcome without repeating delivery 
                 ? `백그라운드 명령 실행 결과: ${label}.${warning}`
                 : `${origin} job-1: ${label}.${warning}`;
             assert.equal(item.message, expected);
-            assert.equal(item.level, status === 'failed' || status === 'unknown' ? 'warning' : 'info');
+            const warningLevel = status === 'unknown' || (surface !== 'shell' && status === 'failed');
+            assert.equal(item.level, warningLevel ? 'warning' : 'info');
         }
     }
 });

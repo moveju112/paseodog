@@ -52,7 +52,17 @@ export function projectWorkRecords<
   function isRecord(item: StreamItem): boolean {
     if (item.kind === "tool_call")
       return !["failed", "canceled"].includes(item.payload.data.status);
-    if (item.kind === "notification") return item.level === "info";
+    if (item.kind === "notification") {
+      // 이전 버전이 warning으로 저장한 로컬 명령 요약도 도구 결과와 함께 기록 안에 보존한다.
+      return (
+        item.level === "info" ||
+        (item.level === "warning" &&
+          item.sourceType === "notification" &&
+          /^(?:백그라운드 명령 실행 결과|로컬 명령 job_[A-Za-z0-9_-]+): (?:성공|실패|취소)\.$/.test(
+            item.message,
+          ))
+      );
+    }
     return (
       item.kind === "assistant_message" ||
       item.kind === "thought" ||

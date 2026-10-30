@@ -1,4 +1,5 @@
 import type pino from "pino";
+import { buildAgentNotificationTag } from "@getpaseo/protocol/agent-notification-tag";
 
 export interface PushPayload {
   title: string;
@@ -14,6 +15,7 @@ interface ExpoPushMessage {
   sound?: "default";
   channelId: string;
   priority: "high";
+  tag?: string;
 }
 
 interface ExpoPushTicket {
@@ -49,6 +51,7 @@ export class PushService {
       title: payload.title,
       body: payload.body,
       data: payload.data,
+      tag: buildAgentNotificationTag(payload.data),
       sound: "default",
       channelId: "paseodog-completion",
       priority: "high",

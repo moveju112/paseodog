@@ -80,6 +80,17 @@ test('warnings, failures, cancellation, plugins and users never disappear inside
     assert.deepEqual(result.tail.filter((item) => item.kind !== 'work_record'), [user, failed, canceled, warning, plugin]);
 });
 
+test('web projection keeps duplicate local command results in records but preserves unresolved and delivery warnings', () => {
+    const local = { kind: 'notification', sourceType: 'notification', id: 'local', level: 'warning',
+        message: '백그라운드 명령 실행 결과: 실패.', timestamp: at };
+    const legacy = { ...local, id: 'legacy', message: '로컬 명령 job_123_test: 실패.' };
+    const unknown = { ...local, id: 'unknown', message: '백그라운드 명령 실행 결과: 결과 불명.' };
+    const delivery = { ...local, id: 'delivery', message: '배포 task: 실패.' };
+    const result = project({ tail: [local, legacy, unknown, delivery], head: [] }, false);
+    assert.deepEqual(result.tail[0].items, [local, legacy]);
+    assert.deepEqual(result.tail.slice(1), [unknown, delivery]);
+});
+
 test('legacy messages use existing completed-turn boundaries without guessing paragraph meanings', () => {
     const first = assistant('one', '이전 안내');
     const last = assistant('two', '문단 하나\n\n문단 둘');

@@ -4,6 +4,32 @@ import {
   findLatestAssistantMessageFromTimeline,
   findLatestPermissionRequest,
 } from "./agent-attention-notification.js";
+import { buildAgentNotificationTag } from "./agent-notification-tag.js";
+
+describe("buildAgentNotificationTag", () => {
+  it("namespaces the host and session without delimiter collisions", () => {
+    expect(buildAgentNotificationTag({ serverId: " host ", agentId: " agent " })).toBe(
+      'paseodog-session:["host","agent"]',
+    );
+    expect(buildAgentNotificationTag({ serverId: "a:b", agentId: "c" })).not.toBe(
+      buildAgentNotificationTag({ serverId: "a", agentId: "b:c" }),
+    );
+    expect(buildAgentNotificationTag({ serverId: "host", agentId: "a" })).not.toBe(
+      buildAgentNotificationTag({ serverId: "other", agentId: "a" }),
+    );
+  });
+  it.each([
+    undefined,
+    null,
+    {},
+    { serverId: "s" },
+    { agentId: "a" },
+    { serverId: "s", agentId: " " },
+    { serverId: 1, agentId: "a" },
+  ])("does not assign a session tag to an incomplete target: %j", (data) => {
+    expect(buildAgentNotificationTag(data)).toBeUndefined();
+  });
+});
 
 describe("buildAgentAttentionNotificationPayload", () => {
   it("carries the workspace needed to open a cold agent destination", () => {

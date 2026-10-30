@@ -128,6 +128,8 @@ export async function prepareRelease(profile, commit, { run = runCommand, adopt 
         await capture(['merge', '--ff-only', commit]);
         // 갱신한 소스의 버전·blob 게이트로 native 패치를 적용한 뒤에만 검증·배포를 시작한다.
         await run(process.execPath, [join(source, 'scripts/patch-mixdog.mjs')], { cwd: source });
+        await run(process.execPath, [join(source, 'scripts/patch-paseo-push-notifications.mjs')], { cwd: source });
+        await run(process.execPath, [join(source, 'scripts/patch-paseo-push-notifications.mjs'), '--check'], { cwd: source });
         // 재사용 worktree는 npm 설치를 다시 하지 않으므로 Android 의존성 패치(Metro·patch-package·query-string)를 직접 확인·적용한다.
         await run(process.execPath, [join(source, 'android/scripts/postinstall-patches.mjs')], { cwd: join(source, 'android'),
             env: { ...process.env, PATH: join(source, 'android/node_modules/.bin') + delimiter + process.env.PATH } });
