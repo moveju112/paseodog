@@ -12,6 +12,8 @@ interface ExpoPushMessage {
   body: string;
   data?: Record<string, unknown>;
   sound?: "default";
+  channelId: string;
+  priority: "high";
 }
 
 interface ExpoPushTicket {
@@ -48,6 +50,8 @@ export class PushService {
       body: payload.body,
       data: payload.data,
       sound: "default",
+      channelId: "paseodog-completion",
+      priority: "high",
     }));
 
     // Batch tokens (max 100 per request per Expo limits)
@@ -91,16 +95,10 @@ export class PushService {
       const message = messages[i];
 
       if (ticket.status === "error") {
-        this.logger.error(
-          { token: message.to, message: ticket.message, details: ticket.details },
-          "Push failed for token",
-        );
+        this.logger.error({ error: ticket.details?.error }, "Push delivery rejected");
 
         // Remove invalid tokens
-        if (
-          ticket.details?.error === "DeviceNotRegistered" ||
-          ticket.details?.error === "InvalidCredentials"
-        ) {
+        if (ticket.details?.error === "DeviceNotRegistered") {
           this.revokeToken(message.to);
         }
       }

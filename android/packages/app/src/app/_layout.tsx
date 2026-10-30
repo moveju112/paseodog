@@ -94,7 +94,7 @@ import { KeyboardShiftProvider } from "@/keyboard/shift";
 import { useCompactWebViewportZoomLock } from "@/hooks/use-compact-web-viewport-zoom-lock";
 import { useOpenProject } from "@/hooks/use-open-project";
 import { useAppSettings } from "@/hooks/use-settings";
-import { useAndroidBackgroundNotifications } from "@/hooks/use-android-background-notifications";
+import { shouldPresentAndroidNotification } from "@/utils/android-notifications";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { useOpenAgentListGesture } from "@/mobile-panels/gestures";
 import { MobilePanelsProvider, useIsMobilePanelActive } from "@/mobile-panels/provider";
@@ -225,14 +225,18 @@ function PushNotificationRouter() {
     }
 
     Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        // Android local notifications are already filtered by focused conversation.
-        shouldShowAlert: Platform.OS === "android",
-        shouldShowBanner: Platform.OS === "android",
-        shouldShowList: Platform.OS === "android",
-        shouldPlaySound: Platform.OS === "android",
-        shouldSetBadge: false,
-      }),
+      handleNotification: async (notification) => {
+        const show =
+          Platform.OS === "android" &&
+          (await shouldPresentAndroidNotification(notification.request.content.data));
+        return {
+          shouldShowAlert: show,
+          shouldShowBanner: show,
+          shouldShowList: show,
+          shouldPlaySound: show,
+          shouldSetBadge: false,
+        };
+      },
     });
 
     const openFromResponse = (response: Notifications.NotificationResponse) => {
@@ -667,7 +671,6 @@ function MobileGestureWrapper({
 }
 
 function ProvidersWrapper({ children }: { children: ReactNode }) {
-  useAndroidBackgroundNotifications();
   return (
     <AppearanceProvider>
       <VoiceProvider>

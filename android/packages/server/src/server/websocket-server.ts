@@ -2561,6 +2561,7 @@ export class VoiceAssistantWebSocketServer {
     const activity = session.getClientActivity(source);
     if (!activity) {
       return {
+        deviceType: "web",
         appVisible: false,
         focusedAgentId: null,
         focusedTerminalId: null,
@@ -2569,6 +2570,7 @@ export class VoiceAssistantWebSocketServer {
     }
 
     return {
+      deviceType: activity.deviceType,
       appVisible: activity.appVisible,
       focusedAgentId: activity.focusedAgentId,
       focusedTerminalId: activity.focusedTerminalId,

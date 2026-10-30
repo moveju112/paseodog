@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useClientActivity } from "@/hooks/use-client-activity";
 import { useDismissViewedAndroidNotifications } from "@/hooks/use-dismiss-viewed-android-notifications";
 import { useAppVisible } from "@/hooks/use-app-visible";
+import { useAppSettings } from "@/hooks/use-settings";
 import { startPushNotifications } from "@/push-notifications";
 import {
   createSetAgentInitializing,
@@ -214,6 +215,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
   const queryClient = useQueryClient();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const toast = useToast();
+  const { settings: appSettings, isLoading: appSettingsLoading } = useAppSettings();
 
   // Zustand store actions
   const setIsPlayingAudio = useSessionStore((state) => state.setIsPlayingAudio);
@@ -264,7 +266,14 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
     focusedAgentId,
     focusedTerminalId,
   });
-  useEffect(() => startPushNotifications({ client, serverId }), [client, serverId]);
+  useEffect(() => {
+    if (appSettingsLoading) return;
+    return startPushNotifications({
+      client,
+      serverId,
+      enabled: appSettings.backgroundNotificationsEnabled,
+    });
+  }, [client, serverId, appSettingsLoading, appSettings.backgroundNotificationsEnabled]);
 
   const notifyAgentAttention = useCallback(
     (params: {
