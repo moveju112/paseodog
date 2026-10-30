@@ -3,6 +3,7 @@ import { realpathSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { DEFAULT_MODEL, deadline, errorText, hash, textOf, display, tokenUsage, publicUsage, contextUsage, validateConfig, promptText } from './util.mjs';
 import { questionRequestInput, questionAnswers } from './question.mjs';
+import { handoffPermission } from './handoff.mjs';
 import { agentMessageSource } from './agent-message.mjs';
 import { compactionNotice, projectCompaction } from './compaction.mjs';
 import { readTurnMinutes } from './turn-duration.mjs';
@@ -397,6 +398,11 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             try { questionInput = questionRequestInput(input); }
             catch (error) { return Promise.resolve({ approved: false, reason: errorText(error) }); }
         }
+        let handoff;
+        if (info?.name === 'handoff_user') {
+            try { handoff = handoffPermission(input); }
+            catch (error) { return Promise.resolve({ approved: false, reason: errorText(error) }); }
+        }
         const id = randomUUID();
         return new Promise((resolve) => {
             const timer = setTimeout(() => {
@@ -417,6 +423,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
                 description: String(info?.reason || 'PaseoDog requires explicit approval'), input,
                 actions: [{ id: 'allow-once', label: 'Allow once', behavior: 'allow', variant: 'primary' },
                     { id: 'deny', label: 'Deny', behavior: 'deny', variant: 'danger' }],
+                ...handoff,
             } });
         });
     }
