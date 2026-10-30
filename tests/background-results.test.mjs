@@ -35,7 +35,10 @@ test('result notices identify the origin and outcome without repeating delivery 
         for (const [status, label] of [['completed', '성공'], ['failed', '실패'], ['canceled', '취소'], ['unknown', '결과 불명']]) {
             const item = resultItem({ key: surface, surface, jobId: 'job-1' }, status);
             const warning = status === 'unknown' ? ' 상태 확인이 필요하며 원래 명령은 자동 재실행하지 않았어.' : '';
-            assert.equal(item.message, `${origin} job-1: ${label}.${warning}`);
+            const expected = surface === 'shell'
+                ? `백그라운드 명령 실행 결과: ${label}.${warning}`
+                : `${origin} job-1: ${label}.${warning}`;
+            assert.equal(item.message, expected);
             assert.equal(item.level, status === 'failed' || status === 'unknown' ? 'warning' : 'info');
         }
     }
@@ -49,7 +52,7 @@ for (const [exitCode, expected] of [[0, '성공'], [7, '실패']]) {
         await f.writeJob({ status: 'completed', exitCode, command: 'secret command', stdoutPreview: 'secret token' });
         await f.service.scan(); await f.service.scan();
         assert.equal(reports(f.store).length, 1);
-        assert.equal(reports(f.store)[0].item.message, `로컬 명령 job_1_test: ${expected}.`);
+        assert.equal(reports(f.store)[0].item.message, `백그라운드 명령 실행 결과: ${expected}.`);
         assert.doesNotMatch(JSON.stringify(f.store.load('bridge')), /secret/);
         const receipt = Object.values(f.store.load('bridge').receipts)[0];
         assert.equal(receipt.result.ai, 'not-requested');
@@ -173,7 +176,7 @@ test('journal failure does not publish or acknowledge a result', async t => {
 test('canceled local task is reported without claiming remote cancellation', async t => {
     const f = await setup(t);
     await f.writeJob({ status: 'canceled' }); await f.service.scan();
-    assert.equal(reports(f.store)[0].item.message, '로컬 명령 job_1_test: 취소.');
+    assert.equal(reports(f.store)[0].item.message, '백그라운드 명령 실행 결과: 취소.');
 });
 test('status probes reject redirects, credentials, oversized responses and honor timeout', async t => {
     const f = await setup(t);

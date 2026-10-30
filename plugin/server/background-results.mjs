@@ -12,8 +12,9 @@ const MAX_TASKS = 1000;
 // 결과 데이터만 저장한다. 명령·로그·URL·서버 오류 원문을 채팅에 복제하지 않는다.
 export function resultItem(task, status) {
     const id = `background-result:${hash({ key: task.key, status })}`;
-    const origin = task.surface === 'remote' ? '원격 작업' : task.surface === 'delivery' ? '배포' : '로컬 명령';
-    const message = `${origin} ${task.jobId}: ${LABELS[status]}.`
+    const origin = task.surface === 'remote' ? `원격 작업 ${task.jobId}`
+        : task.surface === 'delivery' ? `배포 ${task.jobId}` : '백그라운드 명령 실행 결과';
+    const message = `${origin}: ${LABELS[status]}.`
         + (status === 'unknown' ? ' 상태 확인이 필요하며 원래 명령은 자동 재실행하지 않았어.' : '');
     return { type: 'notification', id, level: status === 'failed' || status === 'unknown' ? 'warning' : 'info', message };
 }
