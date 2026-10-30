@@ -175,6 +175,8 @@ test('native title generation uses agreed-task instructions without changing its
             calls++;
             assert.match(source, /Keep the current title EXACTLY/);
             assert.match(source, /not its opening line/);
+            assert.match(source, /Aim for 8-12 characters, at most 16 characters including spaces/);
+            assert.match(source, /noun phrase/);
             assert.match(source, /사용량 자동 갱신/);
             assert.ok(options.signal instanceof AbortSignal);
             return '"사용량 자동 갱신"';
@@ -186,6 +188,42 @@ test('native title generation uses agreed-task instructions without changing its
         config: () => ({ aiSessionTitles: false }), generate: () => { throw new Error('must not call'); },
     }), { title: null });
     await assert.rejects(generateConversationTitle({ ...request, conversation: 'x'.repeat(20001) }), /Invalid/);
+});
+
+test('generated titles stay within sixteen characters even when the model ignores the limit', async () => {
+    const request = { currentTitle: '', provisional: true, conversation: '서버 접근 권한을 수정해줘' };
+    for (const [raw, title] of [
+        ['"danki 서버 접근"', 'danki 서버 접근'],
+        ['danki SSH access', 'danki SSH access'],
+        ['danki live 서버 권한이 없는 유저의 접근 취약점 수정', 'danki live 서버…'],
+        ['서버👩‍💻👩‍💻👩‍💻👩‍💻', '서버👩‍💻👩‍💻…'],
+        ['', null],
+    ]) {
+        const result = await generateConversationTitle(request, {
+            config: () => ({}),
+            generate: async () => raw,
+        });
+        assert.deepEqual(result, { title });
+        if (result.title) assert.ok(result.title.length <= 16);
+    }
+});
+
+test('an unchanged task still asks to shorten an overlong existing automatic title', async () => {
+    const request = {
+        currentTitle: 'danki live 서버 권한이 없는 유저의 접근 취약점 수정',
+        provisional: false,
+        conversation: '같은 작업의 회귀 테스트도 추가해줘',
+    };
+    const result = await generateConversationTitle(request, {
+        config: () => ({}),
+        async generate(source) {
+            assert.match(source, /Shorten a longer current title to at most 16 characters even if the task is unchanged/);
+            assert.match(source, /task has not materially changed and the title is at most 16 characters/);
+            assert.ok(source.includes(JSON.stringify(request.currentTitle)));
+            return 'danki 접근 권한 수정';
+        },
+    });
+    assert.deepEqual(result, { title: 'danki 접근 권한 수정' });
 });
 
 test('native title timeout aborts the single request without retrying it', async (t) => {
