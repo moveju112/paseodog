@@ -16,7 +16,9 @@ export function resultItem(task, status) {
         : task.surface === 'delivery' ? `배포 ${task.jobId}` : '백그라운드 명령 실행 결과';
     const message = `${origin}: ${LABELS[status]}.`
         + (status === 'unknown' ? ' 상태 확인이 필요하며 원래 명령은 자동 재실행하지 않았어.' : '');
-    return { type: 'notification', id, level: status === 'failed' || status === 'unknown' ? 'warning' : 'info', message };
+    // 로컬 명령 결과는 도구 결과와 중복되는 진행 기록이다. 배포 실패·결과 유실은 계속 경고한다.
+    const warning = status === 'unknown' || (task.surface !== 'shell' && status === 'failed');
+    return { type: 'notification', id, level: warning ? 'warning' : 'info', message };
 }
 
 export function saveObservation(record, task, status, now = Date.now()) {

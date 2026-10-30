@@ -10,7 +10,7 @@ import { ensureWindowsJobHelper, windowsCompilerPath } from '../plugin/server/wi
 // Upstream patches applied then verified at install, in this order.
 const PATCHES = ['mixdog', 'paseo-usage', 'paseo-steer', 'paseo-agent-messages', 'paseo-assistant-phase',
     'paseo-workspace-name', 'paseo-session-titles', 'paseo-local-stt', 'paseo-relay-password',
-    'paseo-relay-reconnect', 'paseo-composer'];
+    'paseo-relay-reconnect', 'paseo-push-notifications', 'paseo-composer'];
 
 // Mixdog의 정리 훅이 하위 설치 파일을 지우므로 고정된 하위 훅부터 순서대로 완료한다.
 export function engineInstallSteps() {

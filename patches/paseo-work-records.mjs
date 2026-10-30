@@ -78,6 +78,8 @@ function withCurrentRecordGap(source) {
 // 검토한 이전 투영 주입본 (기록 간격 판, 진행 중 답변 즉시 표시 이전 판)
 // 값: 그 판에 간격 편집이 함께 들어 있었는지
 const LEGACY_PROJECTION_HASHES = new Map([
+    // HEAD의 공용 소스 blob 086d54b와 배포 번들 일치를 확인한 로컬 명령 경고 분리 이전 판.
+    ['018dc61190b65015b877e8fe355ea18e9e85d1f6bdd10adc8472cb19655cd83d', true],
     ['77b55376fb26b763b90c94346a7eb757f9009d1311d49cd9a6bd2973e092fa6c', false],
     ['b6bf3716ac78d587356bb6f1399347df171b4742179363da145cdab86804e66c', true],
 ]);

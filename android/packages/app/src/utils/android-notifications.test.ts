@@ -148,6 +148,46 @@ describe("Android local notifications", () => {
     expect(mocks.permissions).not.toHaveBeenCalled();
   });
 
+  it("dismisses background FCM notifications by session tag when Android drops custom data", async () => {
+    const own =
+      "expo-notifications://foreign_notifications?tag=paseodog-session%3A%5B%22host%22%2C%22agent%22%5D&id=0";
+    const notification = (identifier: string, data: Record<string, unknown> = {}) => ({
+      request: { identifier, trigger: null, content: { data, title: "Agent finished" } },
+    });
+    mocks.presented.mockResolvedValue([
+      notification(own, { "android.title": "Agent finished", "android.text": "Done" }),
+      notification(
+        "expo-notifications://foreign_notifications?tag=paseodog-session%3A%5B%22host%22%2C%22other%22%5D&id=0",
+      ),
+      notification(
+        "expo-notifications://foreign_notifications?tag=paseodog-session%3A%5B%22other%22%2C%22agent%22%5D&id=0",
+      ),
+      notification("expo-notifications://foreign_notifications?tag=FCM-Notification%3A123&id=0"),
+      notification("foreground-service"),
+    ]);
+
+    await dismissAndroidSessionNotifications("host", "agent");
+
+    expect(mocks.dismiss.mock.calls).toEqual([[own]]);
+  });
+
+  it("does not use a tag to override conflicting data or match malformed identifiers", async () => {
+    const own =
+      "expo-notifications://foreign_notifications?tag=paseodog-session%3A%5B%22host%22%2C%22agent%22%5D&id=0";
+    mocks.presented.mockResolvedValue([
+      { request: { identifier: own, content: { data: { serverId: "other", agentId: "agent" } } } },
+      {
+        request: {
+          identifier: own.replace("expo-notifications:", "https:"),
+          content: { data: {} },
+        },
+      },
+      { request: { identifier: "not a URL", content: { data: {} } } },
+    ]);
+    await dismissAndroidSessionNotifications("host", "agent");
+    expect(mocks.dismiss).not.toHaveBeenCalled();
+  });
+
   it("leaves an empty notification tray unchanged", async () => {
     await dismissAndroidSessionNotifications("host", "agent");
     expect(mocks.dismiss).not.toHaveBeenCalled();

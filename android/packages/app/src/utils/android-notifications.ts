@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { AppState } from "react-native";
+import { buildAgentNotificationTag } from "@getpaseo/protocol/agent-notification-tag";
 import { loadAppSettingsFromStorage } from "@/hooks/use-settings";
 import { useSessionStore } from "@/stores/session-store";
 import { resolveNotificationTarget } from "./notification-routing";
@@ -56,12 +57,30 @@ export async function dismissAndroidSessionNotifications(
   serverId: string,
   agentId: string,
 ): Promise<void> {
+  const sessionTag = buildAgentNotificationTag({ serverId, agentId });
   const notifications = await Notifications.getPresentedNotificationsAsync();
   await Promise.all(
     notifications
       .filter((notification) => {
         const target = resolveNotificationTarget(notification.request.content.data);
-        return target.serverId === serverId && target.agentId === agentId;
+        if (target.serverId !== null || target.agentId !== null) {
+          return target.serverId === serverId && target.agentId === agentId;
+        }
+        // Expo는 FCM이 직접 표시한 알림을 tag/id URI로 돌려준다(data에는 Android 표시 속성만 남는다).
+        // React Native의 URL 구현은 제한적이므로 Expo의 고정된 URI 형식만 읽는다.
+        const identifier = notification.request.identifier;
+        const prefix = "expo-notifications://foreign_notifications?";
+        if (!sessionTag || !identifier.startsWith(prefix) || identifier.includes("#")) return false;
+        const tag = identifier
+          .slice(prefix.length)
+          .split("&")
+          .find((field) => field.startsWith("tag="));
+        if (!tag) return false;
+        try {
+          return decodeURIComponent(tag.slice(4)) === sessionTag;
+        } catch {
+          return false;
+        }
       })
       .map((notification) =>
         Notifications.dismissNotificationAsync(notification.request.identifier),

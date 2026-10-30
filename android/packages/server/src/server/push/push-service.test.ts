@@ -67,3 +67,19 @@ it.each(["InvalidCredentials", "DeviceNotRegistered"])(
     }
   },
 );
+
+it("preserves session identity in the Android tag even when background notification data is unavailable", async () => {
+  fetchMock.mockResolvedValue({
+    ok: true,
+    json: async () => ({ data: [{ status: "ok", id: "receipt" }] }),
+  });
+  await service.sendPush(["ExponentPushToken[test]"], {
+    title: "Done",
+    body: "Completed",
+    data: { serverId: "host", agentId: "agent", reason: "finished" },
+  });
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)[0]).toMatchObject({
+    tag: 'paseodog-session:["host","agent"]',
+    data: { serverId: "host", agentId: "agent", reason: "finished" },
+  });
+});

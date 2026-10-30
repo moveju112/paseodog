@@ -6,6 +6,38 @@ import { projectPluginTimelineItems } from "@/plugins/timeline/projection";
 import { projectWorkRecords } from "./work-record-model";
 import { getGapBetweenStreamItems } from "./spacing";
 
+test("legacy local-command summaries stay in progress records without hiding actionable warnings", () => {
+  const notice = (
+    id: string,
+    message: string,
+    sourceType: "notification" | "error" = "notification",
+  ): StreamItem => ({
+    kind: "notification",
+    sourceType,
+    id,
+    message,
+    level: "warning",
+    timestamp: new Date(1),
+  });
+  const summaries = [
+    notice("old", "로컬 명령 job_123_test: 실패."),
+    notice("current", "백그라운드 명령 실행 결과: 실패."),
+  ];
+  const warnings = [
+    notice(
+      "unknown",
+      "백그라운드 명령 실행 결과: 결과 불명. 상태 확인이 필요하며 원래 명령은 자동 재실행하지 않았어.",
+    ),
+    notice("remote", "원격 작업 task-1: 실패."),
+    notice("delivery", "배포 task-1: 실패."),
+    notice("error", "백그라운드 명령 실행 결과: 실패.", "error"),
+    notice("other", "Command blocked"),
+  ];
+  const result = projectWorkRecords({ tail: [...summaries, ...warnings], head: [] }, false);
+  expect(result.tail[0]).toMatchObject({ kind: "work_record", items: summaries });
+  expect(result.tail.slice(1)).toEqual(warnings);
+});
+
 test("steered requests in one native turn keep their own nearby records across history and live rows", () => {
   const timestamp = new Date(1);
   const request: StreamItem = {
