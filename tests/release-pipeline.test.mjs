@@ -164,6 +164,47 @@ test('verification retains completed checks across failure and output-workspace 
     assert.equal(counts.get('check.log'), 2);
 });
 
+test('app verification reuses results across independent desktop and website changes but not shared inputs', async t => {
+    const workspace = await temporary(t);
+    const config = { workspace, appTests: ['src/first.test.ts'] };
+    const files = [];
+    const run = async command => command === 'git' ? files.join('\0') : '';
+    await verifyReleaseSource(config, run);
+    for (const file of ['android/packages/desktop/package.json', 'android/packages/website/package.json']) {
+        files.push(file);
+        const result = await verifyReleaseSource(config, run);
+        for (const name of ['app-types', 'app-tests', 'plugin-types'])
+            assert.equal(result.results.find(row => row.name === name).cached, true, `${name}: ${file}`);
+        for (const name of ['check', 'test'])
+            assert.equal(result.results.find(row => row.name === name).cached, false, `${name}: ${file}`);
+    }
+    for (const file of ['android/packages/app/tsconfig.json', 'android/packages/protocol/package.json',
+        'android/packages/server/package.json', 'android/packages/client/package.json', 'android/package-lock.json',
+        'android/scripts/postinstall-patches.mjs', 'plugin/shared/release.json', 'package.json']) {
+        files.push(file);
+        const result = await verifyReleaseSource(config, run);
+        for (const name of ['app-types', 'app-tests'])
+            assert.equal(result.results.find(row => row.name === name).cached, false, `${name}: ${file}`);
+    }
+});
+
+test('native app implementations select Android without dropping shared and unknown changes', () => {
+    for (const path of ['android/packages/app/src/push-notifications/index.native.ts',
+        'android/packages/app/src/keyboard/shift/internal/translate.android.tsx'])
+        assert.deepEqual(pathTargets(path), ['android']);
+    assert.deepEqual(pathTargets('android/packages/app/src/push-notifications/index.native.test.ts'), []);
+    for (const path of ['android/packages/app/src/contexts/session-context.tsx',
+        'android/packages/app/src/hooks/use-dismiss-viewed-android-notifications.ts',
+        'android/packages/app/src/audio/audio-engine.d.ts', 'new-component/unknown.native.ts'])
+        assert.deepEqual(pathTargets(path), ['android', 'desktop', 'web', 'runtime']);
+    assert.deepEqual(classifyPaths(['android/packages/app/src/push-notifications/index.native.ts',
+        'plugin/server/background-results.mjs']), {
+        android: ['android/packages/app/src/push-notifications/index.native.ts'],
+        desktop: ['plugin/server/background-results.mjs'], web: [],
+        runtime: ['plugin/server/background-results.mjs'],
+    });
+});
+
 for (const failure of [null, 'upload', 'export', 'install', 'pages']) {
 test(`integrated delivery protects active turns, overlaps upload/export and resumes safely: ${failure ?? 'success'}`,
     { timeout: 10000 }, async t => {

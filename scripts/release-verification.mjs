@@ -5,7 +5,7 @@ import { runCommand } from './release-command.mjs';
 import { root } from './paths.mjs';
 import { COMPOSER_FILE } from './patch-paseo-composer.mjs';
 
-export async function sourceFingerprint(run = runCommand, prefixes) {
+export async function sourceFingerprint(run = runCommand, prefixes, excludedPrefixes = []) {
     const paths = (await run('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
         { cwd: root, capture: true })).split('\0').filter(Boolean).sort();
     paths.push(...['engine', 'tools', 'plugin', 'android'].map(directory => `${directory}/node_modules/.package-lock.json`),
@@ -14,6 +14,7 @@ export async function sourceFingerprint(run = runCommand, prefixes) {
     const hash = createHash('sha256').update(process.version).update(process.env.NODE_OPTIONS || '');
     for (const path of [...new Set(paths)].sort()) {
         if (prefixes && !prefixes.some(prefix => path === prefix || path.startsWith(prefix + '/'))) continue;
+        if (excludedPrefixes.some(prefix => path === prefix || path.startsWith(prefix + '/'))) continue;
         const fullPath = join(root, path);
         const link = (await lstat(fullPath)).isSymbolicLink();
         // Git은 링크 대상 디렉터리 대신 링크 자체를 추적한다.
@@ -33,8 +34,8 @@ export async function verifyReleaseSource(config, run = runCommand) {
     await mkdir(cache, { recursive: true, mode: 0o700 });
     const results = [];
     const epoch = config.verificationEpoch ?? 0;
-    const execute = async (name, args, cwd = root, prefixes) => {
-        const input = { schema: 2, fingerprint: prefixes ? await sourceFingerprint(run, prefixes) : fingerprint,
+    const execute = async (name, args, cwd = root, prefixes, excludedPrefixes) => {
+        const input = { schema: 2, fingerprint: prefixes ? await sourceFingerprint(run, prefixes, excludedPrefixes) : fingerprint,
             node: process.version, platform: process.platform, arch: process.arch, epoch, name, args };
         const key = createHash('sha256').update(JSON.stringify(input)).digest('hex');
         const receipt = join(cache, key + '.json');
@@ -63,11 +64,13 @@ export async function verifyReleaseSource(config, run = runCommand) {
     // 타입/앱 검사는 루트 패치 주석이나 다른 앱 테스트 목록에 의해 무효화되지 않는다.
     const pluginInputs = ['plugin', 'engine', 'package.json'];
     const appInputs = ['android', 'plugin/shared', 'package.json'];
+    // 앱이 가져오지 않는 Electron 호스트·소개 사이트만 제외한다. 서버·공유 패키지·lock·빌드 설정은 유지한다.
+    const appExcludes = ['android/packages/desktop', 'android/packages/website'];
     const checks = await Promise.allSettled([
         (async () => { await execute('check', ['run', 'check']); await execute('test', ['test']); })(),
         execute('plugin-types', ['run', 'typecheck'], root, pluginInputs),
-        execute('app-types', ['run', 'typecheck'], join(root, 'android/packages/app'), appInputs),
-        execute('app-tests', ['test', '--', ...config.appTests], join(root, 'android/packages/app'), appInputs),
+        execute('app-types', ['run', 'typecheck'], join(root, 'android/packages/app'), appInputs, appExcludes),
+        execute('app-tests', ['test', '--', ...config.appTests], join(root, 'android/packages/app'), appInputs, appExcludes),
     ]);
     const failed = checks.filter(result => result.status === 'rejected');
     if (failed.length) throw new AggregateError(failed.map(result => result.reason),
