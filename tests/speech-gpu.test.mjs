@@ -45,6 +45,7 @@ test('GPU selection is local-only and appears only after a verified installation
     writeFileSync(path.join(home, 'config.json'), JSON.stringify({ agents: { providers: { paseodog: {} } } }));
     let snapshot = handleSpeechSettings({ action: 'read' }, env);
     assert.equal(snapshot.models.some(model => model.id === 'whisper-turbo-cuda'), false);
+    assert.equal(snapshot.models.some(model => model.id === 'whisper-medium-komix-v2-cuda'), false);
     assert.throws(() => handleSpeechSettings({
         action: 'write', model: 'whisper-turbo-cuda', revision: snapshot.revision,
     }, env), /Unsupported/);
@@ -54,6 +55,7 @@ test('GPU selection is local-only and appears only after a verified installation
     onLinuxArchitecture('arm64', () => {
         snapshot = handleSpeechSettings({ action: 'read' }, env);
         assert.equal(snapshot.models.some(model => model.id === 'whisper-turbo-cuda'), false);
+        assert.equal(snapshot.models.some(model => model.id === 'whisper-medium-komix-v2-cuda'), false);
         assert.throws(() => handleSpeechSettings({
             action: 'write', model: 'whisper-turbo-cuda', revision: snapshot.revision,
         }, env), /Unsupported/);
@@ -61,11 +63,11 @@ test('GPU selection is local-only and appears only after a verified installation
     onLinuxArchitecture('x64', () => {
         snapshot = handleSpeechSettings({ action: 'read' }, env);
         assert.match(snapshot.models.at(-1).warning, /CPU나 유료 API로 자동 전환하지/);
-        handleSpeechSettings({ action: 'write', model: 'whisper-turbo-cuda', revision: snapshot.revision }, env);
+        handleSpeechSettings({ action: 'write', model: 'whisper-medium-komix-v2-cuda', revision: snapshot.revision }, env);
     });
     const saved = JSON.parse(readFileSync(path.join(home, 'config.json')));
     for (const feature of ['dictation', 'voiceMode']) {
-        assert.deepEqual(saved.features[feature].stt, { provider: 'local', model: 'whisper-turbo-cuda', language: 'ko' });
+        assert.deepEqual(saved.features[feature].stt, { provider: 'local', model: 'whisper-medium-komix-v2-cuda', language: 'ko' });
     }
 });
 
@@ -115,6 +117,11 @@ test('GPU worker uses isolated verified libraries and refuses a missing runtime 
     fork({ dictationSttModel: 'whisper-turbo-cuda', voiceSttModel: 'whisper-turbo-cuda' });
     assert.equal(captured.PASEODOG_SPEECH_GPU, '1');
     assert.equal(captured.LD_LIBRARY_PATH, resolved.libDir);
+    for (const feature of ['dictationSttModel', 'voiceSttModel']) {
+        fork({ [feature]: 'whisper-medium-komix-v2-cuda' });
+        assert.equal(captured.PASEODOG_SPEECH_GPU, '1');
+        assert.equal(captured.LD_LIBRARY_PATH, resolved.libDir);
+    }
 });
 
 test('GPU installer verifies archive bytes, inference receipt and destination without replacing existing files', async t => {

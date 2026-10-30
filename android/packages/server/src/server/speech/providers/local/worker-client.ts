@@ -95,8 +95,9 @@ function forkLocalSpeechWorker(config: LocalSpeechWorkerConfig): LocalSpeechWork
   const env: NodeJS.ProcessEnv = { ...process.env };
   delete env.PASEODOG_SPEECH_GPU;
   if (
-    config.dictationSttModel === "whisper-turbo-cuda" ||
-    config.voiceSttModel === "whisper-turbo-cuda"
+    ["whisper-turbo-cuda", "whisper-medium-komix-v2-cuda"].some(
+      (model) => config.dictationSttModel === model || config.voiceSttModel === model,
+    )
   ) {
     env.PASEODOG_SPEECH_GPU = "1";
   }

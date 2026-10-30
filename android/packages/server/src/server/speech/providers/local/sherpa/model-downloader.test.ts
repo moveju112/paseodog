@@ -24,6 +24,23 @@ function makeTmpDir(): string {
 const logger = pino({ level: "silent" });
 
 describe("sherpa model downloader", () => {
+  test("KoMix requires local installation and reuses installed files without a download", async () => {
+    const modelsDir = makeTmpDir();
+    const modelId = "whisper-medium-komix-v2-cuda";
+    try {
+      await expect(ensureSherpaOnnxModel({ modelsDir, modelId, logger })).rejects.toThrow(
+        "verified local model installation",
+      );
+      const modelDir = getSherpaOnnxModelDir(modelsDir, modelId);
+      mkdirSync(modelDir);
+      for (const file of getSherpaOnnxModelSpec(modelId).requiredFiles) {
+        writeFileSync(path.join(modelDir, file), "fixture");
+      }
+      expect(await ensureSherpaOnnxModel({ modelsDir, modelId, logger })).toBe(modelDir);
+    } finally {
+      rmSync(modelsDir, { recursive: true, force: true });
+    }
+  });
   test("does not expose a partial model when tar extraction fails", async () => {
     const root = makeTmpDir();
     const modelsDir = path.join(root, "models");

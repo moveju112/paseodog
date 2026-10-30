@@ -29,9 +29,15 @@ test('local-STT daemon patch is exact-blob gated, idempotent and rejects partial
             for (const [before, after] of spec.cpuEdits) cpu = cpu.replace(before, after);
             assert.equal(patchedLocalSttSource(cpu, spec), patched);
         }
+        if (spec.gpuEdits) {
+            let gpu = original;
+            for (const [before, after] of spec.gpuEdits) gpu = gpu.replace(before, after);
+            assert.equal(patchedLocalSttSource(gpu, spec), patched);
+        }
         assert.throws(() => patchedLocalSttSource(patched + '// drift', spec), /hash mismatch/);
         if (spec.edits.length > 1) {
-            const [before, after] = spec.file.endsWith('model-catalog.js') ? spec.edits[0] : spec.edits.at(-1);
+            const [before, after] = spec.file.endsWith('model-catalog.js') ? spec.edits[0]
+                : spec.file.endsWith('worker-client.js') ? spec.edits[1] : spec.edits.at(-1);
             assert.throws(() => patchedLocalSttSource(patched.replace(after, before), spec), /Partial/);
         }
     }
@@ -59,7 +65,8 @@ test('local-STT patch makes SenseVoice the default STT and keeps Parakeet transd
     assert.equal(catalog.DEFAULT_LOCAL_STT_MODEL, SENSE_VOICE_MODEL_ID);
     assert.deepEqual(catalog.LOCAL_STT_MODEL_IDS,
         ['parakeet-tdt-0.6b-v2-int8', 'parakeet-tdt-0.6b-v3-int8', SENSE_VOICE_MODEL_ID,
-            'whisper-base-int8', 'whisper-small-int8', 'whisper-turbo-int8', 'whisper-turbo-cuda']);
+            'whisper-base-int8', 'whisper-small-int8', 'whisper-turbo-int8', 'whisper-turbo-cuda',
+            'whisper-medium-komix-v2-cuda']);
     assert.deepEqual(catalog.getSherpaOnnxModelSpec(SENSE_VOICE_MODEL_ID).requiredFiles, ['model.int8.onnx', 'tokens.txt']);
 
     const worker = readFileSync(join(local, 'worker-process.js'), 'utf8');
@@ -90,6 +97,12 @@ test('local-STT patch makes SenseVoice the default STT and keeps Parakeet transd
     assert.equal(gpu.featureDim, 128);
     assert.equal(gpu.model.kind, 'whisper');
     assert.equal(gpu.model.encoder, '/models/whisper-turbo-cuda/turbo-encoder.int8.onnx');
+    const komix = workerEngine({ modelsDir: '/models', model: 'whisper-medium-komix-v2-cuda' }, 'dictation').config;
+    assert.equal(komix.provider, 'cuda');
+    assert.equal(komix.featureDim, 80);
+    assert.equal(komix.model.encoder, '/models/whisper-medium-komix-v2-cuda/medium-encoder.int8.onnx');
+    assert.equal(komix.model.decoder, '/models/whisper-medium-komix-v2-cuda/medium-decoder.int8.onnx');
+    assert.equal(komix.model.tokens, '/models/whisper-medium-komix-v2-cuda/medium-tokens.txt');
 
     // 네이티브 바인딩 대신 설정을 기록하는 로더를 두고 패치된 인식기 생성자를 실행한다.
     writeFileSync(join(local, 'sherpa/sherpa-onnx-node-loader.js'), 'export const seen = [];\n'

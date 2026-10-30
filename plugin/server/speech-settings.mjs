@@ -1,7 +1,7 @@
 import { readFileSync, lstatSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { DEFAULT_KOREAN_SPEECH_MODEL, KOREAN_SPEECH_MODELS, GPU_SPEECH_MODEL } from '../shared/speech-models.mjs';
+import { DEFAULT_KOREAN_SPEECH_MODEL, KOREAN_SPEECH_MODELS, GPU_SPEECH_MODEL, KOMIX_SPEECH_MODEL } from '../shared/speech-models.mjs';
 
 const overrides = [
     'PASEO_DICTATION_STT_PROVIDER', 'PASEO_VOICE_STT_PROVIDER',
@@ -34,7 +34,7 @@ export function handleSpeechSettings(request, env = process.env) {
     catch { throw new Error('Invalid daemon configuration'); }
     if (!config?.agents?.providers?.paseodog)
         throw new Error('Dedicated PaseoDog provider required');
-    const models = gpuSpeechReady(home) ? [...KOREAN_SPEECH_MODELS, GPU_SPEECH_MODEL] : KOREAN_SPEECH_MODELS;
+    const models = gpuSpeechReady(home) ? [...KOREAN_SPEECH_MODELS, GPU_SPEECH_MODEL, KOMIX_SPEECH_MODEL] : KOREAN_SPEECH_MODELS;
     const blocked = overrides.some(key => Boolean(env[key]?.trim()));
     let revision = digest(original);
     if (request.action === 'write') {

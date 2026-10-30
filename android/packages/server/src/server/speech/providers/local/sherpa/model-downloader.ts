@@ -150,6 +150,9 @@ export async function ensureSherpaOnnxModel(
     return modelDir;
   }
 
+  if (spec.archiveUrl.startsWith("local:")) {
+    throw new Error("KoMix-v2 requires a verified local model installation");
+  }
   logger.info({ modelsDir: options.modelsDir }, "Starting model download");
 
   try {
