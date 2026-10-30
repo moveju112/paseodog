@@ -8,6 +8,7 @@ import { COMPACTION_SUMMARY_ROUTE_PATCH } from '../patches/compaction-summary-ro
 import { SESSION_TITLE_ROUTE_PATCH } from '../patches/session-title-route.mjs';
 import { BUILTIN_AGENT_FILES, BUILTIN_AGENT_PATCHES, SOLO_BASIC_ROLE_IDS } from '../patches/builtin-agents.mjs';
 import { AGENT_ROUTE_SAFETY_EDITS, AGENT_EDITOR_SAFETY_PATCHES } from '../patches/agent-editor-safety.mjs';
+import { WORK_METHOD_RULE_PATCHES } from '../patches/work-method-rules.mjs';
 export const PIN = '1.4.1';
 export const ORIGINAL_BLOB = '3adfd3eeb9f354198de89d6651647d8f9afc6321';
 export const ANCHOR = '      const turnContext = await dispatchPromptSubmit(turn, session0, prompt, options);';
@@ -20,6 +21,7 @@ export const AGENT_PATCHES = [
     ...BUILTIN_AGENT_PATCHES,
     ...EFFORT_USAGE_PATCHES,
     ...DEFAULT_OUTPUT_STYLE_PATCHES,
+    ...WORK_METHOD_RULE_PATCHES,
     {
         // 전역 설정을 직접 읽는 warmer도 막는다. 캐시 재사용 수정은 그대로 유지한다.
         file: 'src/runtime/agent/orchestrator/session/cache-warm.mjs',
