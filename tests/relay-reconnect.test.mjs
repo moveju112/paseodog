@@ -34,11 +34,16 @@ test('relay reconnect accepts only the reviewed input or its complete idempotent
 test('relay reconnect check is read-only and apply is idempotent', (t) => {
     const { directory, path } = fixture(t);
     const original = readFileSync(path, 'utf8');
-    assert.throws(() => patchPaseoRelayReconnect(directory, { check: true }), /patch is missing/);
+    const expected = patchedRelayReconnectSource(original);
+    if (original === expected) {
+        assert.doesNotThrow(() => patchPaseoRelayReconnect(directory, { check: true }));
+    } else {
+        assert.throws(() => patchPaseoRelayReconnect(directory, { check: true }), /patch is missing/);
+    }
     assert.equal(readFileSync(path, 'utf8'), original);
     patchPaseoRelayReconnect(directory);
     const patched = readFileSync(path, 'utf8');
-    assert.equal(patched, patchedRelayReconnectSource(original));
+    assert.equal(patched, expected);
     const mtime = statSync(path).mtimeMs;
     patchPaseoRelayReconnect(directory, { check: true });
     patchPaseoRelayReconnect(directory);
