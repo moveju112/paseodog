@@ -19,6 +19,21 @@ export const WORK_METHOD_RULE_PATCHES = [
         ]],
     },
     {
+        file: 'src/rules/shared/10-tool-workflow.md',
+        blob: '69bad574748c021e1f9423d593d1c4aa8affd06d',
+        edits: [[
+            [
+                '  patch from it with no surveys or history. Stop once every requested item',
+                '  has its evidence; never widen past what was asked, and never ask',
+                '  permission for work the request already covers.',
+            ].join('\n'),
+            [
+                '  patch from it with no surveys or history. Never ask permission for work the',
+                '  request already covers.',
+            ].join('\n'),
+        ]],
+    },
+    {
         file: 'src/rules/shared/20-research.md',
         blob: '1b3a96f6fd71b8794874222d0e5cc3f563e7f621',
         edits: [[
