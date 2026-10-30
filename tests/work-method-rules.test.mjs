@@ -8,6 +8,7 @@ import { AGENT_PATCHES, patchedAgentSource } from '../scripts/patch-mixdog.mjs';
 const root = new URL('../engine/node_modules/mixdog/', import.meta.url);
 const files = [
     'src/rules/shared/05-tool-calls.md',
+    'src/rules/shared/10-tool-workflow.md',
     'src/rules/shared/20-research.md',
     'src/rules/shared/35-implementation.md',
     'src/rules/shared/45-destructive.md',
@@ -54,6 +55,8 @@ test('rendered rules omit optional mandates while retaining safety and English b
     const options = { PLUGIN_ROOT: fileURLToPath(new URL('src/', root)) };
     const shared = builder.buildSharedToolContent(options);
     const lead = builder.buildLeadRoleContent(options);
+    assert.doesNotMatch(shared, /Stop once every requested item|never widen past what was asked/);
+    assert.match(shared, /Never ask permission for work the\s+request already covers/);
     assert.doesNotMatch(shared, /Group calls already known|combine compatible targets|Order on files:/);
     assert.doesNotMatch(shared, /web search non-Project facts|Separate-branch work goes into a managed worktree/);
     assert.doesNotMatch(shared, /No builds\/lint\/tests\/formatters mid-flight|Never reread your writes/);
