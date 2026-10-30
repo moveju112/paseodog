@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { scratchPath } from '../scripts/paths.mjs';
 import { JournalStore } from '../plugin/server/journal.mjs';
-import { createBackgroundResults, probeRemote, revokeBackgroundWork, shellObservation } from '../plugin/server/background-results.mjs';
+import { createBackgroundResults, probeRemote, resultItem, revokeBackgroundWork, shellObservation } from '../plugin/server/background-results.mjs';
 import { fixture, until } from './helpers.mjs';
 
 const agentId = '11111111-1111-4111-8111-111111111111';
@@ -30,6 +30,17 @@ async function setup(t, options = {}) {
 }
 function reports(store) { return store.load('bridge').items.filter(row => row.item.type === 'notification'); }
 
+test('result notices identify the origin and outcome without repeating delivery caveats', () => {
+    for (const [surface, origin] of [['shell', '로컬 명령'], ['remote', '원격 작업'], ['delivery', '배포']]) {
+        for (const [status, label] of [['completed', '성공'], ['failed', '실패'], ['canceled', '취소'], ['unknown', '결과 불명']]) {
+            const item = resultItem({ key: surface, surface, jobId: 'job-1' }, status);
+            const warning = status === 'unknown' ? ' 상태 확인이 필요하며 원래 명령은 자동 재실행하지 않았어.' : '';
+            assert.equal(item.message, `${origin} job-1: ${label}.${warning}`);
+            assert.equal(item.level, status === 'failed' || status === 'unknown' ? 'warning' : 'info');
+        }
+    }
+});
+
 for (const [exitCode, expected] of [[0, '성공'], [7, '실패']]) {
     test(`shell terminal ${exitCode} is journaled once without user input or a model`, async t => {
         const f = await setup(t);
@@ -38,7 +49,7 @@ for (const [exitCode, expected] of [[0, '성공'], [7, '실패']]) {
         await f.writeJob({ status: 'completed', exitCode, command: 'secret command', stdoutPreview: 'secret token' });
         await f.service.scan(); await f.service.scan();
         assert.equal(reports(f.store).length, 1);
-        assert.match(reports(f.store)[0].item.message, new RegExp(expected));
+        assert.equal(reports(f.store)[0].item.message, `로컬 명령 job_1_test: ${expected}.`);
         assert.doesNotMatch(JSON.stringify(f.store.load('bridge')), /secret/);
         const receipt = Object.values(f.store.load('bridge').receipts)[0];
         assert.equal(receipt.result.ai, 'not-requested');
@@ -162,7 +173,7 @@ test('journal failure does not publish or acknowledge a result', async t => {
 test('canceled local task is reported without claiming remote cancellation', async t => {
     const f = await setup(t);
     await f.writeJob({ status: 'canceled' }); await f.service.scan();
-    assert.match(reports(f.store)[0].item.message, /취소.*원격 작업의 성공·실패와는 별개/);
+    assert.equal(reports(f.store)[0].item.message, '로컬 명령 job_1_test: 취소.');
 });
 test('status probes reject redirects, credentials, oversized responses and honor timeout', async t => {
     const f = await setup(t);
