@@ -3,6 +3,7 @@ import type { AgentAttentionReason } from "@getpaseo/protocol/agent-attention-no
 export const PRESENCE_THRESHOLD_MS = 180_000;
 
 export interface ClientPresenceState {
+  deviceType: "web" | "mobile";
   appVisible: boolean;
   lastActivityAtMs: number | null;
   focusedAgentId: string | null;
@@ -49,6 +50,8 @@ export function computeNotificationPlan({
   let mostRecentPresentAtMs = Number.NEGATIVE_INFINITY;
 
   for (const [clientIndex, state] of allStates.entries()) {
+    // 홈화면의 모바일 JS 연결은 유지되지 않을 수 있으므로 최근 활동과 무관하게 푸시한다.
+    if (state.deviceType === "mobile" && !state.appVisible) continue;
     const clampedActivityAtMs =
       state.lastActivityAtMs === null ? null : Math.min(state.lastActivityAtMs, nowMs);
     const isPresent =

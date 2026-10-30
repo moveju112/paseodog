@@ -23,11 +23,21 @@ beforeEach(() => {
   mocks.platform = "android";
 });
 
-it("never registers Android remote push and retires existing subscriptions on reconnect", () => {
+it("registers Android remote push when explicitly enabled", () => {
+  const stop = vi.fn();
+  mocks.start.mockReturnValue(stop);
+  const input = { serverId: "host", enabled: true } as StartPushNotificationsInput;
+  expect(startPushNotifications(input)).toBe(stop);
+  expect(mocks.start).toHaveBeenCalledWith(input);
+  expect(mocks.revoke).not.toHaveBeenCalled();
+});
+
+it("revokes disabled Android subscriptions immediately and on reconnect", () => {
   const stop = vi.fn();
   const subscribe = vi.fn((_listener: (state: { status: string }) => void) => stop);
   const input = {
     serverId: "host",
+    enabled: false,
     client: { isConnected: true, subscribeConnectionStatus: subscribe },
   } as unknown as StartPushNotificationsInput;
   expect(startPushNotifications(input)).toBe(stop);

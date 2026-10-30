@@ -3,8 +3,8 @@ import type { RevokePushNotificationsInput, StartPushNotificationsInput } from "
 import { Platform } from "react-native";
 
 export function startPushNotifications(input: StartPushNotificationsInput): () => void {
-  if (Platform.OS === "android") {
-    // Android는 로컬 알림만 사용한다. 기존 토큰도 연결 시 해제해 중복 알림을 막는다.
+  if (Platform.OS === "android" && !input.enabled) {
+    // 연결이 끊긴 상태의 opt-out도 다음 연결에서 서버에 반영한다.
     const revoke = () => {
       if (input.client.isConnected) void revokePushNotifications(input);
     };

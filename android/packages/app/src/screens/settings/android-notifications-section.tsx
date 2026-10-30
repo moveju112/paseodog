@@ -48,10 +48,9 @@ export function AndroidNotificationsSection() {
           <View style={settingsStyles.rowContent}>
             <Text style={settingsStyles.rowTitle}>백그라운드 알림</Text>
             <Text style={settingsStyles.rowHint}>
-              홈화면에서도 연결을 유지해 앱이 직접 완료·확인 요청을 알립니다. 연결 유지용 상시
-              알림이 표시되고 배터리를 추가로 사용합니다. 앱 강제 종료·최근 앱에서 제거·배터리 제한
-              시 수신이 중단될 수 있습니다. 화면을 꺼도 받으려면 Android 앱 설정에서 배터리 사용을
-              제한 없음으로 설정해 주세요.
+              서버가 Firebase·Expo 푸시로 완료·확인 요청을 알립니다. 홈화면이나 화면이 꺼진
+              상태에서도 상시 실행 알림 없이 받을 수 있습니다. 인터넷 연결과 Android 알림 권한이
+              필요하며, 앱 강제 종료 후에는 앱을 다시 열어 주세요.
             </Text>
           </View>
           <Switch
@@ -66,7 +65,7 @@ export function AndroidNotificationsSection() {
           disabled={!settings.backgroundNotificationsEnabled || busy}
           onPress={sendTest}
         >
-          알림 테스트
+          기기 알림 테스트
         </Button>
         <Button variant="outline" onPress={openAndroidAppSettings}>
           Android 앱 설정 열기

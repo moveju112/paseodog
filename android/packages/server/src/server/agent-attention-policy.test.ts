@@ -8,6 +8,7 @@ import {
 
 function state(overrides: Partial<ClientPresenceState>): ClientPresenceState {
   return {
+    deviceType: "web",
     appVisible: true,
     focusedAgentId: null,
     focusedTerminalId: null,
@@ -20,6 +21,42 @@ describe("computeNotificationPlan", () => {
   const nowMs = Date.parse("2026-04-19T12:00:00.000Z");
   const staleAtMs = nowMs - PRESENCE_THRESHOLD_MS - 1;
   const presentAtMs = nowMs - PRESENCE_THRESHOLD_MS + 1;
+
+  it.each(["agent", "terminal"] as const)(
+    "pushes %s attention immediately after a mobile client goes home",
+    (kind) => {
+      expect(
+        computeNotificationPlan({
+          allStates: [
+            state({
+              deviceType: "mobile",
+              appVisible: false,
+              focusedAgentId: "target",
+              focusedTerminalId: "target",
+              lastActivityAtMs: nowMs,
+            }),
+          ],
+          focusTarget: { kind, id: "target" },
+          pushEligible: true,
+          nowMs,
+        }),
+      ).toEqual({ inAppRecipientIndex: null, shouldPush: true });
+    },
+  );
+
+  it("keeps background mobile clients out of local recipient selection", () => {
+    expect(
+      computeNotificationPlan({
+        allStates: [
+          state({ appVisible: false, lastActivityAtMs: nowMs - 1000 }),
+          state({ deviceType: "mobile", appVisible: false, lastActivityAtMs: nowMs }),
+        ],
+        focusTarget: { kind: "agent", id: "target" },
+        pushEligible: true,
+        nowMs,
+      }),
+    ).toEqual({ inAppRecipientIndex: 0, shouldPush: false });
+  });
 
   it("does not suppress notifications when a focused client is stale", () => {
     const staleFocused = state({

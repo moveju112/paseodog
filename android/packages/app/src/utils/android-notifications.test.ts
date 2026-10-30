@@ -8,6 +8,21 @@ const mocks = vi.hoisted(() => ({
   schedule: vi.fn(),
   presented: vi.fn(),
   dismiss: vi.fn(),
+  appState: "background",
+  sessions: {} as Record<
+    string,
+    { focusedAgentId: string | null; focusedTerminalId: string | null }
+  >,
+}));
+vi.mock("react-native", () => ({
+  AppState: {
+    get currentState() {
+      return mocks.appState;
+    },
+  },
+}));
+vi.mock("@/stores/session-store", () => ({
+  useSessionStore: { getState: () => ({ sessions: mocks.sessions }) },
 }));
 vi.mock("@/hooks/use-settings", () => ({ loadAppSettingsFromStorage: mocks.load }));
 vi.mock("expo-notifications", () => ({
@@ -24,6 +39,7 @@ import {
   dismissAndroidSessionNotifications,
   requestAndroidNotificationPermission,
   sendAndroidNotification,
+  shouldPresentAndroidNotification,
 } from "./android-notifications";
 
 describe("Android local notifications", () => {
@@ -33,6 +49,8 @@ describe("Android local notifications", () => {
     mocks.permissions.mockResolvedValue({ granted: true, canAskAgain: true });
     mocks.presented.mockResolvedValue([]);
     mocks.dismiss.mockResolvedValue(undefined);
+    mocks.appState = "background";
+    mocks.sessions = {};
   });
   it("sends a sounding local notification with its navigation target", async () => {
     const payload = { title: "Done", data: { serverId: "s", agentId: "a" } };
@@ -47,6 +65,25 @@ describe("Android local notifications", () => {
     mocks.load.mockResolvedValue({ backgroundNotificationsEnabled: false });
     expect(await sendAndroidNotification({ title: "Done" })).toBe(false);
     expect(mocks.schedule).not.toHaveBeenCalled();
+  });
+  it("suppresses remote presentation after opt-out", async () => {
+    mocks.load.mockResolvedValue({ backgroundNotificationsEnabled: false });
+    expect(await shouldPresentAndroidNotification({ serverId: "s", agentId: "a" })).toBe(false);
+  });
+  it("suppresses delayed push for the currently viewed session but not home-screen delivery", async () => {
+    mocks.sessions = { s: { focusedAgentId: "a", focusedTerminalId: null } };
+    const data = { serverId: "s", agentId: "a" };
+    expect(await shouldPresentAndroidNotification(data)).toBe(true);
+    mocks.appState = "active";
+    expect(await shouldPresentAndroidNotification(data)).toBe(false);
+    expect(await shouldPresentAndroidNotification({ serverId: "s", agentId: "other" })).toBe(true);
+    expect(await shouldPresentAndroidNotification({ serverId: "other", agentId: "a" })).toBe(true);
+  });
+  it("suppresses delayed push for the currently viewed terminal", async () => {
+    mocks.appState = "active";
+    mocks.sessions = { s: { focusedAgentId: null, focusedTerminalId: "t" } };
+    expect(await shouldPresentAndroidNotification({ serverId: "s", terminalId: "t" })).toBe(false);
+    expect(await shouldPresentAndroidNotification({})).toBe(true);
   });
   it("does not prompt for denied permission in the background", async () => {
     mocks.permissions.mockResolvedValue({ granted: false, canAskAgain: true });
