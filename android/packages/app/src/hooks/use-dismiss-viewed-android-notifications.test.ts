@@ -6,9 +6,17 @@ const state = vi.hoisted(() => ({
   platform: "android",
   visible: true,
   dismiss: vi.fn(),
+  focus: undefined as (() => void) | undefined,
+  remove: vi.fn(),
 }));
 
 vi.mock("react-native", () => ({
+  AppState: {
+    addEventListener: (_event: string, listener: () => void) => {
+      state.focus = listener;
+      return { remove: state.remove };
+    },
+  },
   Platform: {
     get OS() {
       return state.platform;
@@ -37,6 +45,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   state.platform = "android";
   state.visible = true;
+  state.focus = undefined;
   state.dismiss.mockResolvedValue(undefined);
 });
 afterEach(() => vi.restoreAllMocks());
@@ -83,6 +92,20 @@ it("does not clear notifications without an opened agent", () => {
   });
   expect(state.dismiss).not.toHaveBeenCalled();
   view.unmount();
+});
+
+it("clears again when the Android notification shade closes without an app-state change", () => {
+  const view = renderHook(useViewedSession, {
+    initialProps: { serverId: "host", agentId: "a" } as Props,
+  });
+  expect(state.focus).toBeTypeOf("function");
+  state.focus!();
+  expect(state.dismiss.mock.calls).toEqual([
+    ["host", "a"],
+    ["host", "a"],
+  ]);
+  view.unmount();
+  expect(state.remove).toHaveBeenCalledOnce();
 });
 
 it.each(["ios", "web"])("leaves %s notification behavior unchanged", (platform) => {
