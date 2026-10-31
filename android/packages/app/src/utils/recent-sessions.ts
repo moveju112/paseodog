@@ -92,6 +92,7 @@ export function selectRecentSessions(
   agentsByServer: Record<string, ReadonlyMap<string, Agent> | undefined>,
   window: RecentSessionsWindow,
   now: Date,
+  hiddenThrough: Readonly<Record<string, number>> = {},
 ): Agent[] {
   const cutoff = recentSessionsCutoff(window, now);
   const result: Agent[] = [];
@@ -101,6 +102,8 @@ export function selectRecentSessions(
       const messagedAt = agent.lastUserMessageAt?.getTime();
       if (messagedAt === undefined || messagedAt < cutoff) continue;
       if (agent.archivedAt || agent.parentAgentId) continue;
+      const hiddenAt = hiddenThrough[`${agent.serverId}:${agent.id}`];
+      if (hiddenAt !== undefined && messagedAt <= hiddenAt) continue;
       result.push(agent);
     }
   }

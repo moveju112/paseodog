@@ -3,6 +3,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent } from "@/stores/session-store";
+import { useRecentSessionsStore } from "@/stores/recent-sessions-store";
 import { SidebarRecentSessions } from "./sidebar-recent-sessions";
 
 const state = vi.hoisted(() => ({
@@ -34,6 +35,7 @@ vi.mock("@/components/sidebar/sidebar-workspace-row-content", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useRecentSessionsStore.setState(useRecentSessionsStore.getInitialState());
   state.agent = {
     id: "session",
     serverId: "host",
@@ -49,6 +51,18 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("recent session attention", () => {
+  it("hides only the recent entry without navigating or changing the session", () => {
+    const beforeNavigate = vi.fn();
+    const original = { ...state.agent };
+    render(<SidebarRecentSessions onBeforeNavigate={beforeNavigate} />);
+    fireEvent.click(screen.getByRole("button", { name: "sidebar.recentSessions.hide" }));
+    expect(screen.queryByText("Recent session")).toBeNull();
+    expect(state.agent).toEqual(original);
+    expect(state.navigate).not.toHaveBeenCalled();
+    expect(state.clearAgentAttention).not.toHaveBeenCalled();
+    expect(beforeNavigate).not.toHaveBeenCalled();
+  });
+
   it("acknowledges completion on every explicit selection, even without a focus change", () => {
     render(<SidebarRecentSessions />);
     fireEvent.click(screen.getByText("Recent session"));

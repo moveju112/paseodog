@@ -60,6 +60,41 @@ function minutesAgo(minutes: number): Date {
 }
 
 describe("recent sessions", () => {
+  it("hides only the matching host/session until a newer user message, without mutating agents", () => {
+    const hidden = agent("same", { lastUserMessageAt: minutesAgo(10), status: "running" });
+    const otherHost = agent("same", {
+      serverId: "server-2",
+      lastUserMessageAt: minutesAgo(5),
+    });
+    const linked = agent("linked", { lastUserMessageAt: minutesAgo(15) });
+    const sources = {
+      "server-1": new Map([
+        [hidden.id, hidden],
+        [linked.id, linked],
+      ]),
+      "server-2": new Map([[otherHost.id, otherHost]]),
+    };
+    const hiddenThrough = { "server-1:same": minutesAgo(10).getTime() };
+    const original = { ...hidden };
+    for (const window of ["30m", "4h", "12h"] as const) {
+      const visible = selectRecentSessions(sources, window, now, hiddenThrough);
+      expect(visible).toEqual([otherHost, linked]);
+      expect(groupRecentSessionsBySplit(visible, [["server-1:same", "server-1:linked"]])).toEqual([
+        { agent: otherHost, linked: [] },
+        { agent: linked, linked: [] },
+      ]);
+    }
+    expect(sources["server-1"].get("same")).toEqual(original);
+    hidden.status = "idle";
+    expect(selectRecentSessions(sources, "4h", now, hiddenThrough)).not.toContain(hidden);
+    hidden.lastUserMessageAt = minutesAgo(1);
+    expect(selectRecentSessions(sources, "4h", now, hiddenThrough)).toEqual([
+      hidden,
+      otherHost,
+      linked,
+    ]);
+  });
+
   it("uses rolling windows and local midnight for today", () => {
     expect(recentSessionsCutoff("15m", now)).toBe(minutesAgo(15).getTime());
     expect(recentSessionsCutoff("1h", now)).toBe(minutesAgo(60).getTime());

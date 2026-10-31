@@ -41,6 +41,7 @@ export const SidebarRecentSessions = memo(function SidebarRecentSessions({
   const storedWindow = useRecentSessionsStore((state) => state.window);
   const storedWindows = useRecentSessionsStore((state) => state.windows);
   const setWindow = useRecentSessionsStore((state) => state.setWindow);
+  const hiddenThrough = useRecentSessionsStore((state) => state.hiddenThrough);
   // 설정에서 고른 범위만 보이고, 빠진 범위를 고른 상태였으면 가까운 넓은 범위로 보인다.
   const windows = useMemo(() => normalizeRecentSessionsWindows(storedWindows), [storedWindows]);
   const window = effectiveRecentSessionsWindow(storedWindow, windows);
@@ -62,8 +63,11 @@ export const SidebarRecentSessions = memo(function SidebarRecentSessions({
   // 분할 화면으로 함께 열린 최근 세션은 그중 가장 최근 세션 아래에 붙인다.
   const sessions = useMemo(
     () =>
-      groupRecentSessionsBySplit(selectRecentSessions(agentsByServer, window, now), splitGroups),
-    [agentsByServer, window, now, splitGroups],
+      groupRecentSessionsBySplit(
+        selectRecentSessions(agentsByServer, window, now, hiddenThrough),
+        splitGroups,
+      ),
+    [agentsByServer, window, now, hiddenThrough, splitGroups],
   );
 
   return (
@@ -189,6 +193,12 @@ function RecentSessionRow({
 }) {
   const { t } = useTranslation();
   const timeAgo = useCompactTimeAgo(agent.lastUserMessageAt);
+  const hideSession = useRecentSessionsStore((state) => state.hideSession);
+  const handleHide = useCallback(() => {
+    if (agent.lastUserMessageAt) {
+      hideSession(agent.serverId, agent.id, agent.lastUserMessageAt.getTime());
+    }
+  }, [agent.serverId, agent.id, agent.lastUserMessageAt, hideSession]);
   const bucket = deriveSidebarStateBucket({
     status: agent.status,
     requiresAttention: agent.requiresAttention ?? false,
@@ -223,33 +233,44 @@ function RecentSessionRow({
   );
   const title = agent.title || t("agentList.fallbackTitle");
   return (
-    <Pressable
-      style={style}
-      onPress={handlePress}
-      accessibilityRole="button"
-      accessibilityLabel={
-        linkedTo
-          ? `${title}, ${t("sidebar.recentSessions.splitLinked", { title: linkedTo })}`
-          : undefined
-      }
-      testID={`sidebar-recent-session-${agent.serverId}-${agent.id}`}
-    >
-      <View style={styles.dotSlot}>
-        {/* 확인한 완료(done)는 체크 없이 빈 슬롯으로 둔다 */}
-        {bucket === "done" ? null : (
-          <WorkspaceStatusIndicator bucket={bucket} workspaceKind="directory" />
-        )}
-      </View>
-      <Text style={styles.rowTitle} numberOfLines={1}>
-        {title}
-      </Text>
-      {placement ? (
-        <Text style={styles.rowMeta} numberOfLines={1}>
-          {placement}
+    <View style={styles.rowContainer}>
+      <Pressable
+        style={style}
+        onPress={handlePress}
+        accessibilityRole="button"
+        accessibilityLabel={
+          linkedTo
+            ? `${title}, ${t("sidebar.recentSessions.splitLinked", { title: linkedTo })}`
+            : undefined
+        }
+        testID={`sidebar-recent-session-${agent.serverId}-${agent.id}`}
+      >
+        <View style={styles.dotSlot}>
+          {/* 확인한 완료(done)는 체크 없이 빈 슬롯으로 둔다 */}
+          {bucket === "done" ? null : (
+            <WorkspaceStatusIndicator bucket={bucket} workspaceKind="directory" />
+          )}
+        </View>
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          {title}
         </Text>
-      ) : null}
-      <Text style={styles.rowTime}>{timeAgo}</Text>
-    </Pressable>
+        {placement ? (
+          <Text style={styles.rowMeta} numberOfLines={1}>
+            {placement}
+          </Text>
+        ) : null}
+        <Text style={styles.rowTime}>{timeAgo}</Text>
+      </Pressable>
+      <Pressable
+        style={styles.hideButton}
+        onPress={handleHide}
+        accessibilityRole="button"
+        accessibilityLabel={t("sidebar.recentSessions.hide", { title })}
+        testID={`sidebar-recent-hide-${agent.serverId}-${agent.id}`}
+      >
+        <Text style={styles.hideIcon}>×</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -333,21 +354,38 @@ const styles = StyleSheet.create((theme) => ({
     borderTopColor: theme.colors.border,
     borderStyle: "dashed",
   },
-  // 행 높이 30 기준 약 6행
+  // 터치 영역 44 기준 약 6행
   rows: {
     flexGrow: 0,
-    maxHeight: 186,
+    maxHeight: 264,
   },
   row: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    minHeight: 30,
+    minHeight: 44,
     paddingHorizontal: theme.spacing[2],
     borderRadius: theme.borderRadius.md,
   },
   rowActive: {
     backgroundColor: theme.colors.surfaceSidebarHover,
+  },
+  rowContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  hideButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.md,
+  },
+  hideIcon: {
+    color: theme.colors.foregroundMuted,
+    fontSize: 22,
   },
   dotSlot: {
     width: theme.iconSize.md,

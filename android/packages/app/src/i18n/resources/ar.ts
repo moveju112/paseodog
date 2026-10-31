@@ -1151,6 +1151,7 @@ export const ar: TranslationResources = {
   },
   sidebar: {
     recentSessions: {
+      hide: "إخفاء {{title}} من الجلسات الأخيرة",
       title: "الأخيرة",
       empty: "لا توجد جلسات راسلتها في هذه الفترة",
       windowAccessibility: "عرض الجلسات خلال {{window}}",

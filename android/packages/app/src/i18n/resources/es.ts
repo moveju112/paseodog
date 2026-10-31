@@ -1187,6 +1187,7 @@ export const es: TranslationResources = {
   },
   sidebar: {
     recentSessions: {
+      hide: "Ocultar {{title}} de las sesiones recientes",
       title: "Recientes",
       empty: "No hay sesiones con mensajes en este periodo",
       windowAccessibility: "Mostrar sesiones de {{window}}",

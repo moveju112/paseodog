@@ -1168,6 +1168,7 @@ export const ru: TranslationResources = {
   },
   sidebar: {
     recentSessions: {
+      hide: "Скрыть {{title}} из недавних сессий",
       title: "Недавние",
       empty: "Нет сессий с сообщениями за этот период",
       windowAccessibility: "Показать сессии за {{window}}",
