@@ -2039,6 +2039,7 @@ export const zhCN: TranslationResources = {
     },
   },
   settings: {
+    ...en.settings,
     title: "设置",
     loading: "正在加载设置...",
     groups: {
@@ -2095,6 +2096,7 @@ export const zhCN: TranslationResources = {
       sendFailedTitle: "无法发送测试通知",
     },
     hostSections: {
+      ...en.settings.hostSections,
       engineAccounts: "订阅账户",
       engineWorkflow: "工作流",
       engineTokens: "节省令牌",

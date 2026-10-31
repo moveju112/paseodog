@@ -51,6 +51,8 @@ import { isNative } from "@/constants/platform";
 import type { PluginThemeOption } from "@/plugins/themes";
 import { settingsStyles } from "@/styles/settings";
 import { AppearancePreview } from "./appearance-preview";
+import { OpenLocationSection } from "@/screens/settings/open-location/open-location-section";
+import { isElectronRuntime } from "@/desktop/host";
 
 // ---------------------------------------------------------------------------
 // Theme-reactive leaf icons (withUnistyles + uniProps color mapping — no
@@ -700,6 +702,7 @@ export function AppearanceSection() {
           <AppearancePreview overrides={previewOverrides} />
         </View>
       </SettingsSection>
+      {isElectronRuntime() ? <OpenLocationSection /> : null}
     </View>
   );
 }

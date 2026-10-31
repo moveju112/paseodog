@@ -50,11 +50,9 @@ import { HostPicker as SharedHostPicker } from "@/components/hosts/host-picker";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { AppearanceSection } from "@/screens/settings/appearance/appearance-section";
-import { OpenLocationSection } from "@/screens/settings/open-location/open-location-section";
 import { TerminalSection } from "@/screens/settings/terminal/terminal-section";
 import { ChatSection } from "@/screens/settings/chat/chat-section";
 import { SidebarNavSection } from "@/screens/settings/sidebar/sidebar-nav-section";
-import { SendingSection } from "@/screens/settings/general/sending-section";
 import { useAppSettings, useAppSettingsSaveError, type AppSettings } from "@/hooks/use-settings";
 import { useHostRuntimeIsConnected, useHosts } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
@@ -109,6 +107,9 @@ import {
   HostUsagePage,
   HostWorkspacesPage,
   HostTerminalsPage,
+  HostToolsSection,
+  HostSkillsSection,
+  AppendSystemPromptCard,
 } from "@/screens/settings/host-page";
 import { PluginSettingsContent } from "@/plugins/settings";
 import { useInstalledPlugins } from "@/plugins/registry";
@@ -226,9 +227,18 @@ interface HostSectionItem {
 }
 
 const HOST_SECTION_ITEMS: HostSectionItem[] = [
-  { id: "agents", labelKey: "settings.hostSections.agents", icon: Bot },
   { id: "engine-accounts", labelKey: "settings.hostSections.engineAccounts", icon: KeyRound },
+  { id: "providers", labelKey: "settings.hostSections.providers", icon: Bot },
+  { id: "agents", labelKey: "settings.hostSections.agents", icon: Bot },
   { id: "engine-workflow", labelKey: "settings.hostSections.engineWorkflow", icon: Workflow },
+  { id: "engine-response", labelKey: "settings.hostSections.engineResponse", icon: MessageSquare },
+  {
+    id: "engine-execution",
+    labelKey: "settings.hostSections.engineExecution",
+    icon: SquareTerminal,
+  },
+  { id: "engine-speech", labelKey: "settings.hostSections.engineSpeech", icon: Smartphone },
+  { id: "engine-memory", labelKey: "settings.hostSections.engineMemory", icon: Sparkles },
   { id: "engine-tokens", labelKey: "settings.hostSections.engineTokens", icon: Sparkles },
   {
     id: "engine-instructions",
@@ -237,6 +247,8 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
   },
   { id: "engine-tools", labelKey: "settings.hostSections.engineTools", icon: Puzzle },
   { id: "engine-skills", labelKey: "settings.hostSections.engineSkills", icon: Bot },
+  { id: "metadata", labelKey: "settings.hostSections.metadata", icon: Sparkles },
+  { id: "plugins", labelKey: "settings.hostSections.plugins", icon: Puzzle },
   { id: "host", labelKey: "settings.hostSections.host", icon: Server },
   { id: "projects", labelKey: "settings.hostSections.projects", icon: FolderGit2 },
   { id: "workspaces", labelKey: "settings.hostSections.workspaces", icon: FolderGit2 },
@@ -257,50 +269,68 @@ const ENGINE_PLUGIN_SCREENS: Record<
   "mixdog-instructions": { section: "instructions", hostSection: "engine-instructions" },
   "mixdog-tools": { section: "tools", hostSection: "engine-tools" },
   "mixdog-skills": { section: "skills", hostSection: "engine-skills" },
-  "mixdog-agents": { section: "workflow", hostSection: "engine-workflow" },
+  "mixdog-agents": { section: "agents", hostSection: "agents" },
+};
+
+const STANDALONE_ENGINE_SECTIONS: Partial<Record<HostSectionSlug, EngineSection>> = {
+  "engine-accounts": "accounts",
+  "engine-workflow": "workflow",
+  "engine-tokens": "tokens",
+  "engine-response": "response",
+  "engine-execution": "execution",
+  "engine-speech": "speech",
+  "engine-memory": "memory",
 };
 
 function renderHostSettingsContent(
   view: Extract<SettingsView, { kind: "host" }>,
   onHostRemoved: () => void,
 ): ReactNode {
+  const standaloneSection = STANDALONE_ENGINE_SECTIONS[view.section];
+  if (standaloneSection) {
+    return (
+      <AiEnginePage
+        key={`${view.serverId}:${standaloneSection}`}
+        serverId={view.serverId}
+        section={standaloneSection}
+      />
+    );
+  }
   switch (view.section) {
-    case "engine-accounts":
-      return (
-        <AiEnginePage
-          key={`${view.serverId}:accounts`}
-          serverId={view.serverId}
-          section="accounts"
-        />
-      );
-    case "engine-workflow":
     case "engine-agents":
+    case "agents":
       return (
-        <AiEnginePage
-          key={`${view.serverId}:workflow`}
-          serverId={view.serverId}
-          section="workflow"
-        />
-      );
-    case "engine-tokens":
-      return (
-        <AiEnginePage key={`${view.serverId}:tokens`} serverId={view.serverId} section="tokens" />
+        <>
+          <AiEnginePage key={`${view.serverId}:agents`} serverId={view.serverId} section="agents" />
+          <HostAgentsPage serverId={view.serverId} />
+        </>
       );
     case "engine-instructions":
       return (
-        <AiEnginePage
-          key={`${view.serverId}:instructions`}
-          serverId={view.serverId}
-          section="instructions"
-        />
+        <>
+          <AiEnginePage
+            key={`${view.serverId}:instructions`}
+            serverId={view.serverId}
+            section="instructions"
+          />
+          <SettingsSection title="공통 시스템 프롬프트">
+            <AppendSystemPromptCard serverId={view.serverId} />
+          </SettingsSection>
+        </>
       );
     case "engine-tools":
       return (
-        <AiEnginePage key={`${view.serverId}:tools`} serverId={view.serverId} section="tools" />
+        <>
+          <AiEnginePage key={`${view.serverId}:tools`} serverId={view.serverId} section="tools" />
+          <HostToolsSection serverId={view.serverId} />
+        </>
       );
     case "engine-skills":
       return (
-        <AiEnginePage key={`${view.serverId}:skills`} serverId={view.serverId} section="skills" />
+        <>
+          <AiEnginePage key={`${view.serverId}:skills`} serverId={view.serverId} section="skills" />
+          <HostSkillsSection serverId={view.serverId} />
+        </>
       );
     case "projects":
       return <ProjectsScreen serverId={view.serverId} />;
@@ -308,14 +338,30 @@ function renderHostSettingsContent(
       return <HostConnectionsPage serverId={view.serverId} />;
     case "pair-device":
       return <HostPairDevicePage serverId={view.serverId} />;
-    case "agents":
-      return <HostAgentsPage serverId={view.serverId} />;
     case "metadata":
-      return <MetadataGenerationPage serverId={view.serverId} />;
+      return (
+        <>
+          <AiEnginePage
+            key={`${view.serverId}:generation`}
+            serverId={view.serverId}
+            section="generation"
+          />
+          <MetadataGenerationPage serverId={view.serverId} />
+        </>
+      );
     case "workspaces":
       return <HostWorkspacesPage serverId={view.serverId} />;
     case "providers":
-      return <HostProvidersPage serverId={view.serverId} />;
+      return (
+        <>
+          <AiEnginePage
+            key={`${view.serverId}:providers`}
+            serverId={view.serverId}
+            section="providers"
+          />
+          <HostProvidersPage serverId={view.serverId} />
+        </>
+      );
     case "usage":
       return <HostUsagePage serverId={view.serverId} />;
     case "terminals":
@@ -523,7 +569,9 @@ function AboutSection({ appVersion, appVersionText, isDesktopApp }: AboutSection
               <Text style={settingsStyles.rowTitle}>{t("settings.about.appVersion")}</Text>
               <Text style={settingsStyles.rowHint}>{t("settings.about.thisDevice")}</Text>
             </View>
-            <Text selectable style={styles.aboutValue}>{versionText}</Text>
+            <Text selectable style={styles.aboutValue}>
+              {versionText}
+            </Text>
           </View>
           <PaseodogUpdateRow />
           {isDesktopApp ? <DesktopAppUpdateRow /> : null}
@@ -612,7 +660,9 @@ function HostVersionRow({
           <Text style={settingsStyles.rowHint}>{t("settings.about.versionDiffers")}</Text>
         ) : null}
       </View>
-      <Text selectable style={valueStyle}>{versionText}</Text>
+      <Text selectable style={valueStyle}>
+        {versionText}
+      </Text>
     </View>
   );
 }
@@ -1382,16 +1432,17 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
       if (!item || !isSectionAvailable(item, isDesktopApp)) return null;
       switch (view.section) {
         case "general":
-          return (
-            <>
-              <GeneralSection settings={settings} handleLanguageChange={handleLanguageChange} />
-              <SendingSection />
-              {isDesktopApp ? <OpenLocationSection /> : null}
-            </>
-          );
+          return <GeneralSection settings={settings} handleLanguageChange={handleLanguageChange} />;
         case "diagnostics":
           return (
             <>
+              <Text style={settingsStyles.rowHint} testID="diagnostic-host-target">
+                {t("settings.diagnosticTarget", {
+                  host:
+                    hosts.find((host) => host.serverId === activeHostServerId)?.label ??
+                    t("settings.noDiagnosticHost"),
+                })}
+              </Text>
               <DiagnosticsSection
                 serverId={activeHostServerId}
                 useLegacyTerminalRenderer={settings.useLegacyTerminalRenderer}

@@ -2097,6 +2097,7 @@ export const ptBR: TranslationResources = {
     },
   },
   settings: {
+    ...en.settings,
     title: "Configurações",
     loading: "Carregando configurações...",
     groups: {
@@ -2153,6 +2154,7 @@ export const ptBR: TranslationResources = {
       sendFailedTitle: "Não foi possível enviar a notificação de teste",
     },
     hostSections: {
+      ...en.settings.hostSections,
       engineAccounts: "Contas de assinatura",
       engineWorkflow: "Fluxos de trabalho",
       engineTokens: "Economia de tokens",

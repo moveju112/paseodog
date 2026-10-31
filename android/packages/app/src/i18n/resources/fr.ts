@@ -2111,6 +2111,7 @@ export const fr: TranslationResources = {
     },
   },
   settings: {
+    ...en.settings,
     title: "Paramètres",
     loading: "Chargement des paramètres…",
     groups: {
@@ -2167,6 +2168,7 @@ export const fr: TranslationResources = {
       sendFailedTitle: "Impossible d’envoyer la notification de test",
     },
     hostSections: {
+      ...en.settings.hostSections,
       engineAccounts: "Comptes d'abonnement",
       engineWorkflow: "Workflows",
       engineTokens: "Économie de jetons",

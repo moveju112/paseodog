@@ -2,6 +2,7 @@ import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { settingsStyles } from "@/styles/settings";
+import { SelectField } from "@/components/ui/select-field";
 
 interface SpeechModel {
   id: string;
@@ -129,6 +130,15 @@ export function SpeechSettings({ serverId }: { serverId: string }) {
     return invalidate;
   }, [invalidate, request, serverId]);
   const disabled = !connected || busy || !snapshot || snapshot.blocked;
+  const selectedModel = snapshot?.models.find((model) => model.id === snapshot.model);
+  const selectModel = useCallback(
+    (model: string) => {
+      if (!disabled && snapshot && model !== snapshot.model) {
+        void request(model, snapshot.revision);
+      }
+    },
+    [disabled, request, snapshot],
+  );
   return createElement(
     View,
     { style: { gap: 12 } },
@@ -142,7 +152,7 @@ export function SpeechSettings({ serverId }: { serverId: string }) {
       Text,
       { style: settingsStyles.rowHint },
       snapshot
-        ? "체크 표시는 저장된 선택이며 실행 중 모델·다운로드 완료를 뜻하지 않아요."
+        ? "표시된 모델은 저장된 선택이며 실행 중 모델·다운로드 완료를 뜻하지 않아요."
         : "설정을 확인해 주세요.",
     ),
     snapshot?.blocked
@@ -162,37 +172,33 @@ export function SpeechSettings({ serverId }: { serverId: string }) {
     createElement(
       View,
       { style: settingsStyles.card },
-      ...(snapshot?.models ?? []).map((model) =>
-        createElement(
-          View,
-          { key: model.id },
-          createElement(
-            Pressable,
-            {
-              style: settingsStyles.row,
-              accessibilityRole: "radio",
-              accessibilityLabel: model.label,
-              accessibilityState: { checked: snapshot?.model === model.id, disabled },
-              disabled,
-              onPress: () => {
-                if (!disabled && snapshot) void request(model.id, snapshot.revision);
-              },
-            },
-            createElement(
-              View,
-              { style: settingsStyles.rowContent },
-              createElement(Text, { style: settingsStyles.rowTitle }, model.label),
-              createElement(Text, { style: settingsStyles.rowHint }, model.description),
-            ),
-            createElement(
-              Text,
-              { style: settingsStyles.rowHint },
-              snapshot?.model === model.id ? "선택됨" : "선택",
-            ),
-          ),
-          createElement(SpeechWarning, { model }),
-        ),
+      createElement(
+        View,
+        { style: settingsStyles.row },
+        createElement(SelectField<string>, {
+          label: "음성인식 모델",
+          title: "음성인식 모델 선택",
+          value: snapshot?.model ?? null,
+          selectedDisplay: selectedModel
+            ? { label: selectedModel.label, description: selectedModel.description }
+            : null,
+          options: (snapshot?.models ?? []).map((model) => ({
+            id: model.id,
+            value: model.id,
+            label: model.label,
+            description: [model.description, model.warning].filter(Boolean).join("\n"),
+          })),
+          onChange: selectModel,
+          disabled,
+          loading: busy,
+          placeholder: "모델 선택",
+          emptyText: "사용 가능한 음성인식 모델이 없어요.",
+          testID: "speech-model-select",
+        }),
       ),
+      selectedModel
+        ? createElement(SpeechWarning, { key: selectedModel.id, model: selectedModel })
+        : null,
     ),
     message
       ? createElement(

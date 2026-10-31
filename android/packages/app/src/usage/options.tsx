@@ -5,7 +5,7 @@ import { DropdownMenu, DropdownMenuContent } from "@/components/ui/dropdown-menu
 import { extraMutedIconColorMapping } from "@/components/ui/icon-button-chrome";
 import { ToolbarButton, paneContentToolbarIconSize } from "@/components/ui/pane-content-toolbar";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { SettingsRow, SettingsSwitch } from "@/components/settings";
+import { SettingsCard, SettingsSection, SettingsRow, SettingsSwitch } from "@/components/settings";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import { settingsStyles } from "@/styles/settings";
 import { usageCopy } from "./copy";
@@ -29,8 +29,6 @@ const ThemedSettings = withUnistyles(Settings);
 /** The shared usage preferences, opened from a cog as a popover or compact sheet. */
 export function UsageOptions() {
   const compact = useIsCompactFormFactor();
-  const { display, preferences, setSidebarStyle } = useUsagePreferences();
-  const { inSidebar, setInSidebar } = useUsageInSidebar();
   return (
     <DropdownMenu compactMode="sheet">
       <ToolbarButton
@@ -50,38 +48,58 @@ export function UsageOptions() {
         sheetTitle={usageCopy.options}
         testID="usage-options-surface"
       >
-        <View testID="usage-options-fields">
-          <SettingsSwitch
-            label={usageCopy.showInSidebar}
-            hint={usageCopy.showInSidebarHint}
-            value={inSidebar}
-            onValueChange={setInSidebar}
-            testID="usage-show-in-sidebar"
-          />
-          <View style={settingsStyles.rowBorder}>
-            <SettingsRow label={usageCopy.displayAs}>
-              <SegmentedControl
-                options={DISPLAY_AS_OPTIONS}
-                value={display.displayAs}
-                onValueChange={display.setDisplayAs}
-                size="sm"
-                testID="usage-display-as"
-              />
-            </SettingsRow>
-          </View>
-          <View style={settingsStyles.rowBorder}>
-            <SettingsRow label={usageCopy.sidebarStyle}>
-              <SegmentedControl
-                options={SIDEBAR_STYLE_OPTIONS}
-                value={preferences.sidebarStyle ?? "bar"}
-                onValueChange={setSidebarStyle}
-                size="sm"
-                testID="usage-sidebar-style"
-              />
-            </SettingsRow>
-          </View>
-        </View>
+        <UsagePreferenceFields showVisibilityControl />
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+export function UsagePreferencesSection() {
+  return (
+    <SettingsSection title={usageCopy.options}>
+      <SettingsCard>
+        <UsagePreferenceFields showVisibilityControl={false} />
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
+function UsagePreferenceFields({ showVisibilityControl }: { showVisibilityControl: boolean }) {
+  const { display, preferences, setSidebarStyle } = useUsagePreferences();
+  const { inSidebar, setInSidebar } = useUsageInSidebar();
+  return (
+    <View testID="usage-options-fields">
+      {showVisibilityControl && (
+        <SettingsSwitch
+          label={usageCopy.showInSidebar}
+          hint={usageCopy.showInSidebarHint}
+          value={inSidebar}
+          onValueChange={setInSidebar}
+          testID="usage-show-in-sidebar"
+        />
+      )}
+      <View style={settingsStyles.rowBorder}>
+        <SettingsRow label={usageCopy.displayAs}>
+          <SegmentedControl
+            options={DISPLAY_AS_OPTIONS}
+            value={display.displayAs}
+            onValueChange={display.setDisplayAs}
+            size="sm"
+            testID="usage-display-as"
+          />
+        </SettingsRow>
+      </View>
+      <View style={settingsStyles.rowBorder}>
+        <SettingsRow label={usageCopy.sidebarStyle}>
+          <SegmentedControl
+            options={SIDEBAR_STYLE_OPTIONS}
+            value={preferences.sidebarStyle ?? "bar"}
+            onValueChange={setSidebarStyle}
+            size="sm"
+            testID="usage-sidebar-style"
+          />
+        </SettingsRow>
+      </View>
+    </View>
   );
 }

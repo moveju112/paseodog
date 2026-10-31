@@ -139,8 +139,9 @@ test('chat settings card shows the hide switch below reasoning expansion and upd
         SettingsSwitch: 'SettingsSwitch', SettingsCard: 'SettingsCard', SettingsSection: 'SettingsSection', SettingsSelect: 'SettingsSelect',
         View: 'View', isNative: false,
     };
-    const { ChatSection } = loadModule(patched, 'e.ChatSection=function', stub);
-    const card = () => ChatSection().props.children.props.children;
+    const { ChatSection } = loadModule(complete, 'e.ChatSection=function', stub);
+    const card = () => ChatSection().props.children
+        .find(section => section.props.title === 'settings.chat.display').props.children;
     const labels = (node) => node.props.children.map((child) => [child.type, child.props.label, child.props.value]);
     assert.deepEqual(labels(card()), [
         ['SettingsSwitch', 'settings.general.autoExpandReasoning.label', false],

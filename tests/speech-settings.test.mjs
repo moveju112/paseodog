@@ -9,6 +9,7 @@ import { handleSpeechSettings } from '../plugin/server/speech-settings.mjs';
 import { KOREAN_SPEECH_MODELS, GPU_SPEECH_MODEL, KOMIX_SPEECH_MODEL } from '../plugin/shared/speech-models.mjs';
 import { installedComposerFixture } from './composer-fixture.mjs';
 import { withSpeechSettings, withoutSpeechSettings } from '../patches/paseo-speech-settings.mjs';
+import { withSettingsLayout, withoutSettingsLayout } from '../patches/paseo-settings-layout.mjs';
 
 function fixture(t) {
     const home = mkdtempSync(join(scratchRoot, 'speech-settings-'));
@@ -80,8 +81,8 @@ const start = bundle.indexOf('const PaseodogSpeechSettings=');
 const web = bundle.slice(start, bundle.indexOf('const PaseodogAgentMessageSettings=', start));
 
 test('speech web patch reverses, rejects partial patches and retains its source hash gate', () => {
-    assert.equal(withSpeechSettings(withoutSpeechSettings(bundle)), bundle);
-    assert.throws(() => withoutSpeechSettings(bundle.replace(web, '')), /Partial/);
+    assert.equal(withSettingsLayout(withSpeechSettings(withoutSpeechSettings(withoutSettingsLayout(bundle)))), bundle);
+    assert.throws(() => withoutSpeechSettings(withoutSettingsLayout(bundle).replace(web, '')), /Partial/);
     assert.throws(() => withSpeechSettings(''), /anchor mismatch/);
 });
 
@@ -108,12 +109,16 @@ for (const platform of ['app', 'web']) {
             },
         }]));
         const runtime = { useHostRuntimeClient: id => clients[id], useHostRuntimeIsConnected: () => connected };
-        const components = { View: 'view', Text: 'text', Pressable: 'pressable' };
+        const components = { View: 'view', Text: 'text', Pressable: 'pressable', SelectField: 'select-field' };
         const Component = platform === 'app'
             ? runInNewContext(source + ';SpeechSettings', { ...React, ...components, ...runtime, settingsStyles: {} })
             : runInNewContext(web + ';PaseodogSpeechSettings', {
                 u: React, n: components, o: components, r: components, S: { settingsStyles: {} },
-                _r: id => { assert.equal(id, 3762); return runtime; },
+                _r: id => {
+                    if (id === 4659) return components;
+                    assert.equal(id, 3762);
+                    return runtime;
+                },
             });
         let tree;
         await act(async () => { tree = create(React.createElement(Component, { serverId: 'one' })); });
@@ -122,10 +127,20 @@ for (const platform of ['app', 'web']) {
             delete globalThis.IS_REACT_ACT_ENVIRONMENT;
         });
         const radio = label => tree.root.findByProps({ accessibilityLabel: label });
+        const selector = () => tree.root.findByType('select-field');
+        const select = async id => act(async () => selector().props.onChange(id));
         const refresh = () => radio('음성인식 설정 새로고침');
         const warning = () => radio('Whisper Large-v3 Turbo 연산 경고');
         const warnings = () => tree.root.findAll(node => node.type === 'text' && node.props.children === KOREAN_SPEECH_MODELS[3].warning);
-        assert.equal(tree.root.findAll(node => node.type === 'pressable' && node.props.accessibilityRole === 'radio').length, 6);
+        assert.equal(tree.root.findAll(node => node.type === 'pressable' && node.props.accessibilityRole === 'radio').length, 0);
+        assert.equal(tree.root.findAllByType('select-field').length, 1);
+        assert.equal(selector().props.options.length, 6);
+        assert.equal(selector().props.value, values.one);
+        assert.match(selector().props.options.at(-1).description, /GPU/);
+        const initialCalls = calls.length;
+        await select(values.one);
+        assert.equal(calls.length, initialCalls);
+        await select(KOREAN_SPEECH_MODELS[3].id);
         assert.equal(warnings().length, 0);
         for (const [open, close] of [['onHoverIn', 'onHoverOut'], ['onFocus', 'onBlur'], ['onPress', 'onPress']]) {
             await act(async () => warning().props[open]());
@@ -133,18 +148,18 @@ for (const platform of ['app', 'web']) {
             await act(async () => warning().props[close]());
             assert.equal(warnings().length, 0);
         }
+        await select(GPU_SPEECH_MODEL.id);
         const gpuWarning = radio(`${GPU_SPEECH_MODEL.label} 연산 경고`);
         await act(async () => gpuWarning.props.onHoverIn());
         assert.match(JSON.stringify(tree.toJSON()), /GPU 메모리·전력/);
-        await act(async () => radio(GPU_SPEECH_MODEL.label).props.onPress());
         assert.equal(values.one, 'whisper-turbo-cuda');
-        await act(async () => radio(KOMIX_SPEECH_MODEL.label).props.onPress());
+        await select(KOMIX_SPEECH_MODEL.id);
         assert.equal(values.one, 'whisper-medium-komix-v2-cuda');
-        await act(async () => radio('Whisper Small').props.onPress());
+        await select('whisper-small-int8');
         assert.equal(values.one, 'whisper-small-int8');
         assert.match(JSON.stringify(tree.toJSON()), /재시작한 뒤 적용/);
         fail = true;
-        await act(async () => radio('Whisper Base').props.onPress());
+        await select('whisper-base-int8');
         const count = calls.length;
         assert.match(JSON.stringify(tree.toJSON()), /자동 재전송하지/);
         assert.equal(calls.length, count);
@@ -152,14 +167,14 @@ for (const platform of ['app', 'web']) {
         delayed = 'one';
         await act(async () => refresh().props.onPress());
         await act(async () => tree.update(React.createElement(Component, { serverId: 'two' })));
-        assert.equal(radio('Whisper Base').props.accessibilityState.checked, true);
+        assert.equal(selector().props.value, 'whisper-base-int8');
         await act(async () => finish(snapshot('one')));
-        assert.equal(radio('Whisper Base').props.accessibilityState.checked, true);
+        assert.equal(selector().props.value, 'whisper-base-int8');
         connected = false;
         await act(async () => tree.update(React.createElement(Component, { serverId: 'two' })));
         assert.equal(refresh().props.disabled, true);
         connected = true;
         await act(async () => tree.update(React.createElement(Component, { serverId: 'two' })));
-        assert.equal(radio('Whisper Base').props.accessibilityState.checked, true);
+        assert.equal(selector().props.value, 'whisper-base-int8');
     });
 }

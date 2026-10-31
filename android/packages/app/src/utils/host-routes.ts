@@ -514,6 +514,10 @@ export function isSettingsSectionSlug(value: string): value is SettingsSectionSl
 export const HOST_SECTION_SLUGS = [
   "engine-accounts",
   "engine-workflow",
+  "engine-response",
+  "engine-execution",
+  "engine-speech",
+  "engine-memory",
   "engine-tokens",
   "engine-instructions",
   "engine-tools",
@@ -545,6 +549,7 @@ export function isHostSectionSlug(value: string): value is HostSectionSlug {
 }
 
 export function normalizeHostSectionSlug(value: string): HostSectionSlug | null {
+  if (value === "engine-agents") return "agents";
   if (isHostSectionSlug(value)) {
     return value;
   }

@@ -94,6 +94,9 @@ vi.mock("@/components/adaptive-text-input", () => ({
   },
 }));
 vi.mock("@/styles/settings", () => ({ settingsStyles: {} }));
+vi.mock("@/components/ui/select-field", () => ({
+  SelectField: ({ label }: { label: string }) => <button type="button">{label}</button>,
+}));
 vi.mock("@/components/settings/headings/settings-section", () => ({
   SettingsSection: ({ title, children }: MockChildren & { title: string }) => (
     <section aria-label={title}>{children}</section>
@@ -295,7 +298,7 @@ describe("native host AI engine settings", () => {
       ...snapshot,
       agents: [{ ...snapshot.agents[0], route: { ...route, fallbacks: [fallback, fallback] } }],
     });
-    render(<AiEnginePage serverId="fallback-host" section="workflow" />);
+    render(<AiEnginePage serverId="fallback-host" section="agents" />);
     fireEvent.click(await screen.findByRole("button", { name: "에이전트 Worker" }));
     await waitFor(() => expect(screen.queryByText("원본을 불러오는 중입니다.")).toBeNull());
     const secondModel = screen.getByRole("button", { name: "폴백 모델 2" });
@@ -395,12 +398,12 @@ describe("native host AI engine settings", () => {
       if (input.action === "preferences") outputStyle = input.outputStyle;
       return { ...snapshot, outputStyle, outputStyles };
     });
-    let page = render(<AiEnginePage serverId="style-host" section="workflow" />);
+    let page = render(<AiEnginePage serverId="style-host" section="response" />);
     for (const style of outputStyles) {
       await screen.findByRole("button", { name: "응답 출력 스타일" });
       fireEvent.click(
         screen.getByRole("button", {
-          name: `${outputStyle === style.id ? "✓ " : ""}${style.label}`,
+          name: style.label,
         }),
       );
       await waitFor(() =>
@@ -411,7 +414,7 @@ describe("native host AI engine settings", () => {
       await screen.findByText("저장했어요. 실시간으로 반영돼요.");
       page.unmount();
       clearAiEngineSnapshotCache();
-      page = render(<AiEnginePage serverId="style-host" section="workflow" />);
+      page = render(<AiEnginePage serverId="style-host" section="response" />);
       await waitFor(() =>
         expect(screen.getByRole("button", { name: "응답 출력 스타일" }).textContent).toBe(
           style.label,
@@ -426,7 +429,7 @@ describe("native host AI engine settings", () => {
   });
 
   it("does not invent unsupported output styles when the host has no catalog", async () => {
-    render(<AiEnginePage serverId="style-host" section="workflow" />);
+    render(<AiEnginePage serverId="style-host" section="response" />);
     expect(await screen.findByRole("button", { name: "응답 출력 스타일" })).toHaveProperty(
       "disabled",
       true,
@@ -596,15 +599,21 @@ describe("native host AI engine settings", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
   it("shows only the controls of each separate host section and no main model picker", async () => {
-    const markers: Record<Exclude<EngineSection, "agents">, string> = {
+    const markers: Record<Exclude<EngineSection, "speech">, string> = {
       accounts: "계정 연결",
       workflow: "자동 오케스트레이터 (Orchestration)",
       tokens: "Mixdog 토큰 절감 기술",
       instructions: "지침 파일",
       tools: "내장 도구 모듈 (Built-in Tools)",
       skills: "스킬 및 훅 (Skills & Lifecycle Hooks)",
+      agents: "하위 에이전트",
+      response: "출력 스타일 및 사용자 프로필",
+      execution: "실행 쉘",
+      memory: "메모리",
+      generation: "세션 제목",
+      providers: "로컬 모델 확장",
     };
-    for (const section of Object.keys(markers) as Array<Exclude<EngineSection, "agents">>) {
+    for (const section of Object.keys(markers) as Array<Exclude<EngineSection, "speech">>) {
       clearAiEngineSnapshotCache();
       const view = render(<AiEnginePage serverId="host-one" section={section} />);
       await screen.findByRole("region", { name: markers[section] });
@@ -823,7 +832,7 @@ describe("native host AI engine settings", () => {
     expect(host.invokePluginRpc.mock.calls.map(([, , input]) => input.action)).toEqual(["read"]);
   });
   it("opens Mixdog-style agent editor modal with switch, model chain, and AGENT.md body", async () => {
-    render(<AiEnginePage serverId="host-one" section="workflow" />);
+    render(<AiEnginePage serverId="host-one" section="agents" />);
     fireEvent.click(await screen.findByRole("button", { name: "에이전트 Worker" }));
     expect(screen.getByRole("dialog", { name: "에이전트 편집" })).toBeTruthy();
     await waitFor(() => expect(screen.queryByText("원본을 불러오는 중입니다.")).toBeNull());
@@ -882,7 +891,7 @@ describe("native host AI engine settings", () => {
     ).toBe(false);
   });
   it("does not offer automatic worktree settings", async () => {
-    render(<AiEnginePage serverId="host-one" section="workflow" />);
+    render(<AiEnginePage serverId="host-one" section="execution" />);
     expect(
       await screen.findByText(
         "자동 Worktree 격리는 아직 지원하지 않습니다. 기존 작업 폴더에서 실행됩니다.",

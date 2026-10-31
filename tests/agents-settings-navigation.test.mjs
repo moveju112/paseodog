@@ -5,6 +5,7 @@ import { Script } from 'node:vm';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import { composerFixture } from './composer-fixture.mjs';
 import { AGENTS_SETTINGS_AFTER, withAgentsSettings, withoutAgentsSettings } from '../patches/paseo-agents-settings.mjs';
+import { withSettingsLayout, withoutSettingsLayout } from '../patches/paseo-settings-layout.mjs';
 
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
 
@@ -28,9 +29,10 @@ test('shared native and reviewed web menus expose the existing agents settings r
         assert.equal(items.some((item) => item.id === 'engine-accounts'), true);
     }
     assert.equal(composerFixture(patched), patched);
-    assert.equal(withAgentsSettings(withoutAgentsSettings(patched)), patched);
-    assert.throws(() => withoutAgentsSettings(patched + AGENTS_SETTINGS_AFTER), /drift/);
-    assert.throws(() => withAgentsSettings(patched), /anchor mismatch/);
-    const drifted = withoutAgentsSettings(patched).replace('const Ae=[', 'const Ae= [');
+    const previousLayout = withoutSettingsLayout(patched);
+    assert.equal(withSettingsLayout(withAgentsSettings(withoutAgentsSettings(previousLayout))), patched);
+    assert.throws(() => withoutAgentsSettings(previousLayout + AGENTS_SETTINGS_AFTER), /drift/);
+    assert.throws(() => withAgentsSettings(previousLayout), /anchor mismatch/);
+    const drifted = withoutAgentsSettings(previousLayout).replace('const Ae=[', 'const Ae= [');
     assert.throws(() => patchedComposerSource(drifted), /hash mismatch/);
 });

@@ -2084,6 +2084,7 @@ export const ja: TranslationResources = {
     },
   },
   settings: {
+    ...en.settings,
     title: "設定",
     loading: "設定を読み込み中...",
     groups: {
@@ -2140,6 +2141,7 @@ export const ja: TranslationResources = {
       sendFailedTitle: "テスト通知を送信できません",
     },
     hostSections: {
+      ...en.settings.hostSections,
       engineAccounts: "サブスクリプションアカウント",
       engineWorkflow: "ワークフロー",
       engineTokens: "トークン節約",

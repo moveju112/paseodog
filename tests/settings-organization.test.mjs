@@ -5,6 +5,7 @@ import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { runInNewContext, Script } from 'node:vm';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import { withSettingsOrganization, withoutSettingsOrganization } from '../patches/paseo-settings-organization.mjs';
+import { withSettingsLayout, withoutSettingsLayout } from '../patches/paseo-settings-layout.mjs';
 
 const require = createRequire(new URL('../plugin/package.json', import.meta.url));
 const React = require('react');
@@ -27,24 +28,25 @@ const jsx = (type, props) => React.createElement(type, props);
 test('settings organization remains hash-gated, reversible and idempotent', () => {
     new Script(patched);
     assert.equal(composerFixture(patched), patched);
-    assert.equal(withSettingsOrganization(withoutSettingsOrganization(patched)), patched);
+    assert.equal(withSettingsLayout(withSettingsOrganization(withoutSettingsOrganization(withoutSettingsLayout(patched)))), patched);
     assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
     assert.throws(() => withSettingsOrganization(''), /anchor mismatch/);
 });
 
 test('previous workflow settings upgrade without accepting partial patches or source drift', () => {
-    const durationStart = patched.indexOf('const PaseodogTurnDurationSettings=');
-    const durationEnd = patched.indexOf('const k=[{value:"none",label:', durationStart);
+    const previousLayout = withoutSettingsLayout(patched);
+    const durationStart = previousLayout.indexOf('const PaseodogTurnDurationSettings=');
+    const durationEnd = previousLayout.indexOf('const k=[{value:"none",label:', durationStart);
     assert.ok(durationStart > 0 && durationEnd > durationStart);
-    const duration = patched.slice(durationStart, durationEnd);
+    const duration = previousLayout.slice(durationStart, durationEnd);
     const row = 'e.section==="workflow"?u.createElement(PaseodogTurnDurationSettings,{key:"duration:"+e.serverId,serverId:e.serverId}):null,';
-    assert.ok(patched.includes(row));
-    const previous = patched.replace(duration, '').replace(row, '');
+    assert.ok(previousLayout.includes(row));
+    const previous = previousLayout.replace(duration, '').replace(row, '');
     assert.equal(patchedComposerSource(previous), patched);
-    assert.equal(withoutSettingsOrganization(previous), withoutSettingsOrganization(patched));
+    assert.equal(withoutSettingsOrganization(previous), withoutSettingsOrganization(previousLayout));
     assert.throws(() => patchedComposerSource(previous + '// drift'), /hash mismatch/);
-    assert.throws(() => patchedComposerSource(patched.replace(row, '')), /Partial|hash mismatch/);
-    assert.throws(() => patchedComposerSource(patched.replace(duration, '')), /Partial|hash mismatch/);
+    assert.throws(() => patchedComposerSource(previousLayout.replace(row, '')), /Partial|hash mismatch/);
+    assert.throws(() => patchedComposerSource(previousLayout.replace(duration, '')), /Partial|hash mismatch/);
 });
 
 // 실제 공통 진단과 고정 웹 컴포넌트의 클릭·표시·호스트 연결을 함께 검증한다.
