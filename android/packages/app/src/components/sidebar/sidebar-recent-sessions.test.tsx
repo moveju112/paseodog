@@ -51,6 +51,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("recent session attention", () => {
+  it("keeps the original compact height and leaves only a narrow gap before hide", () => {
+    render(<SidebarRecentSessions />);
+    const row = screen.getByTestId("sidebar-recent-session-host-session");
+    const hide = screen.getByRole("button", { name: "sidebar.recentSessions.hide" });
+    expect(row.style.minHeight).toBe("30px");
+    expect(hide.style.minHeight).toBe("30px");
+    expect(hide.style.minWidth).toBe("24px");
+    expect(row.style.paddingRight).toBe("0px");
+    expect(screen.getByTestId("sidebar-recent-sessions-rows").style.maxHeight).toBe("186px");
+  });
+
   it("hides only the recent entry without navigating or changing the session", () => {
     const beforeNavigate = vi.fn();
     const original = { ...state.agent };
