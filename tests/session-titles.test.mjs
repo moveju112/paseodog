@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { stripTypeScriptTypes } from 'node:module';
+import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { generateConversationTitle } from '../engine/src/session-title.mjs';
+import { createEngineControls } from '../plugin/server/controls.mjs';
+import { MAX_TURN_MINUTES } from '../plugin/shared/turn-duration.mjs';
 import { SESSION_TITLE_PATCHES, patchedSessionTitleSource, patchPaseoSessionTitles } from '../scripts/patch-paseo-session-titles.mjs';
 
 const observerSource = stripTypeScriptTypes(readFileSync(new URL('../android/packages/server/src/server/conversation-titles.ts', import.meta.url), 'utf8'));
@@ -67,6 +69,35 @@ test('completed conversation updates the session title only, using the final ans
     assert.deepEqual(h.workspace, { workspaceId: 'workspace', title: 'PaseoDog', titleOrigin: 'provisional' });
     assert.equal(h.updates.length, 0);
     h.stop();
+});
+
+test('title control responses satisfy the strict RPC contract and update provisional titles', async (t) => {
+    const require = createRequire(new URL('../plugin/package.json', import.meta.url));
+    const source = stripTypeScriptTypes(readFileSync(new URL('../plugin/shared/controls.ts', import.meta.url), 'utf8'))
+        .replace(/^import .*;\s*$/gm, '').replace(/export const /g, 'const ');
+    const rpc = new Function('defineRpc', 'z', 'MAX_TURN_MINUTES', source + '; return engineTitle;')(
+        (value) => value, require('zod').z, MAX_TURN_MINUTES);
+    for (const title of ['제목 생성 오류 수정', null]) {
+        const controls = createEngineControls({
+            async execCommand(_command, args) {
+                const { action, ...request } = JSON.parse(args.at(-1));
+                assert.equal(action, 'title');
+                rpc.input.parse(request);
+                return { stdout: JSON.stringify({ title }) };
+            },
+        });
+        controls.bind({ command: '/test-engine', args: [], env: {} });
+        t.after(() => controls.close());
+        const h = harness({
+            generate: async (input) => rpc.output.parse(await controls.read({ ...input, action: 'title' })),
+        });
+        t.after(h.stop);
+        h.event('turn_completed');
+        await setImmediate();
+        assert.deepEqual(h.warnings, []);
+        assert.equal(h.session.titleOrigin, title ? 'generated' : 'provisional');
+        assert.equal(h.session.title, title ?? 'https://github.com/example/widget');
+    }
 });
 
 test('manual, unknown legacy, and independently renamed titles are protected', async () => {
