@@ -4,6 +4,9 @@ import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'nod
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runInNewContext } from 'node:vm';
+import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { LOCAL_STT_PATCHES, SENSE_VOICE_MODEL_ID, patchedLocalSttSource, patchPaseoLocalStt } from '../scripts/patch-paseo-local-stt.mjs';
 
 const base = new URL('../tools/node_modules/@getpaseo/server/dist/server/server/', import.meta.url);
@@ -14,6 +17,81 @@ function originalOf(spec) {
     for (const [before, after] of [...spec.edits].reverse()) original = original.replace(after, before);
     return original;
 }
+
+test('packaged dictation waits for Korean speech boundaries without rewriting text or logging it', async (t) => {
+    const spec = LOCAL_STT_PATCHES.find(item => item.file === 'dictation/dictation-stream-manager.js');
+    const moduleUrl = new URL(spec.file, base);
+    const require = createRequire(moduleUrl);
+    const source = patchedLocalSttSource(originalOf(spec), spec).replace(
+        /from "([^"]+)"/g,
+        (_, name) => `from "${name.startsWith('.') ? new URL(name, moduleUrl).href : pathToFileURL(require.resolve(name)).href}"`,
+    );
+    const { DictationStreamManager } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
+    const oldDebug = process.env.PASEO_DICTATION_DEBUG;
+    process.env.PASEO_DICTATION_DEBUG = 'false';
+    t.after(() => {
+        if (oldDebug === undefined) delete process.env.PASEO_DICTATION_DEBUG;
+        else process.env.PASEO_DICTATION_DEBUG = oldDebug;
+    });
+    for (const rate of [16000, 24000]) {
+        await t.test(`ordered PCM and private diagnostics at ${rate}Hz`, async () => {
+            const logs = [], emitted = [], appended = [];
+            const logger = { child() { return this; }, debug(data, message) { logs.push({ data, message }); } };
+            const session = Object.assign(new EventEmitter(), {
+                requiredSampleRate: rate, commits: 0, clears: 0,
+                async connect() {}, close() {},
+                appendPcm16(chunk) { appended.push(chunk); },
+                commit() { this.commits++; },
+                clear() { this.clears++; },
+            });
+            const manager = new DictationStreamManager({
+                logger, emit: msg => emitted.push(msg), sessionId: 'boundary-test',
+                stt: { createSession: () => session }, language: 'ko', autoCommitSeconds: 1,
+            });
+            try {
+                const format = `audio/pcm;rate=${rate};bits=16`;
+                await manager.handleStart('dictation', format);
+                const pcm = (value, seconds) => {
+                    const buffer = Buffer.alloc(Math.round(seconds * rate) * 2);
+                    for (let i = 0; i < buffer.length; i += 2) buffer.writeInt16LE(value, i);
+                    return buffer;
+                };
+                const send = (seq, audio) => manager.handleChunk({
+                    dictationId: 'dictation', seq, audioBase64: audio.toString('base64'), format,
+                });
+                const speech = pcm(2000, 1), tail = Buffer.concat([pcm(2000, 0.1), pcm(0, 0.3)]);
+                await send(1, tail);
+                assert.equal(appended.length, 0);
+                await send(0, speech);
+                assert.equal(session.commits, 1);
+                assert.deepEqual(Buffer.concat(appended), Buffer.concat([speech, tail]));
+                await send(1, tail); // 재전송은 무음 길이와 commit 횟수를 늘리지 않는다.
+                assert.equal(session.commits, 1);
+                session.emit('committed', { segmentId: 'first' });
+                session.emit('transcript', { segmentId: 'first', transcript: '정상 부팅은 됐지만', isFinal: true });
+                await send(2, pcm(2000, 1));
+                assert.equal(session.commits, 1);
+                await manager.handleFinish('dictation', 2);
+                assert.equal(session.commits, 2);
+                session.emit('committed', { segmentId: 'second' });
+                session.emit('transcript', { segmentId: 'second', transcript: '문제가 있어', isFinal: true });
+                await Promise.resolve();
+                await Promise.resolve();
+                assert.equal(emitted.find(msg => msg.type === 'dictation_stream_final').payload.text,
+                    '정상 부팅은 됐지만 문제가 있어');
+                const commits = logs.filter(log => log.message === 'Dictation segment commit');
+                assert.deepEqual(commits.map(log => log.data.reason), ['silence', 'finish']);
+                assert.equal(commits[0].data.trailingSilenceSeconds, 0.3);
+                const transcripts = logs.filter(log => log.message === 'Dictation segment transcription');
+                assert.deepEqual(transcripts.map(log => log.data.whitespaceCount), [2, 1]);
+                assert.ok(!JSON.stringify(logs).includes('부팅'));
+                assert.ok(!JSON.stringify(logs).includes('문제가'));
+            } finally {
+                manager.cleanupAll();
+            }
+        });
+    }
+});
 
 test('local-STT daemon patch is exact-blob gated, idempotent and rejects partial patches', () => {
     for (const spec of LOCAL_STT_PATCHES) {

@@ -18,6 +18,8 @@ const PCM_CHANNELS = 1;
 const PCM_BITS_PER_SAMPLE = 16;
 const DEFAULT_DICTATION_FINAL_TIMEOUT_MS = 10000;
 const DEFAULT_DICTATION_AUTO_COMMIT_SECONDS = 15;
+const KOREAN_DICTATION_SILENCE_SECONDS = 0.3;
+const KOREAN_DICTATION_MAX_WAIT_SECONDS = 3;
 const DICTATION_FINAL_TIMEOUT_MAX_MS = 5 * 60 * 1000;
 const DICTATION_FINAL_TIMEOUT_PER_PENDING_SEGMENT_MS = 15 * 1000;
 const DICTATION_FINAL_TIMEOUT_PER_PENDING_AUDIO_SECOND_MS = 1500;
@@ -84,6 +86,7 @@ interface DictationStreamState {
   autoCommitBytes: number;
   bytesSinceCommit: number;
   peakSinceCommit: number;
+  trailingSilenceBytes: number;
   committedSegmentIds: string[];
   transcriptsBySegmentId: Map<string, string>;
   finalTranscriptSegmentIds: Set<string>;
@@ -251,6 +254,7 @@ export class DictationStreamManager {
       autoCommitBytes,
       bytesSinceCommit: 0,
       peakSinceCommit: 0,
+      trailingSilenceBytes: 0,
       committedSegmentIds: [],
       transcriptsBySegmentId: new Map(),
       finalTranscriptSegmentIds: new Set(),
@@ -287,6 +291,15 @@ export class DictationStreamManager {
       state.transcriptsBySegmentId.set(segmentId, transcript);
       if (isFinal) {
         state.finalTranscriptSegmentIds.add(segmentId);
+        this.logger.debug(
+          {
+            dictationId,
+            segmentId,
+            textLength: transcript.length,
+            whitespaceCount: (transcript.match(/\s/g) ?? []).length,
+          },
+          "Dictation segment transcription",
+        );
       }
 
       if (state.finishRequested && state.awaitingFinalCommit && isFinal) {
@@ -378,6 +391,17 @@ export class DictationStreamManager {
         state.debugAudioChunks.push(resampled);
         state.bytesSinceCommit += resampled.length;
         state.peakSinceCommit = Math.max(state.peakSinceCommit, pcm16lePeakAbs(resampled));
+        let trailingSilenceBytes = 0;
+        for (let offset = resampled.length - 2; offset >= 0; offset -= 2) {
+          if (Math.abs(resampled.readInt16LE(offset)) >= DICTATION_SILENCE_PEAK_THRESHOLD) {
+            break;
+          }
+          trailingSilenceBytes += 2;
+        }
+        state.trailingSilenceBytes =
+          trailingSilenceBytes === resampled.length
+            ? state.trailingSilenceBytes + trailingSilenceBytes
+            : trailingSilenceBytes;
         try {
           this.maybeAutoCommitDictationSegment(state);
         } catch (error) {
@@ -627,15 +651,40 @@ export class DictationStreamManager {
       state.stt.clear();
       state.bytesSinceCommit = 0;
       state.peakSinceCommit = 0;
+      state.trailingSilenceBytes = 0;
       return;
     }
 
-    this.requestDictationCommit(state);
+    let reason = "interval";
+    if (/^ko(?:-|$)/i.test(this.language)) {
+      const bytesPerSecond = state.outputRate * 2;
+      const atSilence =
+        state.trailingSilenceBytes >= bytesPerSecond * KOREAN_DICTATION_SILENCE_SECONDS;
+      const atLimit =
+        state.bytesSinceCommit >=
+        state.autoCommitBytes + bytesPerSecond * KOREAN_DICTATION_MAX_WAIT_SECONDS;
+      // 어절 중간 절단을 피하되, 쉬지 않는 발화도 버퍼가 계속 커지지 않게 제한한다.
+      if (!atSilence && !atLimit) {
+        return;
+      }
+      reason = atSilence ? "silence" : "max-wait";
+    }
+    this.requestDictationCommit(state, reason);
   }
 
-  private requestDictationCommit(state: DictationStreamState): void {
+  private requestDictationCommit(state: DictationStreamState, reason = "finish"): void {
+    this.logger.debug(
+      {
+        dictationId: state.dictationId,
+        reason,
+        audioSeconds: state.bytesSinceCommit / (state.outputRate * 2),
+        trailingSilenceSeconds: state.trailingSilenceBytes / (state.outputRate * 2),
+      },
+      "Dictation segment commit",
+    );
     state.bytesSinceCommit = 0;
     state.peakSinceCommit = 0;
+    state.trailingSilenceBytes = 0;
     state.inFlightCommitCount += 1;
     try {
       state.stt.commit();
@@ -673,6 +722,7 @@ export class DictationStreamManager {
         state.stt.clear();
         state.bytesSinceCommit = 0;
         state.peakSinceCommit = 0;
+        state.trailingSilenceBytes = 0;
         state.awaitingFinalCommit = false;
       } else {
         state.awaitingFinalCommit = true;

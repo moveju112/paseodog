@@ -74,6 +74,110 @@ const tick = async (): Promise<void> => {
   await Promise.resolve();
 };
 
+describe("DictationStreamManager (Korean speech boundaries)", () => {
+  beforeEach(() => {
+    vi.stubEnv("PASEO_DICTATION_DEBUG", "false");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  async function setup(language = "ko", autoCommitSeconds = 1) {
+    const session = new FakeRealtimeSession();
+    const emitted: Array<{ type: string; payload: unknown }> = [];
+    const manager = new DictationStreamManager({
+      logger: pino({ level: "silent" }),
+      emit: (msg) => emitted.push(msg),
+      sessionId: "korean-boundaries",
+      stt: new FakeSttProvider(session),
+      language,
+      autoCommitSeconds,
+    });
+    await manager.handleStart("d-ko", "audio/pcm;rate=24000;bits=16");
+    let seq = 0;
+    const append = async (value: number, seconds: number) => {
+      await manager.handleChunk({
+        dictationId: "d-ko",
+        seq: seq++,
+        audioBase64: buildPcmBase64(value, Math.round(24000 * seconds)),
+        format: "audio/pcm;rate=24000;bits=16",
+      });
+    };
+    return {
+      session,
+      manager,
+      emitted,
+      append,
+      finish: () => manager.handleFinish("d-ko", seq - 1),
+    };
+  }
+
+  it("waits for 300ms of consecutive silence rather than cutting a Korean word", async () => {
+    const { session, manager, append } = await setup();
+    try {
+      await append(2000, 1);
+      expect(session.commitCalls).toBe(0);
+      await append(0, 0.2);
+      await append(2000, 0.1);
+      await append(0, 0.2);
+      expect(session.commitCalls).toBe(0);
+      await append(0, 0.1);
+      expect(session.commitCalls).toBe(1);
+      await append(2000, 1);
+      expect(session.commitCalls).toBe(1);
+    } finally {
+      manager.cleanupAll();
+    }
+  });
+
+  it("caps the extra audio at three seconds when there is no pause", async () => {
+    const { session, manager, append } = await setup("ko-KR");
+    try {
+      await append(2000, 3.9);
+      expect(session.commitCalls).toBe(0);
+      await append(2000, 0.1);
+      expect(session.commitCalls).toBe(1);
+    } finally {
+      manager.cleanupAll();
+    }
+  });
+
+  it("finishes immediately and preserves Korean spacing supplied by the recognizer", async () => {
+    const { session, manager, append, finish, emitted } = await setup();
+    try {
+      await append(2000, 1);
+      await finish();
+      expect(session.commitCalls).toBe(1);
+      session.emitCommitted("segment");
+      session.emitTranscript("segment", "정상 부팅은 됐지만 문제가 있어", true);
+      await tick();
+      expect(emitted.find((msg) => msg.type === "dictation_stream_final")?.payload).toMatchObject({
+        text: "정상 부팅은 됐지만 문제가 있어",
+      });
+    } finally {
+      manager.cleanupAll();
+    }
+  });
+
+  it("keeps silence-only clearing, disabled auto-commit and non-Korean behavior", async () => {
+    for (const [language, interval, value, seconds, commits, clears] of [
+      ["ko", 1, 0, 1, 0, 1],
+      ["ko", 0, 2000, 5, 0, 0],
+      ["en", 1, 2000, 1, 1, 0],
+    ] as const) {
+      const { session, manager, append } = await setup(language, interval);
+      try {
+        await append(value, seconds);
+        expect(session.commitCalls).toBe(commits);
+        expect(session.clearCalls).toBe(clears);
+      } finally {
+        manager.cleanupAll();
+      }
+    }
+  });
+});
+
 describe("DictationStreamManager (finish buffer-too-small tolerance)", () => {
   const env = {
     dictationDebug: process.env.PASEO_DICTATION_DEBUG,

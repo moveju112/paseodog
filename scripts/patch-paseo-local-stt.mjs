@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitBlob } from './patch-mixdog.mjs';
+import { KOREAN_DICTATION_BOUNDARY_PATCH } from '../patches/korean-dictation-boundaries.mjs';
 
 export const SENSE_VOICE_MODEL_ID = 'sense-voice-zh-en-ja-ko-yue-int8';
 
@@ -177,6 +178,7 @@ const komixEdits = {
     ]],
 };
 export const LOCAL_STT_PATCHES = [
+    KOREAN_DICTATION_BOUNDARY_PATCH,
     ...legacyGpuPatches.map(spec => ({
         ...spec, gpuEdits: spec.edits, edits: [...spec.edits, ...(komixEdits[spec.file] ?? [])],
     })),
