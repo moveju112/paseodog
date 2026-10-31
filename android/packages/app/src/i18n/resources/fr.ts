@@ -1179,6 +1179,7 @@ export const fr: TranslationResources = {
   },
   sidebar: {
     recentSessions: {
+      hide: "Masquer {{title}} des sessions récentes",
       title: "Récents",
       empty: "Aucune session avec message sur cette période",
       windowAccessibility: "Afficher les sessions : {{window}}",

@@ -1177,6 +1177,7 @@ export const ptBR: TranslationResources = {
   },
   sidebar: {
     recentSessions: {
+      hide: "Ocultar {{title}} das sessões recentes",
       title: "Recentes",
       empty: "Nenhuma sessão com mensagem neste período",
       windowAccessibility: "Mostrar sessões de {{window}}",

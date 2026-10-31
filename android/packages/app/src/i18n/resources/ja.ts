@@ -1164,6 +1164,7 @@ export const ja: TranslationResources = {
   },
   sidebar: {
     recentSessions: {
+      hide: "{{title}}を最近のセッションから非表示にする",
       title: "最近",
       empty: "この期間にメッセージしたセッションはありません",
       windowAccessibility: "{{window}}以内のセッションを表示",

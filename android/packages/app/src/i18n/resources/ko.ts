@@ -1158,6 +1158,7 @@ export const ko: TranslationResources = {
   },
   sidebar: {
     recentSessions: {
+      hide: "{{title}} 최근에서 숨기기",
       title: "최근",
       empty: "이 기간에 채팅한 세션 없음",
       windowAccessibility: "{{window}} 이내 세션 보기",

@@ -1143,6 +1143,7 @@ export const zhCN: TranslationResources = {
   },
   sidebar: {
     recentSessions: {
+      hide: "从最近会话中隐藏{{title}}",
       title: "最近",
       empty: "此时间段内没有发过消息的会话",
       windowAccessibility: "显示{{window}}内的会话",

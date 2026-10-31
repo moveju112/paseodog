@@ -1159,6 +1159,7 @@ export const en = {
   },
   sidebar: {
     recentSessions: {
+      hide: "Hide {{title}} from recent sessions",
       title: "Recent",
       empty: "No sessions you messaged in this range",
       windowAccessibility: "Show sessions from the last {{window}}",
