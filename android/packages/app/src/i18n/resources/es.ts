@@ -2113,6 +2113,7 @@ export const es: TranslationResources = {
     },
   },
   settings: {
+    ...en.settings,
     title: "Ajustes",
     loading: "Cargando configuración...",
     groups: {
@@ -2169,6 +2170,7 @@ export const es: TranslationResources = {
       sendFailedTitle: "No se pudo enviar la notificación de prueba",
     },
     hostSections: {
+      ...en.settings.hostSections,
       engineAccounts: "Cuentas de suscripción",
       engineWorkflow: "Flujos de trabajo",
       engineTokens: "Ahorro de tokens",

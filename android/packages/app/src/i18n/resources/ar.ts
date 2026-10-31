@@ -2063,6 +2063,7 @@ export const ar: TranslationResources = {
     },
   },
   settings: {
+    ...en.settings,
     title: "إعدادات",
     loading: "جارٍ تحميل الإعدادات...",
     groups: {
@@ -2119,6 +2120,7 @@ export const ar: TranslationResources = {
       sendFailedTitle: "تعذر إرسال إشعار الاختبار",
     },
     hostSections: {
+      ...en.settings.hostSections,
       engineAccounts: "حسابات الاشتراك",
       engineWorkflow: "مسارات العمل",
       engineTokens: "توفير الرموز",

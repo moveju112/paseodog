@@ -285,18 +285,11 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
 
   return (
     <View>
-      {isConnected ? (
-        <SettingsSection title={t("settings.hostSections.agents")}>
-          <InjectPaseoToolsCard serverId={serverId} />
-          <BrowserToolsOptInCard serverId={serverId} />
-          <AppendSystemPromptCard serverId={serverId} />
-        </SettingsSection>
-      ) : (
+      {!isConnected ? (
         <View style={[settingsStyles.card, styles.emptyCard]}>
           <Text style={styles.emptyText}>{t("settings.host.agents.unavailable")}</Text>
         </View>
-      )}
-      <AgentSkillsSection serverId={serverId} />
+      ) : null}
       <AgentProfilesSection serverId={serverId} />
     </View>
   );
@@ -859,6 +852,19 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
   );
 }
 
+export function HostToolsSection({ serverId }: { serverId: string }) {
+  return (
+    <SettingsSection title="Paseo 도구·브라우저 연동">
+      <InjectPaseoToolsCard serverId={serverId} />
+      <BrowserToolsOptInCard serverId={serverId} />
+    </SettingsSection>
+  );
+}
+
+export function HostSkillsSection({ serverId }: { serverId: string }) {
+  return <AgentSkillsSection serverId={serverId} />;
+}
+
 function InjectPaseoToolsCard({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
@@ -977,7 +983,7 @@ function EnableTerminalAgentHooksCard({ serverId }: { serverId: string }) {
   );
 }
 
-function AppendSystemPromptCard({ serverId }: { serverId: string }) {
+export function AppendSystemPromptCard({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);

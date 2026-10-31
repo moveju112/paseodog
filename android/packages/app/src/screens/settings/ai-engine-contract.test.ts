@@ -13,11 +13,16 @@ describe("host AI engine settings", () => {
       "engine-instructions",
       "engine-tools",
       "engine-skills",
-      "engine-agents",
+      "engine-response",
+      "engine-execution",
+      "engine-speech",
+      "engine-memory",
+      "agents",
     ]) {
       expect(normalizeHostSectionSlug(slug)).toBe(slug);
     }
     expect(normalizeHostSectionSlug("ai-engine")).toBe("engine-workflow");
+    expect(normalizeHostSectionSlug("engine-agents")).toBe("agents");
   });
   it("accepts instruction file mode and read-only agent definitions from the engine", () => {
     const route = {

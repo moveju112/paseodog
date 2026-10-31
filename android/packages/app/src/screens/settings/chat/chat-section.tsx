@@ -11,6 +11,7 @@ import {
 import { isNative } from "@/constants/platform";
 import { useAppSettings, type AppSettings } from "@/hooks/use-settings";
 import { AssistantProfileSettings } from "./assistant-profile";
+import { SendingSection } from "@/screens/settings/general/sending-section";
 
 const TOOL_CALL_DETAIL_LEVELS: readonly AppSettings["toolCallDetailLevel"][] = [
   "detailed",
@@ -62,7 +63,7 @@ export function ChatSection() {
 
   return (
     <View>
-      <SettingsSection title={t("settings.appearance.detailLevel.title")}>
+      <SettingsSection title={t("settings.chat.profile")}>
         <SettingsCard>
           <SettingsInput
             label={t("settings.general.assistantNickname.label")}
@@ -73,6 +74,10 @@ export function ChatSection() {
             testID="assistant-nickname-input"
           />
           <AssistantProfileSettings testID="assistant-profile-settings" />
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title={t("settings.chat.display")}>
+        <SettingsCard>
           <SettingsSwitch
             label={t("settings.general.autoExpandReasoning.label")}
             hint={t("settings.general.autoExpandReasoning.description")}
@@ -108,6 +113,7 @@ export function ChatSection() {
           )}
         </SettingsCard>
       </SettingsSection>
+      <SendingSection />
     </View>
   );
 }

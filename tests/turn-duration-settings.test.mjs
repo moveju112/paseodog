@@ -78,7 +78,7 @@ for (const platform of ['app', 'web']) {
         const field = () => tree.root.findByProps({ accessibilityLabel: '명령 최대 실행 시간 (분)' });
         const save = () => tree.root.findByProps({ accessibilityLabel: '실행 시간 저장' });
         const refresh = () => tree.root.findByProps({ accessibilityLabel: '실행 시간 설정 새로고침' });
-        const update = async (serverId = 'one', section = 'workflow') =>
+        const update = async (serverId = 'one', section = 'execution') =>
             act(async () => tree.update(React.createElement(Page, { serverId, section })));
         assert.equal(tree.root.findAllByType('input').length, 0);
         assert.equal(calls.length, 0);

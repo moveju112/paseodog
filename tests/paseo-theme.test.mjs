@@ -36,8 +36,10 @@ import { withoutHostSwitch } from '../patches/paseo-host-switch.mjs';
 import { withoutComposerControls } from '../patches/paseo-composer-controls.mjs';
 import { withoutSessionRecovery } from '../patches/paseo-session-recovery.mjs';
 import { withoutSettingsBehavior } from '../patches/paseo-settings-behavior.mjs';
+import { withoutSettingsLayout } from '../patches/paseo-settings-layout.mjs';
 // 사이드바 쿼터 패치 해제 (도넛 -> 고정 순서, 실제 composer 체인 순서)
 const withoutUsageOrder = (source) => {
+    source = withoutSettingsLayout(source);
     source = withoutSessionRecovery(source);
     source = withoutComposerControls(source);
     source = withoutHostSwitch(source);

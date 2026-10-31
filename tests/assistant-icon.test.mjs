@@ -62,6 +62,7 @@ test('shared and web place profile controls next to the nickname and persist ico
         View: 'View', SettingsCard: 'SettingsCard', SettingsInput: 'SettingsInput',
         SettingsSection: 'SettingsSection', SettingsSelect: 'SettingsSelect',
         SettingsSwitch: 'SettingsSwitch', SettingsAction: 'SettingsAction', SettingsRow: 'SettingsRow',
+        SendingSection: 'SendingSection',
         Image: 'Image', isNative: false,
     };
     stub.AssistantProfileSettings = createAssistantProfileSettings({
@@ -82,7 +83,12 @@ test('shared and web place profile controls next to the nickname and persist ico
         },
     };
     for (const ChatSection of chatSections(stub, environment)) {
-        const rows = () => ChatSection().props.children.props.children.props.children;
+        const rows = () => {
+            const sections = ChatSection().props.children;
+            assert.ok(sections.some(section => section.type === 'SendingSection'));
+            const profile = sections.find(section => section.props.title === 'settings.chat.profile');
+            return profile.props.children.props.children;
+        };
         const items = rows();
         const nicknameIndex = items.findIndex((row) => row?.props.testID === 'assistant-nickname-input');
         assert.equal(items[nicknameIndex + 1].props.testID, 'assistant-profile-settings');

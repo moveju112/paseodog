@@ -35,6 +35,7 @@ import { withHostSwitch, withoutHostSwitch } from '../patches/paseo-host-switch.
 import { withVersionDetails, withoutVersionDetails } from '../patches/paseo-version-details.mjs';
 import { withComposerControls, withoutComposerControls } from '../patches/paseo-composer-controls.mjs';
 import { withSessionRecovery, withoutSessionRecovery } from '../patches/paseo-session-recovery.mjs';
+import { withSettingsLayout, withoutSettingsLayout } from '../patches/paseo-settings-layout.mjs';
 
 const PRECOMPRESSED = [['.br', brotliCompressSync, brotliDecompressSync], ['.gz', gzipSync, gunzipSync]];
 
@@ -59,6 +60,7 @@ export function withoutWorktreeSetupTip(source) {
 
 // 기존 첨부파일·대기열 저장 및 배출 로직을 유지하면서 PaseoDog의 자동 턴 교체만 차단한다.
 function originalComposerSource(source, assemble) {
+    source = withoutSettingsLayout(source);
     source = withoutSessionRecovery(source);
     source = withoutComposerControls(source);
     source = withoutVersionDetails(source);
@@ -104,16 +106,16 @@ function patchComposerSource(source, assemble = value => value) {
     const hiddenSetupTip = withVersionDetails(original.replace(...worktreeSetupTip));
     // AI 엔진 설정의 압축 여유 버퍼 선택지를 Mixdog 상한에 맞춘 10/20/25%로 바꾼다.
     const resultWithChat = withChatUsability(withAgentEditorSafety(withSettingsCorrections(withOfferLink(withCompactionBuffer(withConversationFocus(withRelayPassword(withExternalLinks(withWorkRecords(withSidebarStatusShapes(withAgentsSettings(withImportCwd(withHideReasoning(withUsageOrder(withUsageDonut(withUsageColors(withWhite2Theme(withCollaboration(withAutoEffort(withAgentProgress(withSidebarToolbar(withHelpMenu(hiddenSetupTip))))))))))))))))))))));
-    return withSessionRecovery(withComposerControls(withHostSwitch(withSingleWorkspace(withSettingsBehavior(withSettingsOrganization(withDaemonUpdate(withMarkdownTable(resultWithChat))))))));
+    return withSettingsLayout(withSessionRecovery(withComposerControls(withHostSwitch(withSingleWorkspace(withSettingsBehavior(withSettingsOrganization(withDaemonUpdate(withMarkdownTable(resultWithChat)))))))));
 }
 
 // 검토된 Metro 0.11.4의 편집·구형 대기열 모듈과 툴팁/호스트/공급자/callout 참조 모듈.
 // 전체 blob 검사는 복원한 전체 번들에 적용한다. 선택 밖의 코드 변조도 반드시 거부한다.
 const COMPOSER_MODULES = [306, 886, 3119, 3120, 3122, 3123, 3124, 3125, 3126, 3127, 3128,
     3129, 3130, 3212, 3232, 3663, 3681, 3688, 3763, 3868, 3943, 4062, 4073, 4136, 4140, 4166, 4167, 4288, 4342,
-    4346, 4354, 4356, 4380, 4400, 4403, 4405, 4411, 4415, 4416, 4422, 4463, 4464, 4475,
+    3906, 4346, 4354, 4356, 4380, 4400, 4403, 4405, 4411, 4415, 4416, 4422, 4463, 4464, 4475,
     4650, 4651, 4655, 4684, 4685, 4698, 4717, 4759, 4820, 4847, 4863, 4879, 4886, 4934, 4972,
-    4999, 5161, 5204, 5221, 5223, 5224, 5269, 5298, 5304, 5347, 5365];
+    4999, 5161, 5204, 5221, 5223, 5224, 5269, 5298, 5299, 5304, 5305, 5321, 5347, 5365];
 const MODULE_BOUNDARY = '\n__d(';
 
 // 다른 검토 배치의 호환 경로이자 모듈 최적화의 바이트 단위 비교 기준.

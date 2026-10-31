@@ -37,6 +37,7 @@ import {
   type RecentSessionsWindow,
 } from "@/utils/recent-sessions";
 import { settingsStyles } from "@/styles/settings";
+import { UsagePreferencesSection } from "@/usage/options";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -271,6 +272,7 @@ export function SidebarNavSection(): ReactElement {
       <SidebarItemsCard section="header" />
       <SidebarItemsCard section="footer" />
       <RecentSessionsWindowsCard />
+      <UsagePreferencesSection />
     </>
   );
 }

@@ -2098,6 +2098,7 @@ export const ru: TranslationResources = {
     },
   },
   settings: {
+    ...en.settings,
     title: "Настройки",
     loading: "Загрузка настроек...",
     groups: {
@@ -2154,6 +2155,7 @@ export const ru: TranslationResources = {
       sendFailedTitle: "Не удалось отправить тестовое уведомление",
     },
     hostSections: {
+      ...en.settings.hostSections,
       engineAccounts: "Аккаунты подписки",
       engineWorkflow: "Рабочие процессы",
       engineTokens: "Экономия токенов",

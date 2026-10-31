@@ -11,6 +11,7 @@ import { normalizeCompactionConfig } from '../engine/node_modules/mixdog/src/run
 import { patchedComposerSource, COMPOSER_FILE } from '../scripts/patch-paseo-composer.mjs';
 import { composerFixture } from './composer-fixture.mjs';
 import { withSettingsCorrections, withoutSettingsCorrections } from '../patches/paseo-settings-corrections.mjs';
+import { withSettingsLayout, withoutSettingsLayout } from '../patches/paseo-settings-layout.mjs';
 
 // 실제 RPC 스키마와 네이티브 설정 저장기를 메모리 구성으로 연결한다.
 test('zero token override resets the native budget through the actual RPC contract', async () => {
@@ -89,7 +90,7 @@ test('summary route uses its configured provider and preserves model IDs contain
 test('web settings hide unsupported timeout and describe background memory', () => {
     const source = composerFixture(readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8'));
     assert.equal(composerFixture(source), source);
-    assert.ok(source.includes('children:[le,ie,ne,ae,ce,ue,me,ge]'));
+    assert.ok(source.includes('children:[le,ie,ne,ae,ce,ue,me]'));
     assert.ok(!source.includes('children:[le,ie,ne,ae,ce,ue,me,xe,ge]'));
     assert.ok(source.includes(String.raw`\ubc31\uadf8\ub77c\uc6b4\ub4dc \uba54\ubaa8\ub9ac (Recap)`));
 });
@@ -175,6 +176,6 @@ test('shared and web about settings omit release channels and changelog without 
         updater.isDesktopApp = true;
     }
     assert.equal(composerFixture(patched), patched);
-    assert.equal(withSettingsCorrections(withoutSettingsCorrections(patched)), patched);
+    assert.equal(withSettingsLayout(withSettingsCorrections(withoutSettingsCorrections(withoutSettingsLayout(patched)))), patched);
     assert.throws(() => patchedComposerSource(patched + '// drift'), /hash mismatch/);
 });
