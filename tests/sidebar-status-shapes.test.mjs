@@ -62,9 +62,10 @@ test('recent session rows use the shared indicator for running, completed, permi
     const code = transformSync(component, { loader: 'tsx', jsxFactory: 'jsx', format: 'cjs' }).code;
     const { deriveAgentStateBucket } = androidRequire('@getpaseo/protocol/agent-state-bucket');
     const Row = new Function('jsx', 'useTranslation', 'useCompactTimeAgo', 'useCallback', 'Pressable', 'View', 'Text',
-        'WorkspaceStatusIndicator', 'deriveSidebarStateBucket', 'navigateToAgent', 'styles',
+        'WorkspaceStatusIndicator', 'deriveSidebarStateBucket', 'navigateToAgent', 'styles', 'useRecentSessionsStore',
         `${code}\nreturn RecentSessionRow;`)(React.createElement, () => ({ t: (key) => key }), () => '1m', (callback) => callback,
-        'pressable', 'view', 'text', 'shared-status-indicator', deriveAgentStateBucket, () => {}, {});
+        'pressable', 'view', 'text', 'shared-status-indicator', deriveAgentStateBucket, () => {}, {},
+        (selector) => selector({ hideSession: () => {} }));
     const cases = [
         [{ status: 'running' }, 'running'],
         [{ status: 'idle', requiresAttention: true, attentionReason: 'finished' }, 'attention'],
@@ -76,7 +77,7 @@ test('recent session rows use the shared indicator for running, completed, permi
     ];
     for (const [input, expected] of cases) {
         const agent = { id: 'session', serverId: 'server', pendingPermissions: [], ...input };
-        const row = Row({ agent });
+        const row = Row({ agent }).props.children[0];
         const indicator = row.props.children[0].props.children;
         assert.equal(row.props.testID, 'sidebar-recent-session-server-session');
         // 확인한 완료는 최근 목록에서 체크를 숨긴다.
