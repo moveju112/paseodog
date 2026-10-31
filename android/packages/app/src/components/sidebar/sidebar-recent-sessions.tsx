@@ -5,6 +5,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
 import { WorkspaceStatusIndicator } from "@/components/sidebar/sidebar-workspace-row-content";
 import { useCompactTimeAgo } from "@/hooks/use-time-ago";
+import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useRecentSessionsStore } from "@/stores/recent-sessions-store";
 import { useSessionStore, type Agent } from "@/stores/session-store";
 import { requestSessionReveal } from "@/stores/session-reveal-store";
@@ -197,6 +198,13 @@ function RecentSessionRow({
   const placement =
     agent.projectPlacement?.workspaceName || agent.projectPlacement?.projectName || "";
   const handlePress = useCallback(() => {
+    // 이미 열린 세션은 포커스가 바뀌지 않아도 직접 선택한 순간 완료를 확인한다.
+    if (bucket === "attention") {
+      const client = getHostRuntimeStore().getClient(agent.serverId);
+      void client?.clearAgentAttention(agent.id).catch((error) => {
+        console.error("Failed to clear recent session attention", error);
+      });
+    }
     onBeforeNavigate?.();
     // 분할 화면에서도 어느 칸에 열렸는지 보이도록 그 칸을 잠깐 강조한다.
     requestSessionReveal(agent.serverId, agent.id);
@@ -205,7 +213,7 @@ function RecentSessionRow({
       agentId: agent.id,
       workspaceId: agent.workspaceId,
     });
-  }, [agent.id, agent.serverId, agent.workspaceId, onBeforeNavigate]);
+  }, [agent.id, agent.serverId, agent.workspaceId, bucket, onBeforeNavigate]);
   const style = useCallback(
     ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.row,
