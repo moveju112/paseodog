@@ -354,10 +354,10 @@ const styles = StyleSheet.create((theme) => ({
     borderTopColor: theme.colors.border,
     borderStyle: "dashed",
   },
-  // 터치 영역 44 기준 약 6행
+  // 행 높이 30 기준 약 6행
   rows: {
     flexGrow: 0,
-    maxHeight: 264,
+    maxHeight: 186,
   },
   row: {
     flex: 1,
@@ -365,8 +365,9 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    minHeight: 44,
-    paddingHorizontal: theme.spacing[2],
+    minHeight: 30,
+    paddingLeft: theme.spacing[2],
+    paddingRight: 0,
     borderRadius: theme.borderRadius.md,
   },
   rowActive: {
@@ -377,8 +378,8 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
   },
   hideButton: {
-    minWidth: 44,
-    minHeight: 44,
+    minWidth: 24,
+    minHeight: 30,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.borderRadius.md,
