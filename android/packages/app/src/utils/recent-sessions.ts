@@ -87,7 +87,7 @@ export function recentSessionsWindowLabel(t: TFunction, window: RecentSessionsWi
     : t("sidebar.recentSessions.windows.hours", { value: minutes / 60 });
 }
 
-// 최근 세션 추림 (서버별 세션 -> 내 마지막 채팅이 범위 안인 최상위 세션, 최신순)
+// 진행 중인 최상위 세션은 시간 범위와 무관하게 표시하되 직접 숨긴 세션은 제외한다.
 export function selectRecentSessions(
   agentsByServer: Record<string, ReadonlyMap<string, Agent> | undefined>,
   window: RecentSessionsWindow,
@@ -100,7 +100,8 @@ export function selectRecentSessions(
     if (!agents) continue;
     for (const agent of agents.values()) {
       const messagedAt = agent.lastUserMessageAt?.getTime();
-      if (messagedAt === undefined || messagedAt < cutoff) continue;
+      if (messagedAt === undefined) continue;
+      if (agent.status !== "running" && messagedAt < cutoff) continue;
       if (agent.archivedAt || agent.parentAgentId) continue;
       const hiddenAt = hiddenThrough[`${agent.serverId}:${agent.id}`];
       if (hiddenAt !== undefined && messagedAt <= hiddenAt) continue;
