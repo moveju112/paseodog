@@ -64,8 +64,8 @@ test('closing hanging inference terminates child within bounded deadline',async(
 test('abort signal cancels worker startup and leaves no active child',async()=>{
     const controller=new AbortController();controller.abort();const before=processes.length;await assert.rejects(factory().create(args,{signal:controller.signal}),/canceled/);assert.equal(processes.length,before);
 });
-// 실제 자식 프로세스의 설정 읽기·쓰기와 활성 턴 거절을 확인한다.
-test('session effort preferences cross worker IPC and reject configuration during an active ask', async () => {
+// 실제 자식 프로세스의 설정 읽기·쓰기와 활성 턴 중 다음 턴 설정 전달을 확인한다.
+test('session effort preferences cross worker IPC and reach the engine during an active ask', async () => {
     const engine = await factory().create(args);
     try {
         assert.deepEqual(engine.configuration(), { autoEffort: true, effort: 'low' });
@@ -74,8 +74,9 @@ test('session effort preferences cross worker IPC and reject configuration durin
         assert.equal(engine.configuration().autoEffort, false);
         const ask = engine.ask('wait', {});
         const rejection = assert.rejects(ask, /aborted/);
-        await assert.rejects(engine.configure({ autoEffort: true }), /Worker busy/);
-        assert.equal(engine.configuration().autoEffort, false);
+        // 진행 중 턴의 적용 시점은 엔진이 판단하므로 워커는 압축·설정 점유와 달리 거절하지 않는다.
+        assert.deepEqual(await engine.configure({ autoEffort: true }), { autoEffort: true, effort: 'high' });
+        assert.equal(engine.configuration().autoEffort, true);
         await engine.abort();
         await rejection;
     } finally { await engine.close(); }

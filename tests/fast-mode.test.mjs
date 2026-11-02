@@ -159,6 +159,30 @@ test('Fast changes only the selected session route and exposes confirmed values 
     assert.equal(calls.length, 2);
 });
 
+// 응답 중 Fast 선택은 진행 중 턴을 끊지 않고 다음 턴 선호값으로 저장한다.
+test('Fast chosen during an active turn is saved for the next turn', async (t) => {
+    const gate = deferred();
+    const calls = [];
+    const catalog = { route: { provider: 'test', model: 'model', fast: false },
+        models: [{ provider: 'test', id: 'model', label: 'Model', fastCapable: true, effortOptions: [] }] };
+    const f = fixture({
+        async ask() { await gate.promise; return { content: 'done' }; },
+        async configure(changes) { calls.push(changes); return { route: changes.route }; },
+    }, { loadCatalog: () => catalog });
+    t.after(() => f.connection.close());
+    await f.ready();
+    await f.connection.send(f.prompt);
+    await until(f.events, (event) => event.type === 'session.turn' && event.state === 'started');
+    await f.connection.send({ type: 'session.configure', sessionId: 'p1', requestId: 'busy-fast', changes: { settings: { fast: true } } });
+    await until(f.events, (event) => event.type === 'request.completed' && event.requestId === 'busy-fast');
+    assert.deepEqual(calls, [{ route: { fast: true } }]);
+    assert.equal(f.store.list()[0].nativeRoute.fast, true);
+    assert.equal(f.events.findLast((event) => event.type === 'session.config')
+        .config.settings.find((setting) => setting.id === 'fast').value, true);
+    gate.resolve();
+    await until(f.events, (event) => event.type === 'session.turn' && event.state === 'completed');
+});
+
 test('unsupported Fast and mixed settings cannot reach the engine', async (t) => {
     const calls = [];
     const f = fixture({ async configure(changes) { calls.push(changes); } });

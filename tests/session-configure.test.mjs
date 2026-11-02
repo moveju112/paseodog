@@ -51,28 +51,89 @@ test('configuration serializes against prompts and other configuration requests'
     await until(f.events, (e) => e.type === 'request.completed' && e.requestId === 'first');
 });
 
-// 응답 중 설정 변경은 엔진에 전달하지 않고 대기·중지 안내만 돌려준다.
-test('configuration during an active turn is rejected with a localized wait-or-stop notice', async (t) => {
+// 응답 중 모델·모드·컨텍스트 변경은 엔진에 전달하지 않고 대기·중지 안내만 돌려준다.
+test('an active turn rejects model, mode and context changes with a localized wait-or-stop notice', async (t) => {
     const gate = deferred();
-    let configures = 0;
+    const configures = [];
     const f = fixture({
         async ask(text, callbacks) { f.calls.push({ text, callbacks }); await gate.promise; return { result: { content: 'done' } }; },
-        async configure() { configures++; },
+        async configure(changes) { configures.push(changes); },
     });
     t.after(() => f.connection.close());
     await f.ready();
     await f.connection.send(f.prompt);
     await until(f.calls, (c) => c.text);
-    for (const [requestId, changes] of [['mode', { mode: 'bypass' }], ['effort', { thinkingOption: 'high' }], ['model', { model: 'other' }]]) {
+    for (const [requestId, changes] of [['mode', { mode: 'bypass' }], ['model', { model: 'other' }],
+        ['context', { route: { contextPercent: 70 } }]]) {
         await f.connection.send({ type: 'session.configure', sessionId: 'p1', requestId, changes });
         const failed = await until(f.events, (e) => e.type === 'request.failed' && e.requestId === requestId);
         assert.equal(failed.error.message,
-            '응답 중에는 모델·추론 수준·설정을 바꿀 수 없어요. 응답이 끝날 때까지 기다리거나 응답을 중지한 뒤 다시 선택해 주세요.');
+            '응답 중에는 모델·모드·컨텍스트 설정을 바꿀 수 없어요. 응답이 끝날 때까지 기다리거나 응답을 중지한 뒤 다시 선택해 주세요.');
     }
-    assert.equal(configures, 0);
+    assert.deepEqual(configures, []);
     assert.equal(f.events.findLast((e) => e.type === 'session.config').config.mode, 'ask');
     gate.resolve();
     await until(f.events, (e) => e.type === 'session.prompt_result');
+});
+
+// 응답 중 고른 노력도·Fast는 진행 중 턴의 후속 추론에 섞이지 않고 다음 턴 시작 때 적용된다.
+test('native configure during a turn defers effort and Fast to the next turn', async () => {
+    const session = { id: 'deferred', provider: 'first', model: 'one', effort: 'low', fast: false, messages: [] };
+    const routes = [];
+    const efforts = [];
+    let gate = deferred();
+    const engine = await createNativeEngine({
+        config: { cwd: '/work', mode: 'ask', mcpServers: {}, settings: {}, thinkingOption: 'low' },
+        effortOptions: ['low', 'high'],
+    }, {
+        modules: {
+            loadConfig: () => ({}),
+            createMixdogSessionRuntime: async (options) => {
+                const tool = { getStatus: () => ({ jobs: [] }), onStatusChange: () => () => {},
+                    closeAll: async () => ({ failed: [] }) };
+                options.agentSessionSurface({ mgr: {}, getAgentTool: () => tool });
+                return {
+                    id: session.id, session, provider: 'first', model: 'one',
+                    async setToolMode() {},
+                    async setRoute(route, routeOptions) { routes.push([route, routeOptions]); session.fast = route.fast; },
+                    async ask(text, askOptions) {
+                        // 같은 턴의 후속 추론처럼 시작 전 콜백을 한 번 더 호출해 노력도를 기록한다.
+                        askOptions.beforeSessionAsk(session); efforts.push(session.effort);
+                        await gate.promise;
+                        askOptions.beforeSessionAsk(session); efforts.push(session.effort);
+                        return { content: text };
+                    },
+                    abort() {}, close() {}, resume() {}, compact() {},
+                };
+            },
+        },
+    });
+    try {
+        const first = engine.ask('first', {});
+        await until(efforts, () => true);
+        await assert.rejects(engine.configure({ mode: 'bypass' }), /Native engine busy/);
+        await assert.rejects(engine.configure({ route: { contextPercent: 70 } }), /Native engine busy/);
+        await assert.rejects(engine.configure({ route: { provider: 'second', model: 'two' } }), /Native engine busy/);
+        const result = await engine.configure({ route: { fast: true } });
+        assert.equal(result.route.fast, true);
+        assert.deepEqual(await engine.configure({ effort: 'high' }),
+            { autoEffort: false, autoEffortAvailable: false, effort: 'high' });
+        assert.deepEqual(routes, []);
+        assert.equal(session.fast, false);
+        gate.resolve();
+        await first;
+        assert.deepEqual(efforts, ['low', 'low']);
+        assert.deepEqual(routes, []);
+        gate = deferred();
+        gate.resolve();
+        await engine.ask('second', {});
+        assert.deepEqual(efforts, ['low', 'low', 'high', 'high']);
+        assert.equal(routes.length, 1);
+        assert.equal(routes[0][0].fast, true);
+        assert.deepEqual(routes[0][1], { applyToCurrentSession: true, sessionOnly: true, keepMainModel: true });
+        await engine.ask('third', {});
+        assert.equal(routes.length, 1);
+    } finally { await engine.close('done'); }
 });
 
 // 네이티브 엔진은 같은 문맥에서 도구 표면과 다음 턴의 승인 정책을 함께 변경한다.

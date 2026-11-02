@@ -562,18 +562,26 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             final(value) { const full = textOf(value); if (full && full !== text && full !== lastCommitted) setText(full); },
         };
     }
-    // 유휴 세션만 변경하고 다음 턴 선호값을 영속화한 뒤 완료를 알린다.
+    // 응답 중에도 다음 턴부터 적용할 수 있는 추론 수준·자동 노력도·Fast 변경인지 판단한다.
+    function nextTurnChange(changes) {
+        return Boolean(changes) && typeof changes === 'object' && !Array.isArray(changes)
+            && Object.entries(changes).every(([key, value]) => key === 'thinkingOption' || key === 'settings'
+                || (key === 'route' && Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+                    && Object.keys(value).every((name) => name === 'fast')));
+    }
+    // 다음 턴 선호값을 영속화한 뒤 완료를 알린다. 응답 중에는 다음 턴 적용 설정만 받는다.
     async function configureSession(input) {
         if (!selected.includes('session.configure')) throw new Error('Session configuration not negotiated');
         const session = sessions.get(input.sessionId);
         if (!session || session.closed || session.closing || session.broken || !session.engine)
             throw new Error('Session is not ready');
-        // 진행 중 변경은 거절만 하고 재전송하지 않는다. 메시지는 모든 클라이언트 오류 토스트에 그대로 표시된다.
-        if (session.active)
-            throw new Error('응답 중에는 모델·추론 수준·설정을 바꿀 수 없어요. 응답이 끝날 때까지 기다리거나 응답을 중지한 뒤 다시 선택해 주세요.');
+        const changes = input.changes;
+        // 응답 중에는 추론 수준·자동 노력도·Fast만 저장해 다음 턴부터 적용한다.
+        // 나머지 진행 중 변경은 거절만 하고 재전송하지 않는다. 메시지는 모든 클라이언트 오류 토스트에 그대로 표시된다.
+        if (session.active && !nextTurnChange(changes))
+            throw new Error('응답 중에는 모델·모드·컨텍스트 설정을 바꿀 수 없어요. 응답이 끝날 때까지 기다리거나 응답을 중지한 뒤 다시 선택해 주세요.');
         if (session.configuring)
             throw new Error('이전 설정 변경을 저장하는 중이에요. 저장이 끝난 뒤 다시 선택해 주세요.');
-        const changes = input.changes;
         if (!changes || typeof changes !== 'object' || Array.isArray(changes)
             || !Object.keys(changes).length
             || Object.keys(changes).some((key) => !['model', 'mode', 'thinkingOption', 'settings', 'route'].includes(key)))
