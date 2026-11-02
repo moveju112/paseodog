@@ -25,6 +25,7 @@ function commandError(error) {
 export function createProcessScope({ launch, platform = process.platform, mode = 'strict',
     runCommand = (cmd, args, opts) => execFileAsync(cmd, args, opts),
     readCgroupEvents = (path) => readFile(path, 'utf8'),
+    readOwnerCgroup = () => readFile('/proc/self/cgroup', 'utf8'),
     now = () => Date.now(), sleep = delay, unitName = `paseodog-${randomUUID().replaceAll('-', '')}.scope`,
     verifyMs = 4000 } = {}) {
     if (!launch?.command) throw new Error('Missing engine launch command');
@@ -46,6 +47,7 @@ export function createProcessScope({ launch, platform = process.platform, mode =
     const control = (args) => runCommand('/usr/bin/systemctl', ['--user', ...args], options);
     let hasRequestedStop = false;
     let killOptionPromise;
+    let ownerUnit = null;
 
     // 배포판의 백포트를 고려해 버전 숫자 대신 실제 지원 옵션을 읽고, 실행 전에 종료 가능 여부를 보장한다.
     function resolveKillOption() {
@@ -92,8 +94,12 @@ export function createProcessScope({ launch, platform = process.platform, mode =
     return {
         kind: 'systemd-user-cgroup', unit: unitName, detached: false,
         command: '/usr/bin/systemd-run',
-        args: ['--user', '--scope', '--collect', '--quiet', `--unit=${unitName}`,
-            '--property=KillMode=control-group', '--', launch.command, ...(launch.args || []), '--stdio'],
+        get args() {
+            return ['--user', '--scope', '--collect', '--quiet', `--unit=${unitName}`,
+                '--property=KillMode=control-group',
+                ...(ownerUnit ? [`--property=BindsTo=${ownerUnit}`, `--property=After=${ownerUnit}`] : []),
+                '--', launch.command, ...(launch.args || []), '--stdio'];
+        },
         async preflight() {
             try { await control(['show-environment']); }
             catch (error) {
@@ -102,6 +108,11 @@ export function createProcessScope({ launch, platform = process.platform, mode =
                     + commandError(error).slice(0, 450));
             }
             await resolveKillOption();
+            // scope를 형제 cgroup에 만들더라도 실제 소유 user unit이 종료되면 systemd가 함께 회수한다.
+            // 시스템 소유 SSH session scope에는 user manager의 의존성을 걸지 않는다.
+            const cgroup = await readOwnerCgroup();
+            ownerUnit = /^0::\/user\.slice\/user-\d+\.slice\/user@\d+\.service\/(?:[^/\n]+\/)*([a-zA-Z0-9_.@\\-]+\.(?:service|scope))$/m
+                .exec(cgroup)?.[1] || null;
         },
         async stop() {
             const killOption = await resolveKillOption();

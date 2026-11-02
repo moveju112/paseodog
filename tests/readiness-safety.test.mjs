@@ -14,6 +14,28 @@ import { delay, until } from './helpers.mjs';
 const unitName = `paseodog-${'a'.repeat(32)}.scope`;
 const launch = { command: '/usr/bin/node', args: ['worker.mjs'], env: { PATH: process.env.PATH } };
 
+test('Linux scopes follow their actual user service or scope, including daemon stop and restart', async () => {
+    for (const owner of ['paseodog.service', 'app-custom\\x2ddaemon.scope']) {
+        const scope = createProcessScope({ launch, platform: 'linux', unitName,
+            readOwnerCgroup: async () => `0::/user.slice/user-1000.slice/user@1000.service/app.slice/${owner}\n`,
+            runCommand: async () => ({ stdout: '--kill-whom=WHOM\n' }),
+        });
+        await scope.preflight();
+        const separator = scope.args.indexOf('--');
+        assert.ok(scope.args.slice(0, separator).includes(`--property=BindsTo=${owner}`));
+        assert.ok(scope.args.slice(0, separator).includes(`--property=After=${owner}`));
+    }
+});
+
+test('foreground Linux launch does not bind its scope to a system-owned SSH session', async () => {
+    const scope = createProcessScope({ launch, platform: 'linux', unitName,
+        readOwnerCgroup: async () => '0::/user.slice/user-1000.slice/session-42.scope\n',
+        runCommand: async () => ({ stdout: '--kill-whom=WHOM\n' }),
+    });
+    await scope.preflight();
+    assert.equal(scope.args.some(arg => arg.startsWith('--property=BindsTo=')), false);
+});
+
 test('strict Linux scope confines worker independently of Unix process groups', async () => {
     const calls = []; let reads = 0;
     const scope = createProcessScope({ launch, platform: 'linux', unitName,
