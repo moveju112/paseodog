@@ -11,12 +11,14 @@ const MAX_TASKS = 1000;
 
 // 결과 데이터만 저장한다. 명령·로그·URL·서버 오류 원문을 채팅에 복제하지 않는다.
 export function resultItem(task, status) {
+    // 로컬 명령의 확정 결과는 도구 기록에 있으므로 중복 알림을 만들지 않는다.
+    if (task.surface === 'shell' && TERMINAL.has(status)) return null;
     const id = `background-result:${hash({ key: task.key, status })}`;
     const origin = task.surface === 'remote' ? `원격 작업 ${task.jobId}`
         : task.surface === 'delivery' ? `배포 ${task.jobId}` : '백그라운드 명령 실행 결과';
     const message = `${origin}: ${LABELS[status]}.`
         + (status === 'unknown' ? ' 상태 확인이 필요하며 원래 명령은 자동 재실행하지 않았어.' : '');
-    // 로컬 명령 결과는 도구 결과와 중복되는 진행 기록이다. 배포 실패·결과 유실은 계속 경고한다.
+    // 원격·배포 실패와 결과 유실은 계속 경고한다.
     const warning = status === 'unknown' || (task.surface !== 'shell' && status === 'failed');
     return { type: 'notification', id, level: warning ? 'warning' : 'info', message };
 }
@@ -24,8 +26,9 @@ export function resultItem(task, status) {
 export function saveObservation(record, task, status, now = Date.now()) {
     const rows = [];
     if (!['running', 'unknown', ...TERMINAL].includes(status)) throw new Error('Invalid background result');
-    if (status !== 'running') {
-        const item = resultItem(task, status), key = hash(item.id);
+    const item = status === 'running' ? null : resultItem(task, status);
+    if (item) {
+        const key = hash(item.id);
         if (!record.receipts[key]) {
             const row = { item, timestamp: new Date(now).toISOString() };
             record.items.push(row);

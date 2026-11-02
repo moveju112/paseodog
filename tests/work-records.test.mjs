@@ -16,6 +16,11 @@ function loadFunction(file, name) {
     return new Function(`${code}\nreturn ${name};`)();
 }
 const project = loadFunction('work-record-model.ts', 'projectWorkRecords');
+const webProjection = WORK_RECORD_EDITS.find(([before]) => before.startsWith('e.createStreamPresentation='))[1];
+const projectWeb = new Function('return ' + webProjection.slice(
+    webProjection.indexOf('pdWork=') + 'pdWork='.length,
+    webProjection.indexOf(';const l=new WeakMap,H='),
+))();
 const createRenderer = loadFunction('work-record-renderer.ts', 'createWorkRecordRenderer');
 const getRecordGap = loadFunction('work-record-model.ts', 'getWorkRecordGap');
 const at = new Date('2026-10-21T00:00:00Z');
@@ -80,16 +85,44 @@ test('warnings, failures, cancellation, plugins and users never disappear inside
     assert.deepEqual(result.tail.filter((item) => item.kind !== 'work_record'), [user, failed, canceled, warning, plugin]);
 });
 
-test('web projection keeps duplicate local command results in records but preserves unresolved and delivery warnings', () => {
-    const local = { kind: 'notification', sourceType: 'notification', id: 'local', level: 'warning',
-        message: '백그라운드 명령 실행 결과: 실패.', timestamp: at };
-    const legacy = { ...local, id: 'legacy', message: '로컬 명령 job_123_test: 실패.' };
-    const unknown = { ...local, id: 'unknown', message: '백그라운드 명령 실행 결과: 결과 불명.' };
-    const delivery = { ...local, id: 'delivery', message: '배포 task: 실패.' };
-    const result = project({ tail: [local, legacy, unknown, delivery], head: [] }, false);
-    assert.deepEqual(result.tail[0].items, [local, legacy]);
-    assert.deepEqual(result.tail.slice(1), [unknown, delivery]);
-});
+for (const [surface, projection] of [['app', project], ['web', projectWeb]]) {
+    test(`${surface} hides historical duplicate summaries without hiding tool results or actionable warnings`, () => {
+        const local = { kind: 'notification', sourceType: 'notification', id: 'local', level: 'warning',
+            message: '백그라운드 명령 실행 결과: 실패.', timestamp: at };
+        const summaries = ['info', 'warning'].flatMap(level =>
+            ['백그라운드 명령 실행 결과', '로컬 명령 job_123_test'].flatMap(origin =>
+                ['성공', '실패', '취소'].map(status =>
+                    ({ ...local, id: `${level}:${origin}:${status}`, level, message: `${origin}: ${status}.` }))));
+        const warnings = [
+            { ...local, id: 'unknown', message: '백그라운드 명령 실행 결과: 결과 불명.' },
+            { ...local, id: 'delivery', message: '배포 task: 실패.' },
+            { ...local, id: 'remote', message: '원격 작업 task: 실패.' },
+            { ...local, id: 'error', sourceType: 'error' },
+            { ...local, id: 'error-level', level: 'error' },
+            { ...local, id: 'context', message: local.message + ' 확인이 필요해.' },
+        ];
+        const tools = ['completed', 'failed', 'canceled'].map(status => ({
+            kind: 'tool_call', id: status, timestamp: at, payload: { source: 'agent', data: { status } },
+        }));
+        const input = { tail: [user, ...tools, ...summaries.slice(0, 6)], head: [...summaries.slice(6), ...warnings] };
+        const before = JSON.stringify(input);
+        const result = projection(input, true);
+        assert.deepEqual(result.tail[1].items, [tools[0]]);
+        assert.equal(result.tail[1].active, true);
+        assert.equal(result.tail[1].count, 1);
+        assert.deepEqual(result.tail.slice(2), tools.slice(1));
+        assert.deepEqual(result.head, warnings);
+        assert.equal(JSON.stringify(input), before);
+        for (const active of [true, false]) {
+            for (const hideReasoning of [true, false]) {
+                const only = projection({ tail: summaries.slice(0, 6), head: summaries.slice(6) },
+                    active, undefined, hideReasoning);
+                assert.deepEqual(only.tail, []);
+                assert.deepEqual(only.head, []);
+            }
+        }
+    });
+}
 
 test('legacy messages use existing completed-turn boundaries without guessing paragraph meanings', () => {
     const first = assistant('one', '이전 안내');
