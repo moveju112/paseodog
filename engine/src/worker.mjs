@@ -123,6 +123,8 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
                 reply(id, await engine.steer(args.text, args.source)); return;
             }
             if (op === 'configure') {
+                // 응답 중 설정은 엔진이 다음 턴 적용 가능 여부를 판단하고, 압축·다른 설정 중에는 거절한다.
+                if (active?.op === 'ask') { reply(id, await engine.configure(args)); return; }
                 if (active) throw new Error('Worker busy');
                 // 모델 변경의 자동 압축 동안에도 ask·compact·다른 설정이 같은 세션을 건드리지 못하게 한다.
                 const turn = { token: id, finished: false, canceled: false };
@@ -163,7 +165,7 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
             }
             if (op !== 'ask' && op !== 'compact') throw new Error(`Unsupported worker operation: ${op}`);
             if (active) throw new Error('Worker busy');
-            const turn = { token: id, finished: false, canceled: false };
+            const turn = { token: id, op, finished: false, canceled: false };
             active = turn;
             try {
                 let value;

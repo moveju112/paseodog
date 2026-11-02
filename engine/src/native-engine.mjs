@@ -92,6 +92,8 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
     let configurationGeneration = 0;
     let quotaFailure = null;
     let currentEffortOptions = args.effortOptions;
+    // 응답 중 고른 Fast는 진행 중 턴의 경로를 건드리지 않고 다음 턴 시작 직전에 적용한다.
+    let pendingRoute = null;
     const effortSettings = { ...config.settings };
     if (config.thinkingOption) effortSettings.effort = config.thinkingOption;
     // 첫 턴 전 지연 생성 상태에서도 데몬이 조회한 현재 모델 카탈로그로 검증한다.
@@ -117,6 +119,26 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
         contextPercent: runtime.session?.contextPercent ?? runtime.contextPercent,
         contextTokens: runtime.session?.contextTokens ?? runtime.contextTokens,
         };
+    }
+    // 모델·Fast·컨텍스트 선택을 같은 세션에 적용하고, 모델이 바뀌면 이전 모델의 노력도 선호값을 비운다.
+    async function applyRoute(next, nextEffortOptions) {
+        const modelSelection = next.provider !== undefined || next.model !== undefined;
+        const selected = modelSelection ? { ...next } : { ...sessionRoute(),
+            effort: configuration().effort, autoEffort: configuration().autoEffort, ...next };
+        // 비율 선택이 이전의 절대 토큰 한도에 가려지지 않도록 원본의 해제 값을 전달한다.
+        if (Object.hasOwn(next, 'contextPercent') && !Object.hasOwn(next, 'contextTokens'))
+            selected.contextTokens = null;
+        const generation = configurationGeneration;
+        if (modelSelection) await compactBeforeModelSwitch(runtime, selected, native.loadConfig, () => {
+            if (closed || generation !== configurationGeneration)
+                throw new Error('모델 변경이 취소됐어요.');
+        });
+        await runtime.setRoute(selected, { applyToCurrentSession: true, sessionOnly: true, keepMainModel: true });
+        if (nextEffortOptions) currentEffortOptions = nextEffortOptions;
+        if (modelSelection) {
+            delete effortSettings.effort;
+            delete effortSettings.autoEffort;
+        }
     }
     let steeringOwner = null;
     const authentication = createAuthSession(runtime);
@@ -197,10 +219,19 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
                         await runtime.setRecapEnabled(latest.recap);
                     }
                 }
+                // 이전 응답 중 고른 Fast를 이번 턴 추론 전에 적용하고, 적용 중 들어온 새 선택은 다음 턴에 남긴다.
+                if (pendingRoute) {
+                    const next = pendingRoute;
+                    pendingRoute = null;
+                    try { await applyRoute(next); }
+                    catch (error) { pendingRoute = { ...next, ...pendingRoute }; throw error; }
+                }
             } catch (error) {
                 if (steeringOwner === owner) steeringOwner = null;
                 throw new Error('Unable to refresh engine settings before turn', { cause: error });
             }
+            // 같은 턴의 후속 추론에도 시작 시점 노력도를 유지하고, 응답 중 바꾼 값은 다음 턴부터 쓴다.
+            const turnEffort = { ...effortSettings };
             orchestration.begin(callbacks);
             const options = {
                 ...callbacks,
@@ -213,11 +244,11 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
                 beforeSessionAsk(session) {
                     owner.sessionId = session.id;
                     // 호스트 기본 경로는 쓰지 않고 실제 추론 직전 이 세션의 선호값만 적용한다.
-                    if (Object.hasOwn(effortSettings, 'autoEffort')) {
-                        if (effortSettings.autoEffort === false) session.autoEffort = false;
+                    if (Object.hasOwn(turnEffort, 'autoEffort')) {
+                        if (turnEffort.autoEffort === false) session.autoEffort = false;
                         else delete session.autoEffort;
                     }
-                    if (Object.hasOwn(effortSettings, 'effort')) session.effort = effortSettings.effort;
+                    if (Object.hasOwn(turnEffort, 'effort')) session.effort = turnEffort.effort;
                     // 대화 내용은 보존하고 이번 요청의 도구 카탈로그에만 최신 협업 모드를 반영한다.
                     if (typeof nextOrchestrationMode === 'string') session.orchestrationMode = nextOrchestrationMode;
                     orchestration.bind(session);
@@ -246,9 +277,15 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
             return await native.steerSession(steeringOwner.sessionId, content, agentMessageSource(provenance));
         },
         // 도구 노출 모드와 호스트 정책을 함께 갱신하고 하위 세션에도 같은 설정을 전달한다.
+        // 응답 중에는 노력도·Fast만 받아 다음 턴부터 적용하고 모델·모드·컨텍스트 변경은 거절한다.
         async configure(changes) {
             if (closed) throw new Error('Native engine closed');
-            if (steeringOwner) throw new Error('Native engine busy');
+            const deferred = Boolean(steeringOwner);
+            if (deferred && (Object.hasOwn(changes || {}, 'mode') || Object.hasOwn(changes || {}, 'effortOptions')
+                || (changes?.route !== undefined && (!changes.route || typeof changes.route !== 'object'
+                    || Array.isArray(changes.route) || Object.keys(changes.route).some((key) => key !== 'fast')
+                    || typeof changes.route.fast !== 'boolean'))))
+                throw new Error('Native engine busy');
             if (!changes || typeof changes !== 'object' || Array.isArray(changes)
                 || !Object.keys(changes).length
                 || Object.keys(changes).some((key) => !['mode', 'effort', 'autoEffort', 'route', 'effortOptions'].includes(key)))
@@ -265,22 +302,11 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
                 if (!next || typeof next !== 'object' || Array.isArray(next)
                     || Object.keys(next).some((key) => !['provider', 'model', 'fast', 'contextPercent', 'contextTokens'].includes(key)))
                     throw new Error('Invalid session route');
-                const modelSelection = next.provider !== undefined || next.model !== undefined;
-                const selected = modelSelection ? { ...next } : { ...sessionRoute(),
-                    effort: configuration().effort, autoEffort: configuration().autoEffort, ...next };
-                // 비율 선택이 이전의 절대 토큰 한도에 가려지지 않도록 원본의 해제 값을 전달한다.
-                if (Object.hasOwn(next, 'contextPercent') && !Object.hasOwn(next, 'contextTokens'))
-                    selected.contextTokens = null;
-                const generation = configurationGeneration;
-                if (modelSelection) await compactBeforeModelSwitch(runtime, selected, native.loadConfig, () => {
-                    if (closed || generation !== configurationGeneration)
-                        throw new Error('모델 변경이 취소됐어요.');
-                });
-                await runtime.setRoute(selected, { applyToCurrentSession: true, sessionOnly: true, keepMainModel: true });
-                if (changes.effortOptions) currentEffortOptions = changes.effortOptions;
-                if (modelSelection) {
-                    delete effortSettings.effort;
-                    delete effortSettings.autoEffort;
+                if (!deferred) {
+                    // 대기 중인 Fast는 같은 모델의 조정에만 합치고, 모델 선택은 새 모델 기준으로 다시 정한다.
+                    const modelSelection = next.provider !== undefined || next.model !== undefined;
+                    await applyRoute(modelSelection ? next : { ...pendingRoute, ...next }, changes.effortOptions);
+                    pendingRoute = null;
                 }
             }
             if (Object.hasOwn(changes, 'autoEffort') && typeof changes.autoEffort !== 'boolean')
@@ -290,11 +316,13 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
             if (Object.hasOwn(changes, 'effort') && !effortOptions()
                 .some((option) => (typeof option === 'string' ? option : option.id || option.value) === changes.effort))
                 throw new Error('Unsupported effort for current model');
+            // 응답 중 Fast는 모든 검증을 통과한 뒤에만 다음 턴 대기 값으로 저장한다.
+            if (deferred && changes.route) pendingRoute = { ...pendingRoute, ...changes.route };
             Object.assign(effortSettings,
                 Object.hasOwn(changes, 'effort') ? { effort: changes.effort } : {},
                 Object.hasOwn(changes, 'autoEffort') ? { autoEffort: changes.autoEffort } : {},
                 Object.hasOwn(changes, 'effort') && !Object.hasOwn(changes, 'autoEffort') ? { autoEffort: false } : {});
-            return { ...configuration(), ...(changes.route ? { route: sessionRoute() } : {}) };
+            return { ...configuration(), ...(changes.route ? { route: { ...sessionRoute(), ...pendingRoute } } : {}) };
         },
         // 복구·계승·컨텍스트 조회를 실행 중인 동일 네이티브 세션에 한정한다.
         async action(request) {

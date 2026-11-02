@@ -236,19 +236,22 @@ test('journal failure after native preference admission fails closed without pub
     } finally { f.store.save = save; }
 });
 
-// 활성 턴 중 자동·수동 변경은 모두 거절하며 원래 턴과 승인은 그대로 둔다.
-test('active turn rejects effort settings without forwarding configuration', async (t) => {
+// 활성 턴 중 자동·수동 변경은 다음 턴 선호값으로 저장하고 원래 턴은 그대로 이어간다.
+test('active turn saves effort settings for the next turn without interrupting it', async (t) => {
     const gate = deferred();
-    let calls = 0;
+    const calls = [];
     const f = fixture({ async ask() { await gate.promise; return { content: 'done' }; },
-        async configure() { calls++; } }, { loadCatalog });
+        async configure(changes) { calls.push(changes); } }, { loadCatalog });
     t.after(() => f.connection.close());
     await f.ready();
     await f.connection.send(f.prompt);
     await until(f.events, (event) => event.type === 'session.turn' && event.state === 'started');
-    await configure(f, 'busy-auto', { settings: { autoEffort: false } }, true);
-    await configure(f, 'busy-effort', { thinkingOption: 'high' }, true);
-    assert.equal(calls, 0);
+    await configure(f, 'busy-auto', { settings: { autoEffort: false } });
+    await configure(f, 'busy-effort', { thinkingOption: 'high' });
+    assert.deepEqual(calls, [{ autoEffort: false }, { effort: 'high', autoEffort: false }]);
+    assert.deepEqual(f.store.list()[0].effortSettings, { effort: 'high', autoEffort: false });
+    assert.equal(f.events.findLast((event) => event.type === 'session.config').config.thinkingOption, 'high');
+    assert.equal(f.events.some((event) => event.type === 'session.turn' && event.state !== 'started'), false);
     gate.resolve();
     await until(f.events, (event) => event.type === 'session.turn' && event.state === 'completed');
 });
