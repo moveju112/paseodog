@@ -1,17 +1,17 @@
 import { expect, test } from "vitest";
-import { applyStreamEvent, type StreamItem } from "@/types/stream";
+import { applyStreamEvent, type NotificationItem, type StreamItem } from "@/types/stream";
 import { createStreamPresentation } from "./presentation";
 import { buildAgentStreamRenderModel } from "./model";
 import { projectPluginTimelineItems } from "@/plugins/timeline/projection";
 import { projectWorkRecords } from "./work-record-model";
 import { getGapBetweenStreamItems } from "./spacing";
 
-test("legacy local-command summaries stay in progress records without hiding actionable warnings", () => {
+test("local-command summaries are hidden without hiding tool results or actionable warnings", () => {
   const notice = (
     id: string,
     message: string,
     sourceType: "notification" | "error" = "notification",
-  ): StreamItem => ({
+  ): NotificationItem => ({
     kind: "notification",
     sourceType,
     id,
@@ -19,10 +19,17 @@ test("legacy local-command summaries stay in progress records without hiding act
     level: "warning",
     timestamp: new Date(1),
   });
-  const summaries = [
-    notice("old", "로컬 명령 job_123_test: 실패."),
-    notice("current", "백그라운드 명령 실행 결과: 실패."),
-  ];
+  const summaries: StreamItem[] = [];
+  for (const level of ["info", "warning"] as const) {
+    for (const origin of ["백그라운드 명령 실행 결과", "로컬 명령 job_123_test"]) {
+      for (const status of ["성공", "실패", "취소"]) {
+        summaries.push({
+          ...notice(`${level}:${origin}:${status}`, `${origin}: ${status}.`),
+          level,
+        });
+      }
+    }
+  }
   const warnings = [
     notice(
       "unknown",
@@ -31,11 +38,51 @@ test("legacy local-command summaries stay in progress records without hiding act
     notice("remote", "원격 작업 task-1: 실패."),
     notice("delivery", "배포 task-1: 실패."),
     notice("error", "백그라운드 명령 실행 결과: 실패.", "error"),
+    { ...notice("error-level", "백그라운드 명령 실행 결과: 실패."), level: "error" as const },
+    notice("context", "백그라운드 명령 실행 결과: 실패. 확인이 필요해."),
     notice("other", "Command blocked"),
   ];
-  const result = projectWorkRecords({ tail: [...summaries, ...warnings], head: [] }, false);
-  expect(result.tail[0]).toMatchObject({ kind: "work_record", items: summaries });
-  expect(result.tail.slice(1)).toEqual(warnings);
+  const tools: StreamItem[] = (["completed", "failed", "canceled"] as const).map((status) => ({
+    kind: "tool_call",
+    id: status,
+    timestamp: new Date(1),
+    payload: {
+      source: "agent",
+      data: {
+        provider: "codex",
+        name: "shell",
+        status,
+        callId: status,
+        error: null,
+        detail: { type: "unknown", input: null, output: null },
+      },
+    },
+  }));
+  const input = {
+    tail: [...tools, ...summaries.slice(0, 6)],
+    head: [...summaries.slice(6), ...warnings],
+  };
+  const result = projectWorkRecords(input, true);
+  expect(result.tail[0]).toMatchObject({
+    kind: "work_record",
+    items: [tools[0]],
+    active: true,
+    count: 1,
+  });
+  expect(result.tail.slice(1)).toEqual(tools.slice(1));
+  expect(result.head).toEqual(warnings);
+  for (const active of [true, false]) {
+    for (const hideReasoning of [true, false]) {
+      const only = projectWorkRecords(
+        { tail: summaries.slice(0, 6), head: summaries.slice(6) },
+        active,
+        undefined,
+        hideReasoning,
+      );
+      expect(only.tail).toEqual([]);
+      expect(only.head).toEqual([]);
+    }
+  }
 });
 
 test("steered requests in one native turn keep their own nearby records across history and live rows", () => {

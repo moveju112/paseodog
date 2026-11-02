@@ -34,6 +34,10 @@ test('result notices identify the origin and outcome without repeating delivery 
     for (const [surface, origin] of [['shell', '로컬 명령'], ['remote', '원격 작업'], ['delivery', '배포']]) {
         for (const [status, label] of [['completed', '성공'], ['failed', '실패'], ['canceled', '취소'], ['unknown', '결과 불명']]) {
             const item = resultItem({ key: surface, surface, jobId: 'job-1' }, status);
+            if (surface === 'shell' && status !== 'unknown') {
+                assert.equal(item, null);
+                continue;
+            }
             const warning = status === 'unknown' ? ' 상태 확인이 필요하며 원래 명령은 자동 재실행하지 않았어.' : '';
             const expected = surface === 'shell'
                 ? `백그라운드 명령 실행 결과: ${label}.${warning}`
@@ -45,36 +49,42 @@ test('result notices identify the origin and outcome without repeating delivery 
     }
 });
 
-for (const [exitCode, expected] of [[0, '성공'], [7, '실패']]) {
-    test(`shell terminal ${exitCode} is journaled once without user input or a model`, async t => {
+for (const [exitCode, expected] of [[0, 'completed'], [7, 'failed']]) {
+    test(`shell terminal ${exitCode} persists its status without a duplicate notification`, async t => {
         const f = await setup(t);
         await f.writeJob({}); await f.service.scan();
         assert.equal(reports(f.store).length, 0);
         await f.writeJob({ status: 'completed', exitCode, command: 'secret command', stdoutPreview: 'secret token' });
         await f.service.scan(); await f.service.scan();
-        assert.equal(reports(f.store).length, 1);
-        assert.equal(reports(f.store)[0].item.message, `백그라운드 명령 실행 결과: ${expected}.`);
-        assert.doesNotMatch(JSON.stringify(f.store.load('bridge')), /secret/);
-        const receipt = Object.values(f.store.load('bridge').receipts)[0];
-        assert.equal(receipt.result.ai, 'not-requested');
-        assert.equal(receipt.result.clientReceived, null);
+        const record = f.store.load('bridge');
+        assert.equal(reports(f.store).length, 0);
+        assert.equal(Object.values(record.backgroundTasks)[0].status, expected);
+        assert.deepEqual(record.receipts, {});
+        assert.doesNotMatch(JSON.stringify(record), /secret/);
     });
 }
-test('idle session and disconnected client recover after restart; duplicate event remains single-copy', async t => {
+test('idle session and disconnected client recover terminal status after restart without duplicate notices', async t => {
     const f = await setup(t);
     await f.writeJob({}); await f.service.scan();
     await f.writeJob({ status: 'completed', exitCode: 0 });
     const restarted = createBackgroundResults(f.config);
     await restarted.scan(); await restarted.scan();
     assert.equal(f.store.load('bridge').active, null);
-    assert.equal(reports(f.store).length, 1);
+    assert.equal(Object.values(f.store.load('bridge').backgroundTasks)[0].status, 'completed');
+    assert.equal(reports(f.store).length, 0);
 });
 test('missing monitor and restart loss mean unknown, not remote failure or replay', async t => {
     const f = await setup(t);
     await f.writeJob({}); await f.service.scan();
     await rm(join(f.dataRoot, 'shell-jobs', 'job_1_test.json'));
     await createBackgroundResults(f.config).scan();
+    await f.service.scan();
+    assert.equal(reports(f.store).length, 1);
     assert.match(reports(f.store)[0].item.message, /결과 불명/);
+    assert.equal(reports(f.store)[0].item.level, 'warning');
+    const receipt = Object.values(f.store.load('bridge').receipts)[0];
+    assert.equal(receipt.result.ai, 'not-requested');
+    assert.equal(receipt.result.clientReceived, null);
     assert.equal(shellObservation({ jobId: 'job_x', ownerSessionId: 'sess_owner', status: 'failed',
         error: 'daemon restarted while this shell task was running; its outcome was lost. Re-run the command' }), 'unknown');
 });
@@ -174,10 +184,11 @@ test('journal failure does not publish or acknowledge a result', async t => {
     f.store.save = original;
     assert.equal(f.events.some(event => event.item?.id === 'unsaved'), false);
 });
-test('canceled local task is reported without claiming remote cancellation', async t => {
+test('canceled local task persists its status without a duplicate notification', async t => {
     const f = await setup(t);
     await f.writeJob({ status: 'canceled' }); await f.service.scan();
-    assert.equal(reports(f.store)[0].item.message, '백그라운드 명령 실행 결과: 취소.');
+    assert.equal(reports(f.store).length, 0);
+    assert.equal(Object.values(f.store.load('bridge').backgroundTasks)[0].status, 'canceled');
 });
 test('status probes reject redirects, credentials, oversized responses and honor timeout', async t => {
     const f = await setup(t);

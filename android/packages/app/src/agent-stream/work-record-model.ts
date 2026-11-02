@@ -27,7 +27,19 @@ export function projectWorkRecords<
   cache: WorkRecordCache = { records: new Map(), answers: new WeakMap() },
   hideReasoning = false,
 ): T {
-  const items = [...input.tail, ...input.head];
+  const hidden = new Set<StreamItem>();
+  // 이미 저장된 로컬 명령 요약도 도구 결과와 중복되므로 표시에서만 제외한다.
+  const items = [...input.tail, ...input.head].filter((item) => {
+    const duplicate =
+      item.kind === "notification" &&
+      item.sourceType === "notification" &&
+      (item.level === "info" || item.level === "warning") &&
+      /^(?:백그라운드 명령 실행 결과|로컬 명령 job_[A-Za-z0-9_-]+): (?:성공|실패|취소)\.$/.test(
+        item.message,
+      );
+    if (duplicate) hidden.add(item);
+    return !duplicate;
+  });
   const keys = new Map<StreamItem, string | null>();
   const groups = new Map<string | null, StreamItem[]>();
   let userKey: string | null = null;
@@ -45,24 +57,13 @@ export function projectWorkRecords<
   }
   const active = isTurnActive && items.length ? keys.get(items[items.length - 1]!) : undefined;
   const replacements = new Map<StreamItem, StreamItem>();
-  const hidden = new Set<StreamItem>();
   const seen = new Set<string>();
 
   // 승인·오류·플러그인 내용은 접힌 기록 안으로 감추지 않는다.
   function isRecord(item: StreamItem): boolean {
     if (item.kind === "tool_call")
       return !["failed", "canceled"].includes(item.payload.data.status);
-    if (item.kind === "notification") {
-      // 이전 버전이 warning으로 저장한 로컬 명령 요약도 도구 결과와 함께 기록 안에 보존한다.
-      return (
-        item.level === "info" ||
-        (item.level === "warning" &&
-          item.sourceType === "notification" &&
-          /^(?:백그라운드 명령 실행 결과|로컬 명령 job_[A-Za-z0-9_-]+): (?:성공|실패|취소)\.$/.test(
-            item.message,
-          ))
-      );
-    }
+    if (item.kind === "notification") return item.level === "info";
     return (
       item.kind === "assistant_message" ||
       item.kind === "thought" ||
