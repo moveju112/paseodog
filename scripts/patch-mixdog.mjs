@@ -9,12 +9,13 @@ import { SESSION_TITLE_ROUTE_PATCH } from '../patches/session-title-route.mjs';
 import { BUILTIN_AGENT_FILES, BUILTIN_AGENT_PATCHES, SOLO_BASIC_ROLE_IDS } from '../patches/builtin-agents.mjs';
 import { AGENT_ROUTE_SAFETY_EDITS, AGENT_EDITOR_SAFETY_PATCHES } from '../patches/agent-editor-safety.mjs';
 import { WORK_METHOD_RULE_PATCHES } from '../patches/work-method-rules.mjs';
+import { STABILITY_FILES, withStabilityBackports } from '../patches/mixdog-stability.mjs';
 export const PIN = '1.4.1';
 export const ORIGINAL_BLOB = '3adfd3eeb9f354198de89d6651647d8f9afc6321';
 export const ANCHOR = '      const turnContext = await dispatchPromptSubmit(turn, session0, prompt, options);';
 export const ADDITION = '\n      // PaseoDog host-policy boundary v1 (local Apache-2.0 modification).\n      if (typeof options.beforeSessionAsk === \'function\') {\n        await options.beforeSessionAsk(session0);\n      }';
 export const MARKER = 'PaseoDog host-policy boundary v1';
-export const AGENT_PATCHES = [
+export const HOST_PATCHES = [
     ...AGENT_EDITOR_SAFETY_PATCHES,
     COMPACTION_SUMMARY_ROUTE_PATCH,
     SESSION_TITLE_ROUTE_PATCH,
@@ -424,20 +425,22 @@ export const AGENT_PATCHES = [
         ],
     },
 ];
+export const AGENT_PATCHES = withStabilityBackports(HOST_PATCHES);
+const ADDED_FILES = [...BUILTIN_AGENT_FILES, ...STABILITY_FILES];
 // 정확한 원본 또는 정확한 패치 결과만 허용한다.
 export function patchedAgentSource(text, spec) {
     let original = text;
-    for (const [before, after] of [...spec.edits].reverse()) original = original.replace(after, before);
-    for (const [before, after] of [...(spec.previousEdits || [])].reverse()) original = original.replace(after, before);
+    for (const [before, after] of [...spec.edits].reverse()) original = original.replace(after, () => before);
+    for (const [before, after] of [...(spec.previousEdits || [])].reverse()) original = original.replace(after, () => before);
     if (gitBlob(original) !== spec.blob) throw new Error(`Mixdog source hash mismatch: ${spec.file}`);
     let result = original;
     for (const [before, after] of spec.edits) {
         if (result.split(before).length !== 2) throw new Error(`Mixdog patch anchor mismatch: ${spec.file}`);
-        result = result.replace(before, after);
+        result = result.replace(before, () => after);
     }
     const previousVersions = (spec.previousEditCounts || [spec.previousEditCount || 0]).map((count) =>
-        spec.edits.slice(0, count).reduce((source, [before, after]) => source.replace(before, after), original));
-    const previousVersion = (spec.previousEdits || []).reduce((source, [before, after]) => source.replace(before, after), original);
+        spec.edits.slice(0, count).reduce((source, [before, after]) => source.replace(before, () => after), original));
+    const previousVersion = (spec.previousEdits || []).reduce((source, [before, after]) => source.replace(before, () => after), original);
     if (text !== original && text !== result && !previousVersions.includes(text) && text !== previousVersion)
         throw new Error(`Partial Mixdog patch: ${spec.file}`);
     return result;
@@ -452,7 +455,7 @@ export function patchedSource(text, expectedBlob = ORIGINAL_BLOB) {
 export function patch(root, { check = false } = {}) {
     // 같은 파일을 여러 spec으로 쓰면 앞 패치가 유실되므로 읽기·쓰기 전에 차단한다.
     const files = new Set(['src/session-runtime/turn/turn-run.mjs']);
-    for (const { file } of [...AGENT_PATCHES, ...BUILTIN_AGENT_FILES]) {
+    for (const { file } of [...AGENT_PATCHES, ...ADDED_FILES]) {
         if (files.has(file)) throw new Error(`Duplicate Mixdog patch target: ${file}`);
         files.add(file);
     }
@@ -468,7 +471,7 @@ export function patch(root, { check = false } = {}) {
         return { path, before, after: transform(before) };
     });
     // 추가 파일도 고정 버전 안에서 부재 또는 정확한 배포 내용만 허용하고 사용자 파일은 덮어쓰지 않는다.
-    for (const { file, content } of BUILTIN_AGENT_FILES) {
+    for (const { file, content } of ADDED_FILES) {
         const path = resolve(root, file);
         let before = null;
         try { before = readFileSync(path, 'utf8'); }

@@ -1,10 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { patchedSource,gitBlob,ORIGINAL_BLOB } from '../scripts/patch-mixdog.mjs';
+import { patchedSource,patchedAgentSource,gitBlob,ORIGINAL_BLOB } from '../scripts/patch-mixdog.mjs';
 const original=readFileSync(new URL('./fixtures/upstream-turn-run.mjs.txt',import.meta.url),'utf8');
 test('retained upstream turn-run fixture matches the exact Git blob fetched from Mixdog',()=>{
     assert.equal(gitBlob(original),ORIGINAL_BLOB);assert.equal(patchedSource(patchedSource(original)),patchedSource(original));
+});
+test('source edits preserve literal dollar sequences in SQL and template strings', () => {
+    const before = 'const statement = "old";\n';
+    const after = 'const statement = "$$ $& $` $\' $${index}";\n';
+    const spec = { file: 'fixture.mjs', blob: gitBlob(before), edits: [[before, after]] };
+    assert.equal(patchedAgentSource(before, spec), after);
+    assert.equal(patchedAgentSource(after, spec), after);
 });
 async function runUpstream(deps,before){
     const source=patchedSource(original).replace(/^import .*;\n/gm,'');
