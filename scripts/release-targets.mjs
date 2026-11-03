@@ -16,7 +16,7 @@ const RULES = [
     [/\.(test|spec)\.[cm]?[jt]sx?$/, []],
     [/\.md$/, []],
     [/^scripts\/(release-[\w-]+|build-release|build-web|build-metrics|verified-build-cache|runtime-changes|test|test-files|check|check-upstream|benchmark-report|live-acceptance|live-smoke|doctor)\.mjs$/, []],
-    [/^scripts\/(android-update-manifest\.py|check-env\.sh)$/, []],
+    [/^scripts\/android-update-manifest\.py$/, []],
     [/^android\/packages\/app\/(android|plugins)\//, ['android']],
     // Metro의 Android/native 구현만 바뀌면 웹 번들·데스크톱·데몬은 재배포하지 않는다.
     [/^android\/packages\/app\/src\/.*\.(android|native)\.[jt]sx?$/, ['android']],

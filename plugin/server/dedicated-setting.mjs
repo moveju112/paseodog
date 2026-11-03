@@ -1,6 +1,6 @@
-import { mkdirSync, readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { writeFileAtomicSync } from './util.mjs';
 
 // PaseoDog 전용 호스트 설정은 전용 엔진 데이터 폴더에만 저장한다.
 function settingPath(env, file) {
@@ -26,21 +26,5 @@ export function readDedicatedSetting(env, file) {
 export function writeDedicatedSetting(env, file, value) {
     const path = settingPath(env, file);
     mkdirSync(env.MIXDOG_DATA_DIR, { recursive: true, mode: 0o700 });
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    let fd;
-    try {
-        fd = openSync(temporary, 'wx', 0o600);
-        writeFileSync(fd, JSON.stringify(value) + '\n');
-        fsyncSync(fd);
-        closeSync(fd);
-        fd = undefined;
-        renameSync(temporary, path);
-        if (process.platform !== 'win32') {
-            fd = openSync(env.MIXDOG_DATA_DIR, 'r');
-            fsyncSync(fd);
-        }
-    } finally {
-        if (fd !== undefined) closeSync(fd);
-        try { unlinkSync(temporary); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    }
+    writeFileAtomicSync(path, JSON.stringify(value) + '\n');
 }

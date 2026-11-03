@@ -1,7 +1,6 @@
 // 로컬 패치: 새 작업공간의 가져오기에 선택한 프로젝트 경로를 전달한다.
 export const IMPORT_CWD_ANCHOR = '(0,fe.useImportSession)({serverId:T})';
 export const IMPORT_CWD = '(0,fe.useImportSession)({serverId:T,cwd:Wt??void 0})';
-export const SOURCE_IMPORT_CWD_ANCHOR = 'useImportSession({ serverId: selectedServerId })';
 export const SOURCE_IMPORT_CWD = 'useImportSession({ serverId: selectedServerId, cwd: selectedSourceDirectory ?? undefined })';
 
 export const IMPORT_LAUNCHER_ANCHOR = '()=>({showChanges:Sa,showPullRequest:Wa,showBrowser:ss,terminalDisabled:ns,launch:Gr}),[ns,Wa,Sa,Gr,ss]';
