@@ -29,7 +29,6 @@ export type EngineSection =
   | "execution"
   | "memory"
   | "generation"
-  | "providers"
   | "tokens"
   | "instructions"
   | "tools"
@@ -275,7 +274,6 @@ const builtinToolMeta = [
   { id: "tidy", label: "코드 정리 (Tidy)", hint: "포맷팅·린트 자동 정리" },
   { id: "visualize", label: "시각화 도구", hint: "다이어그램·구조 시각화 생성" },
   { id: "media", label: "미디어 처리", hint: "이미지·오디오 파일 분석 및 변환" },
-  { id: "localProvider", label: "로컬 모델 공급자", hint: "Ollama·LM Studio 등 로컬 추론 연결" },
 ] as const;
 
 const defaultEffortLabels: Record<string, string> = {
@@ -461,11 +459,9 @@ function ToolsSection({
   disabled,
   request,
   scope = "tools",
-}: SectionProps & { scope?: "tools" | "memory" | "providers" }) {
+}: SectionProps & { scope?: "tools" | "memory" }) {
   const toolModules = snapshot.toolModules;
-  const tools = builtinToolMeta.filter((tool) =>
-    scope === "providers" ? tool.id === "localProvider" : tool.id !== "localProvider",
-  );
+  const tools = builtinToolMeta;
   const uninstalledModules = tools.filter((tool) => toolModules?.[tool.id]?.installed === false);
   const toggleWebSearch = useCallback(
     (webSearch: boolean) => {
@@ -515,9 +511,7 @@ function ToolsSection({
   }
 
   return (
-    <SettingsSection
-      title={scope === "providers" ? "로컬 모델 확장" : "내장 도구 모듈 (Built-in Tools)"}
-    >
+    <SettingsSection title="내장 도구 모듈 (Built-in Tools)">
       <View style={settingsStyles.card}>
         {scope === "tools" && (
           <SettingRow title="웹 검색 도구" hint="실시간 웹 검색 및 문서 조회 허용">
@@ -1465,9 +1459,9 @@ function WorkflowSection({
         )}
 
         {/* 2. 역할별 기본 에이전트 */}
-        {(section === "agents" || section === "tools") && (
+        {(section === "workflow" || section === "tools") && (
           <SettingsSection title={section === "tools" ? "웹 검색 모델" : "기본 에이전트"}>
-            {section === "agents" && (
+            {section === "workflow" && (
               <Text style={settingsStyles.rowHint}>
                 기본값은 모두 off이며 역할마다 모델을 따로 선택해 켤 수 있어요. 필요한 조건에서만
                 호출하며, 탐색·실패 분석·인계·검토는 메인이 필요할 때 위임해요.
@@ -1506,7 +1500,7 @@ function WorkflowSection({
                   </View>
                 </Pressable>
               )}
-              {section === "agents" &&
+              {section === "workflow" &&
                 basicAgents.map((agent) => (
                   <AgentListRow
                     key={agent.id}
@@ -1997,7 +1991,7 @@ function WorkflowSection({
       {renderPreferences()}
       {section === "workflow" && renderWorkflowModal()}
       {section === "tools" && renderWebSearchModal()}
-      {section === "agents" && renderAgentModal()}
+      {(section === "workflow" || section === "agents") && renderAgentModal()}
     </>
   );
 }
@@ -2242,7 +2236,6 @@ function SectionBody({
         </>
       );
     case "memory":
-    case "providers":
       return <ToolsSection {...props} scope={section} />;
     case "skills":
       return <SkillsSection {...props} />;

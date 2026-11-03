@@ -51,6 +51,12 @@ const snapshot = {
     orchestration: 'none', instructionFiles: 'all', workflows: [],
     agents: [
         { id: 'context-explorer', label: 'Context Explorer', description: 'Explore', route },
+        { id: 'title-generator', label: 'Title Generator', description: 'Titles', route, disabled: true },
+        { id: 'context-compressor', label: 'Context Compressor', description: 'Compact', route },
+        { id: 'maintainer', label: 'Maintainer', description: 'Memory', route },
+        { id: 'failure-analyst', label: 'Failure Analyst', description: 'Failures', route },
+        { id: 'handoff-summarizer', label: 'Handoff Summarizer', description: 'Handoff', route },
+        { id: 'reviewer', label: 'Reviewer', description: 'Review', route },
         { id: 'worker', label: 'Worker', description: 'Work', route },
     ],
     compaction: { auto: true }, sessions: [], outputStyles: [{ id: 'minimal', label: 'Minimal' }],
@@ -112,8 +118,11 @@ test('all supported host pages have unique menu entries, including restored and 
     });
     assert.deepEqual(Array.from(webItems, item => item.id), Array.from(nativeItems, item => item.id));
     assert.equal(new Set(nativeItems.map(item => item.id)).size, nativeItems.length);
-    const expected = ['agents', 'metadata', 'providers', 'plugins', 'engine-response', 'engine-execution', 'engine-memory'];
+    const expected = ['agents', 'metadata', 'engine-response', 'engine-execution', 'engine-memory'];
     for (const id of expected) assert.ok(nativeItems.some(item => item.id === id), id);
+    for (const id of ['providers', 'plugins']) {
+        assert.ok(!nativeItems.some(item => item.id === id), id);
+    }
     assert.ok(!nativeItems.some(item => item.id === 'engine-speech'));
     const routes = read('android/packages/app/src/utils/host-routes.ts');
     const hostSlugs = runInNewContext(routes.match(/export const HOST_SECTION_SLUGS = (\[[\s\S]*?\]) as const;/)[1]);
@@ -153,13 +162,22 @@ test('app and web routes retain every host-specific control at its new destinati
         'engine-execution': ['AiEnginePage:execution'],
         'engine-memory': ['AiEnginePage:memory'],
         metadata: ['AiEnginePage:generation', 'MetadataGenerationPage'],
-        providers: ['AiEnginePage:providers', 'HostProvidersPage'],
-        plugins: ['HostPluginsPage'],
+        providers: [],
+        plugins: [],
     };
     for (const render of [native, web]) {
         for (const [section, types] of Object.entries(expected)) {
             assert.deepEqual(leaves(render({ kind: 'host', serverId: 'selected-host', section }, () => {})), types);
         }
+    }
+});
+
+test('web legacy provider and plugin links resolve to fixed settings without management routes', () => {
+    const routes = webModule(3905, { 52: { Buffer }, 3906: {} });
+    for (const [legacy, current] of [['providers', 'engine-accounts'], ['plugins', 'host']]) {
+        assert.equal(routes.isHostSectionSlug(legacy), false);
+        assert.equal(routes.normalizeHostSectionSlug(legacy), current);
+        assert.equal(routes.buildSettingsHostSectionRoute('host-one', legacy), `/settings/hosts/host-one/${current}`);
     }
 });
 
@@ -169,13 +187,12 @@ for (const platform of ['app', 'web']) {
         const calls = [];
         const Page = enginePage(platform, async command => { calls.push(command); return true; });
         const sections = {
-            workflow: ['작업 규칙', '자동 오케스트레이터 (Orchestration)'],
-            agents: ['기본 에이전트', '하위 에이전트'],
+            workflow: ['작업 규칙', '기본 에이전트', '자동 오케스트레이터 (Orchestration)'],
+            agents: ['하위 에이전트'],
             response: ['출력 스타일 및 사용자 프로필'],
             execution: ['실행 쉘'],
             generation: ['세션 제목'],
             memory: ['메모리'],
-            providers: ['로컬 모델 확장'],
             tools: ['내장 도구 모듈 (Built-in Tools)', '웹 검색 모델'],
             tokens: ['Mixdog 토큰 절감 기술', '유휴 세션 자동 비우기 (Auto-Clear)', '열린 세션 컨텍스트 사용량'],
         };
@@ -191,7 +208,7 @@ for (const platform of ['app', 'web']) {
             const labels = tree.root.findAllByType('switch').map(node => node.props.accessibilityLabel);
             assert.equal(labels.includes('장기 메모리 도구'), section === 'memory');
             assert.equal(labels.includes('백그라운드 메모리'), section === 'memory');
-            assert.equal(labels.includes('로컬 모델 공급자'), section === 'providers');
+            assert.equal(labels.includes('로컬 모델 공급자'), false);
             assert.equal(labels.includes('웹 검색 도구'), section === 'tools');
             assert.equal(labels.includes('컴퓨터 사용'), section === 'tools');
             assert.equal(labels.includes('AI 세션 제목 자동 생성'), section === 'generation');
@@ -204,5 +221,31 @@ for (const platform of ['app', 'web']) {
         assert.deepEqual(calls.map(command => ({ ...command })), [
             { action: 'features', memoryTools: false }, { action: 'features', recap: false },
         ]);
+    });
+
+    test(`${platform}: workflow restores basic roles and their existing editor without duplicating subagents`, async t => {
+        globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+        const calls = [];
+        const Page = enginePage(platform, async command => { calls.push(command); return true; });
+        let tree;
+        await act(async () => { tree = create(React.createElement(Page, { serverId: 'roles-host', section: 'workflow' })); });
+        t.after(async () => {
+            await act(async () => tree.unmount());
+            delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+        });
+        const roles = ['Context Explorer', 'Title Generator', 'Context Compressor', 'Maintainer',
+            'Failure Analyst', 'Handoff Summarizer', 'Reviewer'];
+        assert.deepEqual(tree.root.findAllByType('pressable')
+            .map(node => node.props.accessibilityLabel).filter(label => label?.startsWith('에이전트 ')),
+        roles.map(label => `에이전트 ${label}`));
+        await act(async () => tree.root.findByProps({ accessibilityLabel: '에이전트 Title Generator' }).props.onPress());
+        assert.ok(tree.root.findByType('dialog'));
+        assert.deepEqual(calls.map(command => ({ ...command })), [
+            { action: 'agentDefinition', agent: 'title-generator' },
+        ]);
+        await act(async () => tree.update(React.createElement(Page, { key: 'agents', serverId: 'roles-host', section: 'agents' })));
+        assert.deepEqual(tree.root.findAllByType('pressable')
+            .map(node => node.props.accessibilityLabel).filter(label => label?.startsWith('에이전트 ')),
+        ['에이전트 Worker']);
     });
 }

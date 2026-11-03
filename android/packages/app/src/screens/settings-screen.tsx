@@ -103,7 +103,6 @@ import {
   HostPairDevicePage,
   HostAgentsPage,
   HostSettingsPage,
-  HostProvidersPage,
   HostUsagePage,
   HostWorkspacesPage,
   HostTerminalsPage,
@@ -113,7 +112,6 @@ import {
 } from "@/screens/settings/host-page";
 import { PluginSettingsContent } from "@/plugins/settings";
 import { useInstalledPlugins } from "@/plugins/registry";
-import { HostPluginsPage } from "@/screens/settings/plugins-page";
 import { MetadataGenerationPage } from "@/screens/settings/metadata-generation-page";
 import { AiEnginePage, type EngineSection } from "@/screens/settings/ai-engine-page";
 import ProjectsScreen from "@/screens/projects-screen";
@@ -228,7 +226,6 @@ interface HostSectionItem {
 
 const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "engine-accounts", labelKey: "settings.hostSections.engineAccounts", icon: KeyRound },
-  { id: "providers", labelKey: "settings.hostSections.providers", icon: Bot },
   { id: "agents", labelKey: "settings.hostSections.agents", icon: Bot },
   { id: "engine-workflow", labelKey: "settings.hostSections.engineWorkflow", icon: Workflow },
   { id: "engine-response", labelKey: "settings.hostSections.engineResponse", icon: MessageSquare },
@@ -247,7 +244,6 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "engine-tools", labelKey: "settings.hostSections.engineTools", icon: Puzzle },
   { id: "engine-skills", labelKey: "settings.hostSections.engineSkills", icon: Bot },
   { id: "metadata", labelKey: "settings.hostSections.metadata", icon: Sparkles },
-  { id: "plugins", labelKey: "settings.hostSections.plugins", icon: Puzzle },
   { id: "host", labelKey: "settings.hostSections.host", icon: Server },
   { id: "projects", labelKey: "settings.hostSections.projects", icon: FolderGit2 },
   { id: "workspaces", labelKey: "settings.hostSections.workspaces", icon: FolderGit2 },
@@ -349,23 +345,10 @@ function renderHostSettingsContent(
       );
     case "workspaces":
       return <HostWorkspacesPage serverId={view.serverId} />;
-    case "providers":
-      return (
-        <>
-          <AiEnginePage
-            key={`${view.serverId}:providers`}
-            serverId={view.serverId}
-            section="providers"
-          />
-          <HostProvidersPage serverId={view.serverId} />
-        </>
-      );
     case "usage":
       return <HostUsagePage serverId={view.serverId} />;
     case "terminals":
       return <HostTerminalsPage serverId={view.serverId} />;
-    case "plugins":
-      return <HostPluginsPage serverId={view.serverId} />;
     case "host":
       return <HostSettingsPage serverId={view.serverId} onHostRemoved={onHostRemoved} />;
   }
@@ -1006,7 +989,7 @@ function SettingsSidebar({
   let selectedHostSection: HostSectionSlug | null = null;
   if (view.kind === "host") selectedHostSection = view.section;
   if (view.kind === "project") selectedHostSection = "projects";
-  if (view.kind === "plugin") selectedHostSection = "plugins";
+  if (view.kind === "plugin") selectedHostSection = "host";
 
   const sidebarBody = (
     <>

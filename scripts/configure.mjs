@@ -45,8 +45,8 @@ export function configure({home=paseoHome, enginePath=worker, nativeHome=mixdogH
     if(existsSync(file)&&lstatSync(file).isSymbolicLink())throw new Error('Refusing symlink config');
     const previous=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):{version:1};
     const providers={...(previous.agents?.providers||{})};
-    for(const [id, entry] of Object.entries(providers)) {
-        if(id!=='paseodog' && entry && typeof entry==='object' && entry.extends) delete providers[id];
+    for(const id of Object.keys(providers)) {
+        if(id!=='paseodog' && !DISABLED_BUILTIN_PROVIDERS.includes(id)) delete providers[id];
     }
     for(const id of DISABLED_BUILTIN_PROVIDERS) {
         providers[id]={...(providers[id]||{}),enabled:false};
