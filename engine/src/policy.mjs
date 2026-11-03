@@ -1,6 +1,7 @@
 // Tool-policy guard, not an OS sandbox. Shell approval authorizes its whole command.
 import { createHash } from 'node:crypto';
 import { SOLO_BASIC_ROLE_IDS } from '../../patches/builtin-agents.mjs';
+import { readComputerUse } from '../../plugin/server/computer-use.mjs';
 const READ_TOOLS = new Set(['read', 'head', 'tail', 'grep', 'glob', 'list', 'tree', 'find', 'find_files', 'diff', 'code_graph']);
 const MARKER = Symbol('paseodog-policy');
 const PROMPT_TAG = 'paseodog_host_prompt_v1';
@@ -20,7 +21,8 @@ export function mapMcpServers(servers = {}) {
     }
     return out;
 }
-export function attachHostPolicy(session, { mode = 'ask', systemPrompt = '', onIdentity, orchestration = false }) {
+export function attachHostPolicy(session, { mode = 'ask', systemPrompt = '', onIdentity, orchestration = false,
+    computerUseEnabled = () => readComputerUse(process.env) }) {
     if (!session?.id || !Array.isArray(session.messages)) throw new Error('Mixdog session contract mismatch');
     if (!['ask', 'review', 'bypass'].includes(mode)) throw new Error('Invalid host mode');
     // Explicit app-level instructions stay stable. Never silently change an established prefix.
@@ -41,6 +43,8 @@ export function attachHostPolicy(session, { mode = 'ask', systemPrompt = '', onI
         const rewritten = ['ask', 'modify', 'rewrite'].includes(action);
         const name = rewritten && decision?.name ? decision.name : input.name;
         const args = rewritten && decision?.args ? decision.args : input.args;
+        if (String(name).toLowerCase() === 'computer' && !computerUseEnabled())
+            return { action: 'deny', reason: 'Computer Use is off in PaseoDog settings' };
         const agentTool = ['agent', 'task'].includes(String(name).toLowerCase());
         // 단독 모드도 기본 역할 spawn은 협업 모드의 위임과 같은 정책으로 처리한다.
         const managed = agentTool && (orchestration || (args?.type === 'spawn' && SOLO_BASIC_ROLE_IDS.includes(args?.agent)));

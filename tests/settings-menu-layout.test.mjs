@@ -63,7 +63,9 @@ function enginePage(platform, request) {
     const client = {
         invokePluginRpc: async (_plugin, method) => method === 'agent-message-policy'
             ? { allowUnrelatedSessions: false }
-            : { maxTurnMinutes: 120 },
+            : { maxTurnMinutes: 120, computerUse: {
+                enabled: false, bridge: 'missing', display: false, mixdogVersion: '0.0.0',
+            } },
     };
     const runtime = {
         useHostRuntimeClient: () => client,
@@ -74,6 +76,9 @@ function enginePage(platform, request) {
             React, ...React, ...elements, isBasicAgent, settingsStyles: {},
             useAiEngineSettings: () => settings,
             AgentMessageSettings: 'messages', TurnDurationSettings: 'duration',
+            ComputerUseSettings: ({ serverId }) => React.createElement('switch', {
+                accessibilityLabel: '컴퓨터 사용', serverId,
+            }),
         });
     }
     return webModule(5346, {
@@ -84,6 +89,7 @@ function enginePage(platform, request) {
         3220: elements, 3950: { settingsStyles: {} }, 4684: {},
         4683: { useAiEngineSettings: () => settings }, 5347: elements,
         279: { jsx, jsxs: jsx, Fragment: React.Fragment }, 3762: runtime, 4659: elements,
+        3916: { openExternalUrl() { assert.fail('setup links must open only on an explicit click'); } },
     }).AiEnginePage;
 }
 
@@ -187,6 +193,7 @@ for (const platform of ['app', 'web']) {
             assert.equal(labels.includes('백그라운드 메모리'), section === 'memory');
             assert.equal(labels.includes('로컬 모델 공급자'), section === 'providers');
             assert.equal(labels.includes('웹 검색 도구'), section === 'tools');
+            assert.equal(labels.includes('컴퓨터 사용'), section === 'tools');
             assert.equal(labels.includes('AI 세션 제목 자동 생성'), section === 'generation');
             assert.equal(tree.root.findAllByType('segments').length, 0);
             if (section === 'memory') {

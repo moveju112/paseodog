@@ -36,6 +36,7 @@ const server=serveWorker({input:process.stdin,output:process.stdout,onExit:()=>p
             callbacks.onIdentity?.({id:'sess_child',state:{model:'fixture'}});
             if(text==='question'){const answer=await callbacks.onToolApproval({name:'ask_user',kind:'question',args:{questions:[{question:'Pick?',header:'Pick',options:[{label:'A',description:'a'},{label:'B',description:'b'}]}]}});return {result:{content:JSON.stringify(answer)}};}
             if(text==='permission'){const answer=await callbacks.onToolApproval({name:'shell',args:{command:'pwd'}});return {result:{content:answer.approved?'allowed':'denied'}};}
+            if(text==='computer-permission'){const answer=await callbacks.onToolApproval({name:'computer',args:{action:'capture'}});return {result:{content:answer.approved?'allowed':'denied'}};}
             callbacks.onTextDelta?.(steering.length ? `${text}+${steering.join('+')}` : 'child ');
             if (!steering.length) callbacks.onTextDelta?.('result');
             callbacks.onTextReset?.({chars:1});

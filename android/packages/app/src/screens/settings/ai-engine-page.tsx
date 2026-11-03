@@ -18,6 +18,7 @@ import { useAiEngineSettings } from "./use-ai-engine-settings";
 import { EngineAccounts } from "./engine-accounts";
 import { AgentMessageSettings } from "./agent-message-settings";
 import { TurnDurationSettings } from "./turn-duration-settings";
+import { ComputerUseSettings } from "./computer-use-settings";
 import { isBasicAgent } from "./basic-agent-roles";
 
 // 호스트 설정 목록의 개별 항목과 1:1로 대응하는 엔진 설정 구역
@@ -2255,13 +2256,7 @@ export function AiEnginePage({ serverId, section }: { serverId: string; section:
   );
 }
 
-function EngineSettingsPage({
-  serverId,
-  section,
-}: {
-  serverId: string;
-  section: EngineSection;
-}) {
+function EngineSettingsPage({ serverId, section }: { serverId: string; section: EngineSection }) {
   const { snapshot, busy, connected, message, error, request } = useAiEngineSettings(serverId);
   const disabled = !connected;
   const refresh = useCallback(() => {
@@ -2307,6 +2302,9 @@ function EngineSettingsPage({
           busy={busy}
           request={request}
         />
+      )}
+      {section === "tools" && (
+        <ComputerUseSettings key={`computer:${serverId}`} serverId={serverId} />
       )}
       {section === "execution" && (
         <TurnDurationSettings key={`duration:${serverId}`} serverId={serverId} />
