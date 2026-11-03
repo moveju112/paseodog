@@ -403,7 +403,7 @@ test('control daemon stdin failures reject uncertain writes without retrying mut
         const snapshot = await next;
         assert.equal(snapshot.saved, true);
         assert.equal(snapshot.maxTurnMinutes, 120);
-        assert.equal(snapshot.computerUse.enabled, false);
+        assert.equal(Object.hasOwn(snapshot, 'computerUse'), false);
         assert.equal(fallbacks, 0);
     } finally {
         await controls.close();

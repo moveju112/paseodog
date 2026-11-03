@@ -92,20 +92,20 @@ describe("Paseo tool-call detail presentation", () => {
   it("unwraps MCP result envelopes instead of exposing JSON-encoded text", () => {
     expect(
       buildPaseoToolDetailSections(
-        "mcp__paseo__send_agent_prompt",
-        { prompt: "Say hello back." },
+        "mcp__paseo__create_agent",
+        { initialPrompt: "Start a task." },
         {
           meta: null,
           content: [
             {
               type: "text",
-              text: '{"success":true,"status":"idle","lastMessage":"Hello back."}',
+              text: '{"success":true,"agentId":"agt_123","status":"idle"}',
             },
           ],
           structuredContent: {
             success: true,
+            agentId: "agt_123",
             status: "idle",
-            lastMessage: "Hello back.",
           },
         },
       )?.at(-1),
@@ -113,8 +113,8 @@ describe("Paseo tool-call detail presentation", () => {
       kind: "fields",
       title: "Result",
       fields: [
+        { label: "Agent", value: "agt_123" },
         { label: "Status", value: "idle" },
-        { label: "Last message", value: "Hello back." },
       ],
     });
   });

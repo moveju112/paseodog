@@ -1,7 +1,4 @@
 import { stat } from "node:fs/promises";
-import * as messagePolicyFs from "node:fs/promises";
-import { join as messagePolicyJoin, isAbsolute as messagePolicyIsAbsolute } from "node:path";
-import { createAgentMessagePolicy } from "../agent-message-policy.js";
 import { z } from "zod";
 import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
@@ -64,11 +61,6 @@ import {
   toScheduleSummary,
   waitForAgentWithTimeout,
 } from "../mcp-shared.js";
-import {
-  sendPromptToAgent,
-  setupFinishNotification,
-  waitForAgentRunStartWithTimeout,
-} from "../agent-prompt.js";
 import { respondToAgentPermission } from "../permission-response.js";
 import {
   archiveAgentCommand,
@@ -578,12 +570,6 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     logger,
   } = options;
   const childLogger = logger.child({ module: "agent", component: "paseo-tool-catalog" });
-  const messagePolicy = createAgentMessagePolicy({
-    fs: messagePolicyFs,
-    join: messagePolicyJoin,
-    isAbsolute: messagePolicyIsAbsolute,
-    home: options.paseoHome ?? process.env.PASEO_HOME,
-  });
   const callerContext = callerAgentId ? (resolveCallerContext?.(callerAgentId) ?? null) : null;
 
   const parseToolInput = async (tool: PaseoToolDefinition, input: unknown): Promise<unknown> => {
@@ -1131,48 +1117,6 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   const legacyTopLevelCreateAgentArgsSchema = z
     .object(legacyTopLevelCreateAgentInputSchema)
     .strict();
-  const commonSendAgentPromptInputSchema = {
-    agentId: z.string(),
-    prompt: z.string(),
-    sessionMode: z.string().optional().describe("Optional mode to set before running the prompt."),
-  };
-  const agentToAgentSendAgentPromptInputSchema = {
-    ...commonSendAgentPromptInputSchema,
-    background: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe(
-        "Run agent in background. Agent-scoped default is true so you can continue until the finish notification arrives. Set false only when you need a blocking response.",
-      ),
-    notifyOnFinish: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe(
-        "Get notified when the prompted agent finishes, errors, or needs permission. Set false only for truly fire-and-forget prompts.",
-      ),
-  };
-  const topLevelSendAgentPromptInputSchema = {
-    ...commonSendAgentPromptInputSchema,
-    background: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe(
-        "Run agent in background. If false (default), waits for completion or permission request. If true, returns immediately.",
-      ),
-    notifyOnFinish: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe(
-        "Agent-scoped only: get notified when the prompted agent finishes, errors, or needs permission.",
-      ),
-  };
-  const sendAgentPromptInputSchema = callerAgentId
-    ? agentToAgentSendAgentPromptInputSchema
-    : topLevelSendAgentPromptInputSchema;
   const inspectProviderInputSchema = {
     provider: ProviderOrProviderModelInputSchema.describe(
       "Provider ID, optionally with a model ID (for example codex or codex/gpt-5.4).",
@@ -1898,108 +1842,6 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     }
   }
 
-  const PROMPTED_AGENT_NOTIFICATION_GUIDANCE =
-    "You will get notified when the prompted agent finishes, errors, or needs permission. Do not poll for status; continue with other work until the notification arrives.";
-
-  registerTool(
-    "send_agent_prompt",
-    {
-      title: "Send agent prompt",
-      description:
-        "Send a task to a running agent. Agent-scoped callers run in background by default; top-level callers wait by default.",
-      inputSchema: sendAgentPromptInputSchema,
-      outputSchema: {
-        success: z.boolean(),
-        status: AgentStatusEnum,
-        lastMessage: z.string().nullable().optional(),
-        permission: AgentPermissionRequestPayloadSchema.nullable().optional(),
-        guidance: z.string().optional(),
-      },
-    },
-    async ({
-      agentId,
-      prompt,
-      sessionMode,
-      background = Boolean(callerAgentId),
-      notifyOnFinish = Boolean(callerAgentId),
-    }) => {
-      function armFinishNotification(): boolean {
-        if (!callerAgentId || !notifyOnFinish) {
-          return false;
-        }
-        setupFinishNotification({
-          agentManager,
-          agentStorage,
-          childAgentId: agentId,
-          callerAgentId,
-          logger: childLogger,
-        });
-        return true;
-      }
-
-      await messagePolicy.authorize(callerAgentId, agentId, agentManager, agentStorage);
-      const { disposition } = await sendPromptToAgent({
-        agentManager,
-        agentStorage,
-        agentId,
-        prompt,
-        sessionMode,
-        logger: childLogger,
-      });
-
-      // If not running in background, wait for completion
-      if (!background) {
-        const result = await waitForAgentWithTimeout(agentManager, agentId, {
-          waitForActive: true,
-        });
-        // The wait ran out while the agent keeps working, so its result arrives as a
-        // finish notification instead of in this response.
-        const notifying =
-          result.timedOut &&
-          agentManager.getAgent(agentId)?.lifecycle === "running" &&
-          armFinishNotification();
-
-        const responseData = {
-          success: true,
-          status: result.status,
-          lastMessage: result.lastMessage,
-          permission: sanitizePermissionRequest(result.permission),
-          ...(notifying ? { guidance: PROMPTED_AGENT_NOTIFICATION_GUIDANCE } : {}),
-        };
-        const validJson = ensureValidJson(responseData);
-
-        const response = {
-          content: [],
-          structuredContent: validJson,
-        };
-        return response;
-      }
-
-      const notifying = armFinishNotification();
-
-      // Return once the provider has accepted the turn, so the status reports it running.
-      if (disposition === "turn_started") {
-        await waitForAgentRunStartWithTimeout(agentManager, agentId);
-      }
-      const currentSnapshot = agentManager.getAgent(agentId);
-
-      const responseData = {
-        success: true,
-        status: currentSnapshot?.lifecycle ?? "idle",
-        lastMessage: null,
-        permission: null,
-        ...(notifying ? { guidance: PROMPTED_AGENT_NOTIFICATION_GUIDANCE } : {}),
-      };
-      const validJson = ensureValidJson(responseData);
-
-      const response = {
-        content: [],
-        structuredContent: validJson,
-      };
-      return response;
-    },
-  );
-
   registerTool(
     "get_agent_status",
     {
@@ -2201,7 +2043,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       },
     },
     async ({ agentId, name, labels, settings }) => {
-      messagePolicy.assertLabelUpdate(callerAgentId, labels);
+      if (callerAgentId && labels && Object.hasOwn(labels, "paseo.parent-agent-id")) {
+        throw new Error("Agent parent relationship is assigned by the server at creation");
+      }
       if (settings?.modeId !== undefined) {
         await agentManager.setAgentMode(agentId, settings.modeId);
       }

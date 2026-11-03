@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { root } from './paths.mjs';
 import { runCommand } from './release-command.mjs';
-import { AGENT_MESSAGE_PATCHES, patchedAgentMessageSource } from './patch-paseo-agent-messages.mjs';
+import { PASEO_ISOLATION_PATCHES, patchedSessionIsolationSource } from './patch-paseo-session-isolation.mjs';
 import { patchMetroImageSize } from '../android/scripts/patch-metro-image-size.mjs';
 import { releaseEnvironment } from './release-environment.mjs';
 
@@ -58,9 +58,9 @@ export async function releasePreflight(config, run = runCommand, sourceRoot = ro
             { code: 'android-sdk-missing' });
     }
     const server = join(sourceRoot, 'tools/node_modules/@getpaseo/server');
-    for (const spec of AGENT_MESSAGE_PATCHES)
-        patchedAgentMessageSource(await readFile(join(server, spec.file), 'utf8'), spec);
+    for (const spec of PASEO_ISOLATION_PATCHES)
+        patchedSessionIsolationSource(await readFile(join(server, spec.file), 'utf8'), spec);
     patchMetroImageSize(join(sourceRoot, 'android/node_modules/metro'), { check: true });
     await run(join(config.androidTools, 'apksigner'), ['verify', config.previousApk], { capture: true });
-    console.log('Release preflight: signing inputs, installed locks, agent-message and Metro hash gates passed');
+    console.log('Release preflight: signing inputs, installed locks, MCP isolation and Metro hash gates passed');
 }

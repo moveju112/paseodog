@@ -7,7 +7,6 @@ import { patch } from '../../scripts/patch-mixdog.mjs';
 import { createOrchestrationBridge } from './orchestration.mjs';
 import { normalizeOrchestrationMode } from './orchestration-mode.mjs';
 import { createAuthSession } from './auth-session.mjs';
-import { agentMessageSource, agentMessageContent, pendingAgentMessage } from '../../plugin/server/agent-message.mjs';
 import { nativeSessionAction } from './session-actions.mjs';
 import { migrateCompactionBuffer } from './compaction-buffer.mjs';
 import { compactBeforeModelSwitch } from './model-switch.mjs';
@@ -40,8 +39,10 @@ export async function loadNativeModules() {
                 && Boolean(effortConfiguration.turnEffortConfigurationMode(session, registry.getProvider(session.provider)));
         },
         // 네이티브의 영속 지시 큐를 사용하며 같은 ask 안에서 A와 B를 함께 처리한다.
-        async steerSession(sessionId, content, source) {
-            const depth = pending.enqueuePendingMessage(sessionId, pendingAgentMessage(content, source));
+        async steerSession(sessionId, content) {
+            const depth = pending.enqueuePendingMessage(sessionId, {
+                content, mode: 'prompt', options: { paseodogSteering: true },
+            });
             if (!depth) throw new Error('Native steering was not accepted');
             await pending.settlePendingMessageWrites({ throwOnTimeout: true });
             return { accepted: true };
@@ -175,8 +176,7 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
         get id() { return runtime.id || ''; },
         configuration,
         // 턴 시작 전 최신 프로필 설정(오케스트레이션·워크플로우·압축·자동정리)을 열린 세션에 반영한다.
-        async ask(text, callbacks, provenance, quotaRetry = false) {
-            const source = agentMessageSource(provenance);
+        async ask(text, callbacks, quotaRetry = false) {
             if (closed) throw new Error('Native engine closed');
             if (steeringOwner) throw new Error('Native engine busy');
             if (runtime.session?.remoteAttached === true) throw new Error('Refusing to forward work to an unmanaged native writer');
@@ -239,8 +239,6 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
                 transcriptMeta: {},
                 hostManagedCompletions: true,
                 hostSteering: true,
-                ...(source ? { promptSource: 'task-notification',
-                    transcriptMeta: { sender: 'agent', agentId: source.agentId } } : {}),
                 beforeSessionAsk(session) {
                     owner.sessionId = session.id;
                     // 호스트 기본 경로는 쓰지 않고 실제 추론 직전 이 세션의 선호값만 적용한다.
@@ -258,9 +256,9 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
                 },
             };
             try {
-                const result = await runtime.ask(source ? agentMessageContent(text, source) : text, options);
+                const result = await runtime.ask(text, options);
                 return await orchestration.drainLead(
-                    () => runtime.ask('', { ...options, promptSource: undefined, transcriptMeta: undefined, continueTurn: true }), result);
+                    () => runtime.ask('', { ...options, continueTurn: true }), result);
             } catch (error) {
                 quotaFailure = turnFailureRecord(error, {
                     provider: runtime.session?.provider ?? runtime.provider,
@@ -272,9 +270,9 @@ export async function createNativeEngine(args, { modules, emit = () => {} } = {}
             } finally { if (steeringOwner === owner) steeringOwner = null; orchestration.finish(); }
         },
         // 활성 턴을 취소하거나 새 세션을 만들지 않고 추가 지시를 전달한다.
-        async steer(content, provenance) {
+        async steer(content) {
             if (closed || !steeringOwner?.sessionId) throw new Error('No active native turn for steering');
-            return await native.steerSession(steeringOwner.sessionId, content, agentMessageSource(provenance));
+            return await native.steerSession(steeringOwner.sessionId, content);
         },
         // 도구 노출 모드와 호스트 정책을 함께 갱신하고 하위 세션에도 같은 설정을 전달한다.
         // 응답 중에는 노력도·Fast만 받아 다음 턴부터 적용하고 모델·모드·컨텍스트 변경은 거절한다.

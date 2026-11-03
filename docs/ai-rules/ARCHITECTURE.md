@@ -42,5 +42,5 @@ PaseoDog = Paseo (daemon, desktop/mobile/web/SSH clients) + Mixdog (inference, n
 ## Ownership boundaries
 
 - Paseo: clients, daemon. Mixdog: inference, model history. Adapter (`plugin/`, `engine/`): lifecycle, approval, journal, wire mapping.
-- `engine/src` imports `plugin/server/{json-lines,util,agent-message}.mjs` directly. `evidence: engine/src/controls.mjs:5`
+- `engine/src` imports `plugin/server/{json-lines,util}.mjs` directly. `evidence: engine/src/controls.mjs:5`
 - A daemon keeps the plugin code and `release.json` it loaded; only new engine children read current disk code.

@@ -16,9 +16,7 @@ import {
 } from "./ai-engine-contract";
 import { useAiEngineSettings } from "./use-ai-engine-settings";
 import { EngineAccounts } from "./engine-accounts";
-import { AgentMessageSettings } from "./agent-message-settings";
 import { TurnDurationSettings } from "./turn-duration-settings";
-import { ComputerUseSettings } from "./computer-use-settings";
 import { isBasicAgent } from "./basic-agent-roles";
 
 // 호스트 설정 목록의 개별 항목과 1:1로 대응하는 엔진 설정 구역
@@ -2002,34 +2000,6 @@ function WorkflowSection({
   );
 }
 
-// 열린 세션별 컨텍스트 사용 토큰 표시 (값 없음 -> 확인 대기)
-function formatUsedTokens(usedTokens: number | undefined) {
-  return usedTokens === undefined ? "확인 대기" : `${Math.round(usedTokens).toLocaleString()} 토큰`;
-}
-
-// 열린 엔진 세션의 컨텍스트 사용량 목록
-function SessionUsage({ sessions }: { sessions: EngineSnapshot["sessions"] }) {
-  return (
-    <SettingsSection title="열린 세션 컨텍스트 사용량">
-      <View style={settingsStyles.card}>
-        {sessions.length === 0 ? (
-          <View style={settingsStyles.row}>
-            <Text style={settingsStyles.rowHint}>현재 메모리에 열린 엔진 세션이 없어요.</Text>
-          </View>
-        ) : (
-          sessions.map((session) => (
-            <SettingRow key={session.id} title={session.model || "열린 세션"} hint={session.id}>
-              <Text style={settingsStyles.rowTitle}>
-                {formatUsedTokens(session.context?.usedTokens)}
-              </Text>
-            </SettingRow>
-          ))
-        )}
-      </View>
-    </SettingsSection>
-  );
-}
-
 // 토큰 절감 설정 (자동 압축·유휴 세션 비우기·세션 리캡) 즉시 저장
 function TokensSection({ snapshot, disabled, request }: SectionProps) {
   const hasMainModel = Boolean(snapshot.route.model?.trim());
@@ -2212,8 +2182,6 @@ function TokensSection({ snapshot, disabled, request }: SectionProps) {
           )}
         </View>
       </SettingsSection>
-
-      <SessionUsage sessions={snapshot.sessions} />
     </>
   );
 }
@@ -2303,13 +2271,9 @@ function EngineSettingsPage({ serverId, section }: { serverId: string; section: 
           request={request}
         />
       )}
-      {section === "tools" && (
-        <ComputerUseSettings key={`computer:${serverId}`} serverId={serverId} />
-      )}
       {section === "execution" && (
         <TurnDurationSettings key={`duration:${serverId}`} serverId={serverId} />
       )}
-      {section === "workflow" && <AgentMessageSettings key={serverId} serverId={serverId} />}
     </View>
   );
 }

@@ -2,7 +2,6 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitBlob } from './patch-mixdog.mjs';
-import { agentMessageTransportEdits } from '../patches/paseo-agent-messages.mjs';
 import { ADAPTER_PHASE_EDITS, withAssistantPhase, withoutAssistantPhase } from '../patches/paseo-assistant-phase.mjs';
 import { REVERT_HISTORY_EDIT } from '../patches/paseo-revert-history.mjs';
 
@@ -12,9 +11,12 @@ export function patchedSteerSource(source) {
     const phaseBase = withoutAssistantPhase(source, ADAPTER_PHASE_EDITS);
     const hadPhase = phaseBase !== source;
     source = phaseBase;
-    let transportOriginal = source;
-    for (const [before, after] of [...agentMessageTransportEdits].reverse())
-        transportOriginal = transportOriginal.replace(after, before);
+    // 구버전이 넣은 세션 송신자 확장만 해제한 뒤 원본 blob을 검증한다.
+    const transportOriginal = source
+        .replace('            input: options.paseodogSource ? { type: "message", content: mapPromptContent(prompt) } : mapPromptInput(prompt, this.bridge.commands),\n            ...(options.paseodogSource ? { source: options.paseodogSource } : {}),',
+            '            input: mapPromptInput(prompt, this.bridge.commands),')
+        .replace('            input: { type: "message", content: mapPromptContent(prompt) },\n            ...(options.paseodogSource ? { source: options.paseodogSource } : {}),',
+            '            input: { type: "message", content: mapPromptContent(prompt) },');
     const before = '    async steerActiveTurn(prompt, options) {\n';
     const previous = before + '        if (!this.bridge.negotiatedCapabilities.includes("prompt.steer")) return { status: "unavailable" };\n';
     const after = before + '        if (!this.bridge.negotiatedCapabilities.includes("prompt.steer")) {\n            if (this.provider === "paseodog") throw new Error("PaseoDog cannot steer an active turn. Queue this message instead; the active turn was not interrupted.");\n            return { status: "unavailable" };\n        }\n';
@@ -26,13 +28,7 @@ export function patchedSteerSource(source) {
     if (gitBlob(original) !== '8516d2ea7d46b1af26b669ab2e80f2befd28f77c')
         throw new Error('Paseo steering source hash mismatch');
     if (original.split(revertBefore).length !== 2) throw new Error('Paseo revert history anchor mismatch');
-    let result = original.replace(before, after).replace(failureBefore, failureAfter).replace(revertBefore, revertAfter);
-    if (transportOriginal !== source) {
-        for (const [before, after] of agentMessageTransportEdits) result = result.replace(before, after);
-        // 되돌리기 기록 절단이 없는 이전 설치본도 같은 전송 패치로 인정해 갱신한다.
-        if (result.replace(revertAfter, revertBefore) !== source.replace(revertAfter, revertBefore))
-            throw new Error('Partial Paseo agent-message transport patch');
-    }
+    const result = original.replace(before, after).replace(failureBefore, failureAfter).replace(revertBefore, revertAfter);
     return hadPhase ? withAssistantPhase(result, ADAPTER_PHASE_EDITS) : result;
 }
 

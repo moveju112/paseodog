@@ -34,7 +34,7 @@ jobs:
         run: node --test --test-name-pattern="control daemon stdin failures" tests/engine-controls.test.mjs
       - name: Apply and verify pinned runtime patches
         run: |
-          for patch in mixdog paseo-usage paseo-steer paseo-agent-messages paseo-assistant-phase \
+          for patch in mixdog paseo-usage paseo-steer paseo-session-isolation paseo-assistant-phase \
               paseo-workspace-name paseo-session-titles paseo-relay-password paseo-composer; do
             node "scripts/patch-${patch}.mjs"
             node "scripts/patch-${patch}.mjs" --check

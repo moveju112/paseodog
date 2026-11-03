@@ -25,10 +25,8 @@ const server=serveWorker({input:process.stdin,output:process.stdout,onExit:()=>p
             if (request.operation !== 'fork') throw new Error('Unknown fixture action');
             return { nativeSessionId: 'sess_heir' };
         },
-        async ask(text,callbacks,source){
+        async ask(text,callbacks){
             steering.length = 0;
-            if(text==='provenance')return{content:JSON.stringify(source)};
-            if(text==='wait-provenance'){await new Promise(r=>{release=r;});return{content:JSON.stringify(steering)};}
             if(args.config.env.ASK_LOG) appendFileSync(args.config.env.ASK_LOG, JSON.stringify({text})+'\n');
             if(text==='crash') process.exit(42);
             if(text==='hang') return new Promise(()=>{});
@@ -36,13 +34,12 @@ const server=serveWorker({input:process.stdin,output:process.stdout,onExit:()=>p
             callbacks.onIdentity?.({id:'sess_child',state:{model:'fixture'}});
             if(text==='question'){const answer=await callbacks.onToolApproval({name:'ask_user',kind:'question',args:{questions:[{question:'Pick?',header:'Pick',options:[{label:'A',description:'a'},{label:'B',description:'b'}]}]}});return {result:{content:JSON.stringify(answer)}};}
             if(text==='permission'){const answer=await callbacks.onToolApproval({name:'shell',args:{command:'pwd'}});return {result:{content:answer.approved?'allowed':'denied'}};}
-            if(text==='computer-permission'){const answer=await callbacks.onToolApproval({name:'computer',args:{action:'capture'}});return {result:{content:answer.approved?'allowed':'denied'}};}
             callbacks.onTextDelta?.(steering.length ? `${text}+${steering.join('+')}` : 'child ');
             if (!steering.length) callbacks.onTextDelta?.('result');
             callbacks.onTextReset?.({chars:1});
             return {result:{content:steering.length ? `${text}+${steering.join('+')}` : args.config.env.TEST_VALUE||'child result',providerReplay:'MUST_NOT_CROSS_WIRE'},session:{secrets:'MUST_NOT_CROSS_WIRE'}};
         // 진행 중인 실제 worker RPC에 지시를 추가하고 원래 ask를 이어간다.
-        },steer(text,source){steering.push(source?{text,source}:text);release?.();return{accepted:true};
+        },steer(text){steering.push(text);release?.();return{accepted:true};
         },compact:async()=>({changed:true,messages:[{content:'MUST_NOT_CROSS_WIRE'}],providerReplay:'MUST_NOT_CROSS_WIRE'}),abort(){aborted=true;release?.();},close:async()=>{},
     };
 }});

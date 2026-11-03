@@ -156,7 +156,7 @@ test('quota resume requires a confirmed quota failure and never replays the orig
     const received = [];
     const f = fixture({
         async status() { return {}; },
-        async ask(text, callbacks, source, retry) {
+        async ask(text, callbacks, retry) {
             received.push({ text, retry });
             if (received.length === 1) {
                 const error = new Error('quota exhausted');

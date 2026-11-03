@@ -17,7 +17,6 @@ export const runtimeFiles = [
     'patches/session-title-route.mjs', 'patches/builtin-agents.mjs',
     'patches/agent-editor-safety.mjs', 'patches/work-method-rules.mjs',
     'patches/mixdog-stability.mjs', 'patches/mixdog-stability.json',
-    'android/packages/server/src/server/agent/agent-message-policy.ts',
 ];
 
 // 소스 checkout의 private umask가 root 소유 설치본의 읽기 권한을 제한하지 않게 한다.
