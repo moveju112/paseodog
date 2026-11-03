@@ -4,7 +4,12 @@ import { readFileSync } from 'node:fs';
 const screen = readFileSync(new URL('../android/packages/app/src/screens/settings-screen.tsx', import.meta.url), 'utf8');
 const hostItems = screen.match(/const HOST_SECTION_ITEMS: HostSectionItem\[\] = (\[[\s\S]*?\n\]);/)[1]
     .replace(/\bicon: (\w+)/g, 'icon:f.$1');
-const previousManagedHostItems = hostItems
+// 기기 페어링이 연결 페이지로 합쳐지기 전 배포본의 메뉴. 해제 전용이다.
+const connectionsItem = '  { id: "connections", labelKey: "settings.hostSections.connections", icon:f.Network },\n';
+if (hostItems.split(connectionsItem).length !== 2) throw new Error('Settings layout host items changed');
+const previousPairDeviceHostItems = hostItems.replace(connectionsItem, () => connectionsItem
+    + '  { id: "pair-device", labelKey: "openProject.tiles.pairDevice.title", icon:f.Smartphone },\n');
+const previousManagedHostItems = previousPairDeviceHostItems
     .replace('  { id: "agents",', '  { id: "providers", labelKey: "settings.hostSections.providers", icon:f.Bot },\n  { id: "agents",')
     .replace('  { id: "host",', '  { id: "plugins", labelKey: "settings.hostSections.plugins", icon:f.Puzzle },\n  { id: "host",');
 const previousHostItems = '[{id:"agents",labelKey:"settings.hostSections.agents",icon:f.Bot},{id:"engine-accounts",labelKey:"settings.hostSections.engineAccounts",icon:f.KeyRound},{id:"engine-workflow",labelKey:"settings.hostSections.engineWorkflow",icon:f.Workflow},{id:"engine-tokens",labelKey:"settings.hostSections.engineTokens",icon:f.Sparkles},{id:"engine-instructions",labelKey:"settings.hostSections.engineInstructions",icon:f.FileText},{id:"engine-tools",labelKey:"settings.hostSections.engineTools",icon:f.Puzzle},{id:"engine-skills",labelKey:"settings.hostSections.engineSkills",icon:f.Bot},{id:"host",labelKey:"settings.hostSections.host",icon:f.Server},{id:"projects",labelKey:"settings.hostSections.projects",icon:f.FolderGit2},{id:"workspaces",labelKey:"settings.hostSections.workspaces",icon:f.FolderGit2},{id:"usage",labelKey:"settings.hostSections.usage",icon:f.Gauge},{id:"terminals",labelKey:"settings.hostSections.terminals",icon:f.SquareTerminal},{id:"connections",labelKey:"settings.hostSections.connections",icon:f.Network},{id:"pair-device",labelKey:"openProject.tiles.pairDevice.title",icon:f.Smartphone}]';
@@ -109,6 +114,14 @@ const edits = [
         '{id:"chat",labelKey:"settings.sections.chat",icon:f.MessageSquare,Content:_.ChatSection},/* PaseoDog fixed terminal scrollback */'],
     ['"chat","terminal","browser"', '"chat","browser"'],
     ['scrollbackLines:ue.terminalScrollbackLines,', 'scrollbackLines:1e4,'],
+    // 음성 기능이 없으므로 마이크 권한 메뉴와 오디오 재생 테스트 행을 뺀다.
+    ['{id:"notifications",labelKey:"settings.sections.notifications",icon:f.Bell,desktopOnly:!0,Content:ee.DesktopNotificationsSection},{id:"permissions",labelKey:"settings.sections.permissions",icon:f.Shield,desktopOnly:!0,Content:Z.DesktopPermissionsSection},',
+        '{id:"notifications",labelKey:"settings.sections.notifications",icon:f.Bell,desktopOnly:!0,Content:ee.DesktopNotificationsSection},/* PaseoDog removed permissions */'],
+    ['"notifications","permissions","diagnostics"', '"notifications","diagnostics"'],
+    ['children:[w,D,E]}),n[46]=D', 'children:[w,D,null]}),n[46]=D'],
+    // 기기 페어링은 연결 페이지에 함께 표시하고 이전 주소도 같은 화면을 연다.
+    ['case"connections":return(0,Pe.jsx)(pe.HostConnectionsPage,{serverId:e.serverId});case"pair-device":return(0,Pe.jsx)(pe.HostPairDevicePage,{serverId:e.serverId});',
+        'case"connections":case"pair-device":return c.createElement(c.Fragment,null,(0,Pe.jsx)(pe.HostConnectionsPage,{serverId:e.serverId}),(0,Pe.jsx)(pe.HostPairDevicePage,{serverId:e.serverId}));'],
 ];
 
 // 번역 리소스의 문자열 객체를 그대로 사용해 앱·웹 메뉴 이름이 갈라지지 않게 한다.
@@ -141,6 +154,7 @@ const previousHostContent = hostContent.replace('default:return base();',
     'case"providers":return c.createElement(c.Fragment,null,page("providers"),base());\ndefault:return base();');
 const legacySpeechItem = '{ id: "engine-speech", labelKey: "settings.hostSections.engineSpeech", icon:f.Smartphone },\n  ';
 const legacyEdits = [
+    ['const Ae=' + previousHostItems, 'const Ae=' + previousPairDeviceHostItems],
     ['const Ae=' + previousHostItems, 'const Ae=' + previousManagedHostItems],
     ['const Ae=' + previousHostItems, 'const Ae=' + previousManagedHostItems.replace('{ id: "engine-memory"', () => legacySpeechItem + '{ id: "engine-memory"')],
     ['function Re(e,t){switch(e.section)', previousHostContent],

@@ -27,7 +27,6 @@ const SECTION_LABELS = {
   browser: "Browser",
   shortcuts: "Shortcuts",
   integrations: "Integrations",
-  permissions: "Permissions",
   diagnostics: "Diagnostics",
   about: "About",
 } as const;
@@ -37,7 +36,6 @@ export type SettingsSection = keyof typeof SECTION_LABELS;
 type HostSection =
   | "projects"
   | "connections"
-  | "pair-device"
   | "agents"
   | "metadata"
   | "workspaces"

@@ -2103,7 +2103,6 @@ export const ko: TranslationResources = {
       shortcuts: "단축키",
       integrations: "통합",
       notifications: "알림",
-      permissions: "권한",
       diagnostics: "진단",
       about: "정보",
     },
@@ -2287,15 +2286,6 @@ export const ko: TranslationResources = {
           },
         },
       },
-      legacyTerminalRenderer: {
-        label: "레거시 터미널 렌더러 사용",
-        description: "터미널을 다시 열 때 이전 WebView 터미널을 사용합니다.",
-        accessibilityLabel: "레거시 터미널 렌더러 사용",
-      },
-      testAudio: "오디오 테스트",
-      playTest: "테스트 재생",
-      playing: "재생 중...",
-      playbackFailed: "재생 실패: {{message}}",
       app: {
         title: "앱 진단",
         rowTitle: "앱 진단",
@@ -2509,11 +2499,8 @@ export const ko: TranslationResources = {
       },
     },
     permissions: {
-      title: "권한",
-      microphone: "마이크",
       refresh: "새로고침",
       refreshing: "새로고침 중...",
-      refreshAccessibility: "데스크톱 권한 새로고침",
       actions: {
         granted: "허용됨",
         request: "요청",

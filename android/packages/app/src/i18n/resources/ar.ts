@@ -2093,7 +2093,6 @@ export const ar: TranslationResources = {
       shortcuts: "الاختصارات",
       integrations: "التكامل",
       notifications: "الإشعارات",
-      permissions: "الأذونات",
       diagnostics: "التشخيص",
       about: "عن",
     },
@@ -2236,15 +2235,6 @@ export const ar: TranslationResources = {
     diagnostics: {
       title: "التشخيص",
       errorReporting: en.settings.diagnostics.errorReporting,
-      legacyTerminalRenderer: {
-        label: "استخدام عارض الطرفية السابق",
-        description: "استخدام طرفية WebView السابقة بعد إعادة فتح الطرفية",
-        accessibilityLabel: "استخدام عارض الطرفية السابق",
-      },
-      testAudio: "اختبار الصوت",
-      playTest: "لعب الاختبار",
-      playing: "جارٍ اللعب...",
-      playbackFailed: "فشل التشغيل:{{message}}",
       app: {
         title: "App diagnostic",
         rowTitle: "App diagnostic",
@@ -2459,11 +2449,8 @@ export const ar: TranslationResources = {
       },
     },
     permissions: {
-      title: "الأذونات",
-      microphone: "ميكروفون",
       refresh: "ينعش",
       refreshing: "منعش...",
-      refreshAccessibility: "تحديث أذونات سطح المكتب",
       actions: {
         granted: "ممنوح",
         request: "طلب",

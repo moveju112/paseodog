@@ -499,7 +499,6 @@ export const SETTINGS_SECTION_SLUGS = [
   "shortcuts",
   "integrations",
   "notifications",
-  "permissions",
   "diagnostics",
   "about",
 ] as const;
@@ -523,7 +522,6 @@ export const HOST_SECTION_SLUGS = [
   "engine-agents",
   "projects",
   "connections",
-  "pair-device",
   "agents",
   "metadata",
   "workspaces",
@@ -540,6 +538,7 @@ const LEGACY_HOST_SECTION_SLUGS: Record<string, HostSectionSlug> = {
   "ai-engine": "engine-workflow",
   providers: "engine-accounts",
   plugins: "host",
+  "pair-device": "connections",
 };
 
 export function isHostSectionSlug(value: string): value is HostSectionSlug {

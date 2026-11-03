@@ -286,7 +286,6 @@
         "packages/app/src/composer/agent-controls/mode-control.tsx",
         "packages/app/src/constants/layout.ts",
         "packages/app/src/desktop/components/desktop-permission-row.tsx",
-        "packages/app/src/desktop/components/desktop-permissions-section.tsx",
         "packages/app/src/desktop/components/desktop-updates-section.tsx",
         "packages/app/src/desktop/components/integrations-section.tsx",
         "packages/app/src/desktop/updates/update-callout-source.tsx",

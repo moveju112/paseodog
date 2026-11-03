@@ -2127,7 +2127,6 @@ export const ptBR: TranslationResources = {
       shortcuts: "Atalhos",
       integrations: "Integrações",
       notifications: "Notificações",
-      permissions: "Permissões",
       diagnostics: "Diagnósticos",
       about: "Sobre",
     },
@@ -2272,15 +2271,6 @@ export const ptBR: TranslationResources = {
     diagnostics: {
       title: "Diagnósticos",
       errorReporting: en.settings.diagnostics.errorReporting,
-      legacyTerminalRenderer: {
-        label: "Usar renderizador de terminal anterior",
-        description: "Usa o terminal WebView anterior após reabrir um terminal",
-        accessibilityLabel: "Usar renderizador de terminal anterior",
-      },
-      testAudio: "Testar áudio",
-      playTest: "Reproduzir teste",
-      playing: "Reproduzindo...",
-      playbackFailed: "Falha na reprodução: {{message}}",
       app: {
         title: "App diagnostic",
         rowTitle: "App diagnostic",
@@ -2496,11 +2486,8 @@ export const ptBR: TranslationResources = {
       },
     },
     permissions: {
-      title: "Permissões",
-      microphone: "Microfone",
       refresh: "Atualizar",
       refreshing: "Atualizando...",
-      refreshAccessibility: "Atualizar permissões do desktop",
       actions: {
         granted: "Concedida",
         request: "Solicitar",
