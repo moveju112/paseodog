@@ -19,8 +19,8 @@ test('bypass skips approval for tools but preserves upstream denies and host res
     const session = makeSession();
     session.beforeToolHook = async (input) => input.name === 'blocked'
         ? { action: 'block', reason: 'upstream block' } : { action: 'ask' };
-    attachHostPolicy(session, { mode: 'bypass', orchestration: true, computerUseEnabled: () => true });
-    for (const name of ['read', 'glob', 'write', 'shell', 'mcp_test', 'agent', 'task', 'setup', 'computer', 'goal']) {
+    attachHostPolicy(session, { mode: 'bypass', orchestration: true });
+    for (const name of ['read', 'glob', 'write', 'shell', 'mcp_test', 'agent', 'task', 'setup', 'goal']) {
         const args = { command: 'printf test' };
         const decision = await session.beforeToolHook({ name, args });
         assert.equal(decision.action, 'rewrite');
@@ -63,13 +63,13 @@ test('rewritten tools are checked after upstream hooks and cannot escape review 
     const s=makeSession();s.beforeToolHook=async()=>({action:'rewrite',name:'shell',args:{command:'danger'}});attachHostPolicy(s,{mode:'review'});
     assert.equal((await s.beforeToolHook({name:'read',args:{}})).action,'deny');
 });
-// 도구 종류별 차단 없이 일반 승인 경로와 네이티브 거부·재작성 검사를 유지한다.
+// 지원하는 도구의 일반 승인 경로와 네이티브 거부·재작성 검사를 유지한다.
 test('tool categories follow session approval modes and preserve native restrictions', async () => {
     for (const name of ['agent', 'agents', 'task', 'task_control', 'channel', 'channels',
-        'setup', 'computer', 'goal', 'automation', 'schedule', 'scheduler']) {
+        'setup', 'goal', 'automation', 'schedule', 'scheduler']) {
         for (const [mode, action] of [['ask', 'ask'], ['review', 'deny'], ['bypass', 'rewrite']]) {
             const session = makeSession();
-            attachHostPolicy(session, { mode, computerUseEnabled: () => true });
+            attachHostPolicy(session, { mode });
             const args = { action: 'create', prompt: 'test' };
             const decision = await session.beforeToolHook({ name, args });
             assert.equal(decision.action, action);

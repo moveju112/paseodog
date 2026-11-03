@@ -10,7 +10,6 @@ import { createClientErrorCollector } from './server/client-errors.mjs';
 import { daemonRelease, daemonUpdate } from './shared/controls.js';
 import { DAEMON_RELEASE } from './server/util.mjs';
 import { createDaemonUpdater } from './server/daemon-update.mjs';
-import { agentMessagePolicy } from './shared/message-policy.js';
 import { scheduleTurnRecovery } from './server/turn-recovery.mjs';
 import { scheduleDeliveryReports } from './server/delivery-notifications.mjs';
 import { createBackgroundResults } from './server/background-results.mjs';
@@ -29,8 +28,6 @@ export default function contribute(server: PluginServerContext) {
         if (!resultService) throw new Error('Dedicated background result service is unavailable');
         return resultService.request(request);
     });
-    server.handle(agentMessagePolicy, ({ action, ...request }) =>
-        controls.read({ ...request, action: 'messagePolicy', operation: action }));
     const clientErrorCollector = createClientErrorCollector();
     server.handle(clientErrors, (request) => clientErrorCollector.handle(request));
     server.registerUsageSource(createClaudeUsageSource(controls));
@@ -42,14 +39,7 @@ export default function contribute(server: PluginServerContext) {
     server.handle(engineStatus, async () => ({ sessions: await controls.sessions(), observedAt: Date.now() }));
     server.handle(engineMetrics, (request) => controls.metrics(request));
     server.handle(nativeConfigView, (request) => readNativeConfig(request));
-    server.handle(engineControls, async (request) => {
-        const snapshot = await controls.read(request);
-        const mutation = Boolean(request?.action && request.action !== 'read');
-        return {
-            ...snapshot,
-            sessions: mutation ? controls.peekSessions() : await controls.sessions(),
-        };
-    });
+    server.handle(engineControls, request => controls.read(request));
     server.registerProvider(createMixdogProvider(controls));
     // 데몬 재시작으로 중단된 턴은 시작 후 한 번만 이어가기 지시를 보낸다.
     const stopRecovery = scheduleTurnRecovery();

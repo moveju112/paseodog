@@ -8,7 +8,7 @@ import { root, journalRoot, launcherPath, supportedNode } from './paths.mjs';
 import { ensureWindowsJobHelper, windowsCompilerPath } from '../plugin/server/windows-job.mjs';
 
 // Upstream patches applied then verified at install, in this order.
-const PATCHES = ['mixdog', 'paseo-usage', 'paseo-steer', 'paseo-agent-messages', 'paseo-assistant-phase',
+const PATCHES = ['mixdog', 'paseo-usage', 'paseo-steer', 'paseo-session-isolation', 'paseo-assistant-phase',
     'paseo-workspace-name', 'paseo-session-titles', 'paseo-relay-password',
     'paseo-relay-reconnect', 'paseo-push-notifications', 'paseo-composer'];
 

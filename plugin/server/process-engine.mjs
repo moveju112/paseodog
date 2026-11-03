@@ -1,7 +1,6 @@
 import { createJsonLineDecoder, encodeFrame } from './json-lines.mjs';
 import { deferred, deadline, errorText, engineEnvironment } from './util.mjs';
 import { createProcessScope } from './process-scope.mjs';
-import { computerSessionEnvironment, readComputerUse, withComputerUse } from './computer-use.mjs';
 
 /**
  * The child is spawned with detached:true on Unix, so its pid is a dedicated
@@ -40,10 +39,8 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
         async create(args, { signal } = {}) {
             if (signal?.aborted) throw new Error('Engine startup canceled');
             if (!launch?.command) throw new Error('paseodog-engine executable not resolved');
-            // 새로 시작하는 엔진마다 현재 토글을 읽어 computer 도구 노출을 정한다.
-            const enabled = readComputerUse(launch.env);
-            const base = { ...launch.env, ...args.config.env };
-            const env = withComputerUse(enabled ? computerSessionEnvironment(base) : base, enabled);
+            // 지원하지 않는 화면 제어 도구는 기존 설정이나 세션 env로 다시 노출하지 않는다.
+            const env = { ...launch.env, ...args.config.env, MIXDOG_FEATURE_COMPUTER: '0' };
             for (const key of ['MIXDOG_HOME', 'MIXDOG_DATA_DIR', 'PASEO_HOME', 'PASEODOG_STATE_DIR', 'OPENAI_OAUTH_CREDENTIALS_PATH']) {
                 if (launch.env?.[key] !== undefined) env[key] = launch.env[key];
                 else delete env[key];
@@ -116,20 +113,9 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
                     if (frame.event === 'permission') {
                         const callbacks = activeCallbacks, token = activeToken;
                         Promise.resolve().then(() => callbacks.onToolApproval?.(frame.payload.info))
-                            .then((answer) => {
-                                // 승인창이 열린 사이 토글을 꺼도 뒤늦은 승인이 화면 조작을 허용하지 않는다.
-                                if (frame.payload.info?.name === 'computer') {
-                                    try {
-                                        if (!readComputerUse(launch.env))
-                                            answer = { approved: false, reason: 'Computer Use is off in PaseoDog settings' };
-                                    } catch {
-                                        answer = { approved: false, reason: 'Computer Use setting could not be verified' };
-                                    }
-                                }
-                                return send('permission', { id: frame.payload.id, token,
-                                    approved: answer?.approved === true, reason: answer?.reason || '',
-                                    ...(answer?.approved === true && Array.isArray(answer.answers) ? { answers: answer.answers } : {}) });
-                            })
+                            .then((answer) => send('permission', { id: frame.payload.id, token,
+                                approved: answer?.approved === true, reason: answer?.reason || '',
+                                ...(answer?.approved === true && Array.isArray(answer.answers) ? { answers: answer.answers } : {}) }))
                             .catch(() => { /* closed/obsolete permissions are never granted */ });
                         return;
                     }
@@ -192,10 +178,10 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
                     if (crashReason) queueMicrotask(() => { if (listeners.has(listener)) listener(crashReason); });
                     return () => listeners.delete(listener);
                 },
-                ask(text, callbacks, source, quotaRetry = false) {
-                    return send('ask', { text, quotaRetry, ...(source ? { source } : {}) }, { waitMs: 0, callbacks });
+                ask(text, callbacks, quotaRetry = false) {
+                    return send('ask', { text, quotaRetry }, { waitMs: 0, callbacks });
                 },
-                steer(text, source) { return send('steer', { text, token: activeToken, ...(source ? { source } : {}) }, { fatalOnTimeout: false }); },
+                steer(text) { return send('steer', { text, token: activeToken }, { fatalOnTimeout: false }); },
                 compact(callbacks = {}) { return send('compact', {}, { waitMs: 0, callbacks }); },
                 status() { return send('status', {}, { waitMs: 5000, fatalOnTimeout: false }); },
                 async configure(changes) {

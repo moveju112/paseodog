@@ -4,7 +4,6 @@ import { isAbsolute } from 'node:path';
 import { DEFAULT_MODEL, deadline, errorText, hash, textOf, display, tokenUsage, publicUsage, contextUsage, validateConfig, promptText } from './util.mjs';
 import { questionRequestInput, questionAnswers } from './question.mjs';
 import { handoffPermission } from './handoff.mjs';
-import { agentMessageSource } from './agent-message.mjs';
 import { compactionNotice, projectCompaction } from './compaction.mjs';
 import { readTurnMinutes } from './turn-duration.mjs';
 import { sessionDescription } from './journal.mjs';
@@ -103,9 +102,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         // The entire promise is observed; a failed systemd kill, synchronous
         // exception or timeout cannot crash the provider process.
     }
-    // 구조화된 내부 송신자는 감사 기록에만 남기고 사용자 타임라인으로 내보내지 않는다.
     function publishItem(session, row) {
-        if (row.item.source?.kind === 'agent') return;
         const revertToken = revertTokenFor(session, row.item);
         emit({ type: 'timeline.item', sessionId: session.id, ...row, ...(revertToken ? { item: { ...row.item, revertToken } } : {}) });
     }
@@ -669,12 +666,10 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         if (session.broken) throw new Error('Session engine failed; reopen the session before sending another instruction');
         if (session.configuring) throw new Error('Session configuration is in progress');
         const parsed = promptText(input.prompt);
-        const source = agentMessageSource(input.prompt.source);
-        if (source && (parsed.command || input.prompt.clearPendingPermissions))
-            throw new Error('Agent messages cannot execute commands or clear human permissions');
+        if (input.prompt.source !== undefined) throw new Error('Inter-session messages are not supported in PaseoDog');
         if (parsed.content && !selected.includes('prompt.image')) throw new Error('Images not negotiated');
         if (parsed.command && !selected.includes('prompt.command')) throw new Error('Commands not negotiated');
-        const receiptKey = hash(input.prompt.clientMessageId), requestHash = hash(source ? { ...parsed, source } : parsed);
+        const receiptKey = hash(input.prompt.clientMessageId), requestHash = hash(parsed);
         const previous = session.record.receipts[receiptKey];
         if (previous) {
             if (session.acked.has(input.prompt.clientMessageId)) {
@@ -698,17 +693,14 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             const turn = session.active;
             if (!turn?.accepted || turn.finished || turn.canceled) throw new Error('The active turn ended before steering; send a new instruction');
             const result = { type: 'steer', turnId: turn.id };
-            const receipt = { hash: requestHash, turnId: turn.id, state: 'running', result, ...(source ? { source } : {}) };
+            const receipt = { hash: requestHash, turnId: turn.id, state: 'running', result };
             session.record.receipts[receiptKey] = receipt;
             (turn.steeringReceipts ||= new Set()).add(receiptKey);
             flush(session);
             try {
-                await turn.engine.steer(parsed.content || parsed.text, source);
-                recordItem(session, source
-                    ? { type: 'notification', id: `agent:${receiptKey}`, level: 'info', source,
-                        message: `Agent ${source.agentId} (not human approval): ${parsed.text}` }
-                    : { type: 'user_message', id: `user:${receiptKey}`,
-                        clientMessageId: input.prompt.clientMessageId, text: parsed.text });
+                await turn.engine.steer(parsed.content || parsed.text);
+                recordItem(session, { type: 'user_message', id: `user:${receiptKey}`,
+                    clientMessageId: input.prompt.clientMessageId, text: parsed.text });
                 ack(session, input.prompt, result);
             } catch (error) {
                 receipt.state = 'uncertain';
@@ -730,21 +722,19 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             if (session.closing || session.closed || turn.canceled) throw new Error('Session closed or interrupted during startup');
             const turnDurationMs = maxTurnMs ?? readTurnMinutes(env) * 60000;
             const result = { type: 'turn', turnId: turn.id };
-            session.record.receipts[receiptKey] = { hash: requestHash, turnId: turn.id, state: 'running', result, ...(source ? { source } : {}),
-                // 원본 대화 절단은 텍스트로 대상을 찾으므로 이미지·명령·에이전트 전달은 제외한다.
-                ...(!source && !parsed.command && !parsed.content ? { rewindable: true } : {}) };
+            session.record.receipts[receiptKey] = { hash: requestHash, turnId: turn.id, state: 'running', result,
+                // 원본 대화 절단은 텍스트로 대상을 찾으므로 이미지·명령은 제외한다.
+                ...(!parsed.command && !parsed.content ? { rewindable: true } : {}) };
             session.record.active = { turnId: turn.id, receiptKey };
             flush(session); // Durable receipt BEFORE inference; never automatically replay an uncertain write.
             turn.accepted = true;
             ack(session, input.prompt, result);
             emit({ type: 'session.turn', sessionId: session.id, turnId: turn.id, state: 'started' });
-            recordItem(session, source
-                ? { type: 'notification', id: `agent:${receiptKey}`, level: 'info', source,
-                    message: `Agent ${source.agentId} (not human approval): ${parsed.text}` }
-                : { type: 'user_message', id: `user:${receiptKey}`, clientMessageId: input.prompt.clientMessageId, text: parsed.command ? '/compact' : parsed.text });
+            recordItem(session, { type: 'user_message', id: `user:${receiptKey}`,
+                clientMessageId: input.prompt.clientMessageId, text: parsed.command ? '/compact' : parsed.text });
             const callbacks = callbacksFor(session, turn);
             turn.timer = setTimeout(() => { void interrupt(session, 'Maximum turn duration reached'); }, turnDurationMs);
-            turn.work = parsed.command ? turn.engine.compact(callbacks) : turn.engine.ask(parsed.content || parsed.text, callbacks, source, quotaRetry);
+            turn.work = parsed.command ? turn.engine.compact(callbacks) : turn.engine.ask(parsed.content || parsed.text, callbacks, quotaRetry);
             const answer = await turn.work;
             if (turn.finished) return;
             clearTimeout(turn.timer);

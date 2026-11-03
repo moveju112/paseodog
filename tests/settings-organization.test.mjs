@@ -33,18 +33,17 @@ test('settings organization remains hash-gated, reversible and idempotent', () =
     assert.throws(() => withSettingsOrganization(''), /anchor mismatch/);
 });
 
-test('computer settings upgrade the previous bundle and reject partial or changed insertions', () => {
-    const current = withoutSettingsLayout(patched);
-    const start = current.indexOf('const PaseodogComputerUseSettings=');
-    const end = current.indexOf('const PaseodogAgentMessageSettings=', start);
-    assert.ok(start > 0 && end > start);
-    const component = current.slice(start, end);
-    const row = 'e.section==="tools"?u.createElement(PaseodogComputerUseSettings,{key:"computer:"+e.serverId,serverId:e.serverId}):null,';
-    const previous = current.replace(component, '').replace(row, '');
-    assert.equal(patchedComposerSource(previous), patched);
-    assert.throws(() => patchedComposerSource(current.replace(component, '')), /Partial|hash mismatch/);
-    assert.throws(() => patchedComposerSource(current.replace(row, '')), /Partial|hash mismatch/);
-    assert.throws(() => patchedComposerSource(current.replace('기본은 꺼짐이에요.', 'unexpected drift')), /Partial|hash mismatch/);
+test('removed settings reject partial legacy insertions and unreviewed component contents', () => {
+    for (const [component, row] of [
+        ['const PaseodogComputerUseSettings=(()=>{const unknown=0;return ComputerUseSettings})();',
+            'e.section==="tools"?u.createElement(PaseodogComputerUseSettings,{key:"computer:"+e.serverId,serverId:e.serverId}):null,'],
+        ['const PaseodogAgentMessageSettings=(()=>{const unknown=0;return AgentMessageSettings})();',
+            ',e.section==="workflow"?u.createElement(PaseodogAgentMessageSettings,{key:e.serverId,serverId:e.serverId}):null'],
+    ]) {
+        assert.throws(() => withoutSettingsOrganization(component), /Partial/);
+        assert.throws(() => withoutSettingsOrganization(row), /Partial/);
+        assert.throws(() => withoutSettingsOrganization(component + row), /source hash mismatch/);
+    }
 });
 
 test('previous workflow settings upgrade without accepting partial patches or source drift', () => {
@@ -53,7 +52,7 @@ test('previous workflow settings upgrade without accepting partial patches or so
     const durationEnd = previousLayout.indexOf('const k=[{value:"none",label:', durationStart);
     assert.ok(durationStart > 0 && durationEnd > durationStart);
     const duration = previousLayout.slice(durationStart, durationEnd);
-    const row = 'e.section==="workflow"?u.createElement(PaseodogTurnDurationSettings,{key:"duration:"+e.serverId,serverId:e.serverId}):null,';
+    const row = ',e.section==="workflow"?u.createElement(PaseodogTurnDurationSettings,{key:"duration:"+e.serverId,serverId:e.serverId}):null';
     assert.ok(previousLayout.includes(row));
     const previous = previousLayout.replace(duration, '').replace(row, '');
     assert.equal(patchedComposerSource(previous), patched);
@@ -151,13 +150,13 @@ test('web Auto-Clear details follow the switch without changing thresholds', () 
     const anchor = patched.indexOf('children:[pe,...(Q?.enabled?[Te,ke,Ve]:[])]');
     const start = patched.lastIndexOf('function we(', anchor);
     const end = patched.indexOf('function je(', anchor);
-    const cache = memo(104);
+    const cache = memo(101);
     const element = (type, props) => ({ type, ...props });
     const Tokens = runInNewContext('(' + patched.slice(start, end) + ')', {
         c: { c: () => cache }, C: { jsx: element, jsxs: element, Fragment: 'fragment' },
         I: 'row', D: 'select', w: { Switch: 'switch' }, j: { Button: 'button' },
         b: { SettingsSection: 'section' }, n: { View: 'view' }, S: { settingsStyles: {} },
-        M: [], _: [], E: [], z: [], P: [], L: [], fe: 'usage', je: (value) => value,
+        M: [], _: [], E: [], z: [], P: [], L: [], je: (value) => value,
     });
     const nodes = (node) => {
         if (!node || typeof node !== 'object') return [];

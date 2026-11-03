@@ -152,7 +152,7 @@ export const engineControls = defineRpc({
         action: z.enum([
             'read', 'main', 'agent', 'agentDefinition', 'agentSave', 'agentCreate', 'agentDelete',
             'compaction', 'autoClear', 'workflow', 'workflowPack', 'workflowSave', 'workflowCreate', 'workflowDelete',
-            'orchestration', 'instructionFiles', 'features', 'preferences', 'turnDuration', 'computerUse',
+            'orchestration', 'instructionFiles', 'features', 'preferences', 'turnDuration',
         ]).default('read'),
         refresh: z.boolean().optional(),
         maxTurnMinutes: z.number().int().min(1).max(MAX_TURN_MINUTES).optional(),

@@ -67,11 +67,7 @@ const snapshot = {
 function enginePage(platform, request) {
     const settings = { snapshot, busy: false, connected: true, request };
     const client = {
-        invokePluginRpc: async (_plugin, method) => method === 'agent-message-policy'
-            ? { allowUnrelatedSessions: false }
-            : { maxTurnMinutes: 120, computerUse: {
-                enabled: false, bridge: 'missing', display: false, mixdogVersion: '0.0.0',
-            } },
+        invokePluginRpc: async () => ({ maxTurnMinutes: 120 }),
     };
     const runtime = {
         useHostRuntimeClient: () => client,
@@ -81,10 +77,7 @@ function enginePage(platform, request) {
         return runInNewContext(compile(nativeEngine) + ';AiEnginePage', {
             React, ...React, ...elements, isBasicAgent, settingsStyles: {},
             useAiEngineSettings: () => settings,
-            AgentMessageSettings: 'messages', TurnDurationSettings: 'duration',
-            ComputerUseSettings: ({ serverId }) => React.createElement('switch', {
-                accessibilityLabel: '컴퓨터 사용', serverId,
-            }),
+            TurnDurationSettings: 'duration',
         });
     }
     return webModule(5346, {
@@ -95,7 +88,6 @@ function enginePage(platform, request) {
         3220: elements, 3950: { settingsStyles: {} }, 4684: {},
         4683: { useAiEngineSettings: () => settings }, 5347: elements,
         279: { jsx, jsxs: jsx, Fragment: React.Fragment }, 3762: runtime, 4659: elements,
-        3916: { openExternalUrl() { assert.fail('setup links must open only on an explicit click'); } },
     }).AiEnginePage;
 }
 
@@ -194,7 +186,7 @@ for (const platform of ['app', 'web']) {
             generation: ['세션 제목'],
             memory: ['메모리'],
             tools: ['내장 도구 모듈 (Built-in Tools)', '웹 검색 모델'],
-            tokens: ['Mixdog 토큰 절감 기술', '유휴 세션 자동 비우기 (Auto-Clear)', '열린 세션 컨텍스트 사용량'],
+            tokens: ['Mixdog 토큰 절감 기술', '유휴 세션 자동 비우기 (Auto-Clear)'],
         };
         let tree;
         await act(async () => { tree = create(null); });
@@ -210,7 +202,8 @@ for (const platform of ['app', 'web']) {
             assert.equal(labels.includes('백그라운드 메모리'), section === 'memory');
             assert.equal(labels.includes('로컬 모델 공급자'), false);
             assert.equal(labels.includes('웹 검색 도구'), section === 'tools');
-            assert.equal(labels.includes('컴퓨터 사용'), section === 'tools');
+            assert.equal(labels.includes('컴퓨터 사용'), false);
+            assert.equal(labels.includes('무관한 세션 간 메시지 허용'), false);
             assert.equal(labels.includes('AI 세션 제목 자동 생성'), section === 'generation');
             assert.equal(tree.root.findAllByType('segments').length, 0);
             if (section === 'memory') {

@@ -14,10 +14,10 @@ test('source allowlist includes required runtime modules and release commands', 
     const entries = new Set(readFileSync(join(root, 'MANIFEST.sha256'), 'utf8').trim().split('\n')
         .map((line) => line.split('  ')[1]));
     for (const path of ['engine/src/session-actions.mjs', 'engine/src/resource-controls.mjs',
-        'plugin/server/computer-use.mjs', 'plugin/server/dedicated-setting.mjs',
+        'plugin/server/dedicated-setting.mjs',
         'plugin/server/turn-duration.mjs', 'plugin/shared/turn-duration.mjs',
-        'android/packages/app/src/screens/settings/computer-use-settings.ts',
-        'tests/computer-use.test.mjs', 'tests/computer-use-settings.test.mjs',
+        'patches/paseo-session-usage-removal.mjs', 'scripts/patch-paseo-session-isolation.mjs',
+        'tests/unsupported-tools.test.mjs', 'tests/session-isolation.test.mjs', 'tests/mcp-identity.test.mjs',
         'plugin/client/session-tools.tsx', 'android/packages/app/src/screens/settings/turn-duration-settings.ts', 'tests/native-session-features.test.mjs',
         'engine/src/orchestration.mjs', 'plugin/server/compaction.mjs',
         'patches/effort-usage.mjs', 'patches/session-title-route.mjs', 'patches/builtin-agents.mjs',
