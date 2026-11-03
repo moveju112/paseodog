@@ -42,8 +42,10 @@ export const runtimeEnv = () => {
     const pathKey = Object.keys(base).find((key) => key.toUpperCase() === 'PATH') || 'PATH';
     const inheritedPath = base[pathKey] || '';
     delete base[pathKey];
+    // 음성인식은 지원하지 않는다. 설정 파일과 무관하게 받아쓰기·음성 모드와 로컬 음성 모델을 쓰지 않는다.
     return { ...base, ...providerEnvironment(), PASEO_HOME: paseoHome, MIXDOG_HOME: mixdogHome,
         MIXDOG_DATA_DIR: mixdogDataDir, PASEODOG_STATE_DIR: journalRoot,
+        PASEO_DICTATION_ENABLED: 'false', PASEO_VOICE_MODE_ENABLED: 'false',
         PATH: [dirname(process.execPath), join(root,'tools','node_modules','.bin'), inheritedPath].join(delimiter) };
 };
 export function supportedNode(version = process.versions.node) {

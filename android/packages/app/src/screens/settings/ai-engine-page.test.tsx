@@ -599,7 +599,7 @@ describe("native host AI engine settings", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
   it("shows only the controls of each separate host section and no main model picker", async () => {
-    const markers: Record<Exclude<EngineSection, "speech">, string> = {
+    const markers: Record<EngineSection, string> = {
       accounts: "계정 연결",
       workflow: "자동 오케스트레이터 (Orchestration)",
       tokens: "Mixdog 토큰 절감 기술",
@@ -613,7 +613,7 @@ describe("native host AI engine settings", () => {
       generation: "세션 제목",
       providers: "로컬 모델 확장",
     };
-    for (const section of Object.keys(markers) as Array<Exclude<EngineSection, "speech">>) {
+    for (const section of Object.keys(markers) as EngineSection[]) {
       clearAiEngineSnapshotCache();
       const view = render(<AiEnginePage serverId="host-one" section={section} />);
       await screen.findByRole("region", { name: markers[section] });

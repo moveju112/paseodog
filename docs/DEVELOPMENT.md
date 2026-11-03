@@ -46,7 +46,7 @@ npm --prefix android run build:protocol
 
 ```bash
 for patch in mixdog paseo-usage paseo-steer paseo-agent-messages paseo-assistant-phase \
-    paseo-workspace-name paseo-session-titles paseo-local-stt paseo-relay-password paseo-composer; do
+    paseo-workspace-name paseo-session-titles paseo-relay-password paseo-composer; do
     node "scripts/patch-${patch}.mjs" && node "scripts/patch-${patch}.mjs" --check
 done
 ```

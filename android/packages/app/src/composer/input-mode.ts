@@ -25,7 +25,8 @@ export interface ComposerInputModePresentation {
 const PRESENTATION_BY_MODE: Record<ComposerInputMode, ComposerInputModePresentation> = {
   chat: {
     showAttachments: true,
-    showVoice: true,
+    // PaseoDog은 받아쓰기·음성 모드를 지원하지 않으므로 마이크 버튼을 표시하지 않는다.
+    showVoice: false,
     showAutocomplete: true,
     showAgentControls: true,
     isMonospace: false,

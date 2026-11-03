@@ -18,7 +18,6 @@ import { useAiEngineSettings } from "./use-ai-engine-settings";
 import { EngineAccounts } from "./engine-accounts";
 import { AgentMessageSettings } from "./agent-message-settings";
 import { TurnDurationSettings } from "./turn-duration-settings";
-import { SpeechSettings } from "./speech-settings";
 import { isBasicAgent } from "./basic-agent-roles";
 
 // 호스트 설정 목록의 개별 항목과 1:1로 대응하는 엔진 설정 구역
@@ -27,7 +26,6 @@ export type EngineSection =
   | "workflow"
   | "response"
   | "execution"
-  | "speech"
   | "memory"
   | "generation"
   | "providers"
@@ -2223,7 +2221,7 @@ function TokensSection({ snapshot, disabled, request }: SectionProps) {
 function SectionBody({
   section,
   ...props
-}: SectionProps & { section: Exclude<EngineSection, "accounts" | "speech"> }) {
+}: SectionProps & { section: Exclude<EngineSection, "accounts"> }) {
   switch (section) {
     case "workflow":
     case "agents":
@@ -2252,7 +2250,6 @@ function SectionBody({
 
 // 선택한 호스트의 Mixdog 엔진 설정 중 해당 구역의 컨트롤만 지연 없이 제어한다 (기본 모델은 채팅에서 선택).
 export function AiEnginePage({ serverId, section }: { serverId: string; section: EngineSection }) {
-  if (section === "speech") return <SpeechSettings key={serverId} serverId={serverId} />;
   return (
     <EngineSettingsPage key={`${serverId}:${section}`} serverId={serverId} section={section} />
   );
@@ -2263,7 +2260,7 @@ function EngineSettingsPage({
   section,
 }: {
   serverId: string;
-  section: Exclude<EngineSection, "speech">;
+  section: EngineSection;
 }) {
   const { snapshot, busy, connected, message, error, request } = useAiEngineSettings(serverId);
   const disabled = !connected;

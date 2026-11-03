@@ -516,7 +516,6 @@ export const HOST_SECTION_SLUGS = [
   "engine-workflow",
   "engine-response",
   "engine-execution",
-  "engine-speech",
   "engine-memory",
   "engine-tokens",
   "engine-instructions",

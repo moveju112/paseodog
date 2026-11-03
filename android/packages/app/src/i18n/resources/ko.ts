@@ -2134,7 +2134,6 @@ export const ko: TranslationResources = {
       engineWorkflow: "워크플로우",
       engineResponse: "AI 응답·프로필",
       engineExecution: "실행 설정",
-      engineSpeech: "음성",
       engineMemory: "메모리",
       engineTokens: "컨텍스트·토큰",
       engineInstructions: "지침·프롬프트",
