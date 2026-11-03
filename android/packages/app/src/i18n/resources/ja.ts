@@ -2109,7 +2109,6 @@ export const ja: TranslationResources = {
       chat: "チャット",
       appearance: "外観",
       sidebar: "サイドバー",
-      terminal: "ターミナル",
       browser: "ブラウザ",
       editor: "エディター",
       shortcuts: "ショートカット",
@@ -2209,11 +2208,6 @@ export const ja: TranslationResources = {
           inApp: "Paseoで",
           external: "外部ブラウザ",
         },
-      },
-      terminalScrollback: {
-        label: "ターミナルスクロールバック",
-        description: "組み込みターミナルバッファに保持する行数",
-        accessibilityLabel: "ターミナルスクロールバック行数",
       },
       autoExpandReasoning: {
         label: "常に思考プロセスを展開",

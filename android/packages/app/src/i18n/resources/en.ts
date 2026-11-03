@@ -2114,7 +2114,6 @@ export const en = {
       appearance: "Appearance",
       sidebar: "Sidebar",
       editor: "Editor",
-      terminal: "Terminal display",
       browser: "Browser",
       shortcuts: "Shortcuts",
       integrations: "Integrations",
@@ -2322,11 +2321,6 @@ export const en = {
           inApp: "In Paseo",
           external: "External browser",
         },
-      },
-      terminalScrollback: {
-        label: "Terminal scrollback",
-        description: "Lines kept in the built-in terminal buffer",
-        accessibilityLabel: "Terminal scrollback lines",
       },
       autoExpandReasoning: {
         label: "Always expand reasoning",

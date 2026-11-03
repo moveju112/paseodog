@@ -494,7 +494,6 @@ export const SETTINGS_SECTION_SLUGS = [
   "appearance",
   "sidebar",
   "chat",
-  "terminal",
   "browser",
   "editor",
   "shortcuts",

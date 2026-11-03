@@ -2064,7 +2064,6 @@ export const zhCN: TranslationResources = {
       chat: "聊天",
       appearance: "外观",
       sidebar: "侧边栏",
-      terminal: "终端",
       browser: "浏览器",
       editor: "编辑器",
       shortcuts: "快捷键",
@@ -2162,11 +2161,6 @@ export const zhCN: TranslationResources = {
           inApp: "在 Paseo 中",
           external: "外部浏览器",
         },
-      },
-      terminalScrollback: {
-        label: "终端回滚",
-        description: "内置终端缓冲区保留的行数",
-        accessibilityLabel: "终端回滚行数",
       },
       autoExpandReasoning: {
         label: "始终展开推理过程",

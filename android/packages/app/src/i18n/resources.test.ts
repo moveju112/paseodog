@@ -190,7 +190,6 @@ describe("translation resources", () => {
 
   it("keeps reported Spanish settings and scripts labels clean", () => {
     expect(es.workspace.scripts.title).toBe("Scripts");
-    expect(es.settings.general.terminalScrollback.label).toBe("Historial de terminal");
     expect(es.settings.project.scripts.title).toBe("Scripts");
   });
 

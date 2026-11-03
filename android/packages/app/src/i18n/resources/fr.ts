@@ -2136,7 +2136,6 @@ export const fr: TranslationResources = {
       chat: "Discussion",
       appearance: "Apparence",
       sidebar: "Barre latérale",
-      terminal: "Terminal",
       browser: "Navigateur",
       editor: "Éditeur",
       shortcuts: "Raccourcis",
@@ -2239,11 +2238,6 @@ export const fr: TranslationResources = {
           inApp: "Dans Paseo",
           external: "Navigateur externe",
         },
-      },
-      terminalScrollback: {
-        label: "Historique du terminal",
-        description: "Lignes conservées dans le tampon du terminal intégré",
-        accessibilityLabel: "Lignes d’historique du terminal",
       },
       autoExpandReasoning: {
         label: "Toujours afficher le raisonnement",

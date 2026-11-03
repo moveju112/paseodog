@@ -2098,7 +2098,6 @@ export const ko: TranslationResources = {
       chat: "채팅",
       appearance: "모양",
       sidebar: "사이드바",
-      terminal: "터미널 표시",
       browser: "브라우저",
       editor: "편집기",
       shortcuts: "단축키",
@@ -2208,11 +2207,6 @@ export const ko: TranslationResources = {
           inApp: "Paseo에서",
           external: "외부 브라우저",
         },
-      },
-      terminalScrollback: {
-        label: "터미널 스크롤백",
-        description: "내장 터미널 버퍼에 보관되는 줄 수",
-        accessibilityLabel: "터미널 스크롤백 줄 수",
       },
       autoExpandReasoning: {
         label: "추론 항상 펼치기",

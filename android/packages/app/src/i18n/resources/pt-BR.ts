@@ -2122,7 +2122,6 @@ export const ptBR: TranslationResources = {
       chat: "Chat",
       appearance: "Aparência",
       sidebar: "Barra lateral",
-      terminal: "Terminal",
       browser: "Navegador",
       editor: "Editor",
       shortcuts: "Atalhos",
@@ -2224,11 +2223,6 @@ export const ptBR: TranslationResources = {
           inApp: "No Paseo",
           external: "Navegador externo",
         },
-      },
-      terminalScrollback: {
-        label: "Scrollback do terminal",
-        description: "Linhas mantidas no buffer do terminal integrado",
-        accessibilityLabel: "Linhas do scrollback do terminal",
       },
       autoExpandReasoning: {
         label: "Sempre expandir raciocínio",

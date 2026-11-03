@@ -50,7 +50,6 @@ import { HostPicker as SharedHostPicker } from "@/components/hosts/host-picker";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { AppearanceSection } from "@/screens/settings/appearance/appearance-section";
-import { TerminalSection } from "@/screens/settings/terminal/terminal-section";
 import { ChatSection } from "@/screens/settings/chat/chat-section";
 import { SidebarNavSection } from "@/screens/settings/sidebar/sidebar-nav-section";
 import { useAppSettings, useAppSettingsSaveError, type AppSettings } from "@/hooks/use-settings";
@@ -162,12 +161,6 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
     Content: SidebarNavSection,
   },
   { id: "chat", labelKey: "settings.sections.chat", icon: MessageSquare, Content: ChatSection },
-  {
-    id: "terminal",
-    labelKey: "settings.sections.terminal",
-    icon: SquareTerminal,
-    Content: TerminalSection,
-  },
   {
     id: "browser",
     labelKey: "settings.sections.browser",

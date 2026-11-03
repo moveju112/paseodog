@@ -2088,7 +2088,6 @@ export const ar: TranslationResources = {
       chat: "الدردشة",
       appearance: "مظهر",
       sidebar: "الشريط الجانبي",
-      terminal: "الطرفية",
       browser: "المتصفح",
       editor: "المحرر",
       shortcuts: "الاختصارات",
@@ -2189,11 +2188,6 @@ export const ar: TranslationResources = {
           inApp: "في Paseo",
           external: "متصفح خارجي",
         },
-      },
-      terminalScrollback: {
-        label: "التمرير Terminal",
-        description: "يتم الاحتفاظ بالخطوط في المخزن المؤقت الطرفي المدمج",
-        accessibilityLabel: "خطوط التمرير Terminal",
       },
       autoExpandReasoning: {
         label: "عرض التفكير دائماً",

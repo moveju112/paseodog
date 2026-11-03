@@ -56,9 +56,6 @@ const ThemePreferenceSchema = z.enum([
 ]);
 /** Where the theme picker lands when the persisted preference cannot be honoured. */
 export const DEFAULT_THEME_PREFERENCE = "auto" satisfies ThemePreference;
-export const DEFAULT_TERMINAL_SCROLLBACK_LINES = 10_000;
-export const MIN_TERMINAL_SCROLLBACK_LINES = 0;
-export const MAX_TERMINAL_SCROLLBACK_LINES = 1_000_000;
 export function defaultUiBaseFontSize(native: boolean): number {
   return native ? 15 : FONT_SIZE.base;
 }
@@ -89,7 +86,6 @@ export interface AppSettings {
   language: AppLanguage;
   sendBehavior: SendBehavior;
   serviceUrlBehavior: ServiceUrlBehavior;
-  terminalScrollbackLines: number;
   useLegacyTerminalRenderer: boolean;
   uiFontFamily: string; // "" = platform default UI stack
   monoFontFamily: string; // "" = platform default mono stack
@@ -162,7 +158,6 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   language: "ko",
   sendBehavior: "steer",
   serviceUrlBehavior: "ask",
-  terminalScrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
   useLegacyTerminalRenderer: false,
   uiFontFamily: "",
   monoFontFamily: "",
@@ -247,10 +242,6 @@ const StoredAppSettingsSchema = z
       .catch("ko"),
     sendBehavior: z.enum(["interrupt", "steer", "queue"]).catch("steer"),
     serviceUrlBehavior: z.enum(["ask", "in-app", "external"]).catch("ask"),
-    terminalScrollbackLines: clampedNumber(
-      MIN_TERMINAL_SCROLLBACK_LINES,
-      MAX_TERMINAL_SCROLLBACK_LINES,
-    ).catch(DEFAULT_TERMINAL_SCROLLBACK_LINES),
     useLegacyTerminalRenderer: z.boolean().catch(false),
     uiFontFamily: sanitizedFontFamily().catch(""),
     monoFontFamily: sanitizedFontFamily().catch(""),
@@ -521,22 +512,6 @@ function pickAppSettingsFromLegacy(legacy: StoredAppSettings): AppSettings {
     // rendered value into the new independent preference during migration.
     contentFontSize: legacy.uiBaseFontSize,
   };
-}
-
-export function parseTerminalScrollbackLines(value: unknown): number | null {
-  let numericValue = NaN;
-  if (typeof value === "number") {
-    numericValue = value;
-  } else if (typeof value === "string" && value.trim().length > 0) {
-    numericValue = Number(value);
-  }
-  if (!Number.isFinite(numericValue)) {
-    return null;
-  }
-  return Math.min(
-    MAX_TERMINAL_SCROLLBACK_LINES,
-    Math.max(MIN_TERMINAL_SCROLLBACK_LINES, Math.floor(numericValue)),
-  );
 }
 
 export function parseContentMaxWidth(value: unknown): number | null {
