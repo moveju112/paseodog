@@ -54,6 +54,20 @@ test('failed mutation requires explicit reconciliation and retry, never an autom
     assert.equal(calls, 2);
 });
 
+test('failed checkpoints retain only an allowlisted cause and never copy raw command errors', async t => {
+    const directory = await temporary(t);
+    const { stage } = await openReleaseState(directory, {});
+    for (const [name, code] of [['known', 'dependency-missing'], ['unknown', 'private-token']]) {
+        await assert.rejects(stage(name, async () => {
+            throw Object.assign(new Error('private command or credential'), { code });
+        }));
+    }
+    const saved = JSON.parse(await readFile(join(directory, 'release-state.json'), 'utf8'));
+    assert.equal(saved.stages.known.reason, 'dependency-missing');
+    assert.equal(saved.stages.unknown.reason, 'stage-failed');
+    assert.doesNotMatch(JSON.stringify(saved), /private/);
+});
+
 test('running mutation and parallel build checkpoints survive restart without losing siblings', async t => {
     const directory = await temporary(t);
     const first = await openReleaseState(directory, {});
@@ -625,12 +639,14 @@ test('web-only delivery skips GitHub and PC apply, then records the deployed web
         workspace: directory, cacheRoot: directory + '-cache', signingInit: init, signingKey: key,
         previousApk: previous, androidTools: '/sdk/tools', metroWorkers: 2, appTests: ['src/fixture.test.ts'],
         repo: 'moveju112/paseodog', pagesProject: 'paseodog', webUrl: 'https://paseodog.choondoggy.com/',
-        targets: ['web'],
+        targets: ['web'], androidHome: '/approved/sdk', wineBin: '/approved/wine/bin',
     });
     t.after(() => rm(config.cacheRoot, { recursive: true, force: true }));
     const commit = 'f'.repeat(40);
     const calls = [];
-    const run = async (command, args) => {
+    const run = async (command, args, options) => {
+        assert.equal(options.env.ANDROID_HOME, '/approved/sdk');
+        assert.ok(options.env.PATH.startsWith('/approved/wine/bin:'));
         calls.push([command, ...args]);
         if (command === 'git' && args[0] === 'rev-parse') return commit + '\n';
         if (command === 'git' && args[0] === 'ls-remote') return commit + '\trefs/heads/main\n';
@@ -643,7 +659,11 @@ test('web-only delivery skips GitHub and PC apply, then records the deployed web
     };
     const builds = [];
     const result = await deliverRelease(config, {
-        run, build: async ({ targets }) => { builds.push(targets); },
+        run, build: async ({ targets, env }) => {
+            assert.equal(env.ANDROID_HOME, '/approved/sdk');
+            assert.ok(env.PATH.startsWith('/approved/wine/bin:'));
+            builds.push(targets);
+        },
         verifyArtifacts: async () => { throw new Error('GitHub artifacts must not be verified'); },
         checkWeb: async () => { calls.push(['check-browser']); },
         launchDesktop: async () => { throw new Error('desktop must not launch'); },

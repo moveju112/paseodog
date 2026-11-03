@@ -10,7 +10,11 @@ export const backgroundResults = defineRpc({
             confirmed: z.literal(true) }).strict(),
         z.object({ action: z.literal('cancel'), ...identity }).strict(),
         z.object({ action: z.literal('delivery'), ...identity, eventId: z.string().regex(/^delivery-result:[a-f0-9]{64}$/),
-            status: z.enum(['completed', 'failed']) }).strict(),
+            status: z.enum(['completed', 'failed', 'running']),
+            stage: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/).optional(),
+            attempt: z.number().int().positive().optional(),
+            reason: z.enum(['dependency-missing', 'android-sdk-missing', 'preflight-failed', 'stage-failed']).optional(),
+            recovered: z.boolean().optional() }).strict(),
     ]),
     output: z.unknown(),
 });

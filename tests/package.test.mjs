@@ -38,6 +38,7 @@ test('source allowlist includes required runtime modules and release commands', 
         'patches/paseo-soft-light-themes.mjs', 'android/packages/app/src/styles/soft-light-palettes.ts',
         'patches/paseo-daemon-update.mjs', 'android/packages/app/src/desktop/updates/daemon-update-callouts.ts',
         'plugin/server/daemon-update.mjs',
+        'plugin/server/delivery-status.mjs', 'scripts/release-environment.mjs',
         'patches/paseo-settings-organization.mjs', 'android/packages/app/src/screens/settings/diagnostic-details.ts',
         'patches/paseo-assistant-icon.mjs', 'android/packages/app/src/hooks/use-settings/assistant-icons.ts',
         'scripts/prepare-paseo-web-ui.mjs', 'scripts/paseo-web-ui-base.json', 'tests/paseo-web-ui-base.test.mjs'])

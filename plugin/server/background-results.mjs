@@ -3,9 +3,10 @@ import { join } from 'node:path';
 import { JournalStore } from './journal.mjs';
 import { agentsBySession } from './turn-recovery.mjs';
 import { hash } from './util.mjs';
+import { DELIVERY_REASONS, DELIVERY_STAGES } from './delivery-status.mjs';
 
 const TERMINAL = new Set(['completed', 'failed', 'canceled']);
-const LABELS = { completed: '성공', failed: '실패', canceled: '취소', unknown: '결과 불명' };
+const LABELS = { completed: '성공', failed: '실패', canceled: '취소', unknown: '결과 불명', running: '재개 중' };
 const LOST = 'daemon restarted while this shell task was running; its outcome was lost.';
 const MAX_TASKS = 1000;
 
@@ -16,7 +17,17 @@ export function resultItem(task, status) {
     const id = `background-result:${hash({ key: task.key, status })}`;
     const origin = task.surface === 'remote' ? `원격 작업 ${task.jobId}`
         : task.surface === 'delivery' ? `배포 ${task.jobId}` : '백그라운드 명령 실행 결과';
-    const message = `${origin}: ${LABELS[status]}.`
+    const delivery = task.surface === 'delivery';
+    const label = delivery && task.recovered && status === 'completed' ? '복구 후 성공' : LABELS[status];
+    const details = delivery ? [
+        task.stage ? Object.hasOwn(DELIVERY_STAGES, task.stage) ? DELIVERY_STAGES[task.stage] : '단계 확인 필요' : null,
+        Number.isSafeInteger(task.attempt) && task.attempt > 0 ? `${task.attempt}회차` : null,
+    ].filter(Boolean) : [];
+    const message = `${origin}: ${label}.`
+        + (details.length ? ` (${details.join(', ')})` : '')
+        + (delivery && status === 'failed' && task.reason
+            ? ` 원인: ${Object.hasOwn(DELIVERY_REASONS, task.reason)
+                ? DELIVERY_REASONS[task.reason] : DELIVERY_REASONS['stage-failed']}.` : '')
         + (status === 'unknown' ? ' 상태 확인이 필요하며 원래 명령은 자동 재실행하지 않았어.' : '');
     // 원격·배포 실패와 결과 유실은 계속 경고한다.
     const warning = status === 'unknown' || (task.surface !== 'shell' && status === 'failed');
@@ -26,7 +37,7 @@ export function resultItem(task, status) {
 export function saveObservation(record, task, status, now = Date.now()) {
     const rows = [];
     if (!['running', 'unknown', ...TERMINAL].includes(status)) throw new Error('Invalid background result');
-    const item = status === 'running' ? null : resultItem(task, status);
+    const item = status === 'running' && task.surface !== 'delivery' ? null : resultItem(task, status);
     if (item) {
         const key = hash(item.id);
         if (!record.receipts[key]) {
@@ -122,11 +133,12 @@ export function createBackgroundResults({ stateRoot, paseoHome, dataRoot, contro
         return update(bridgeId, record => {
             record.backgroundTasks ||= {};
             if (input.action === 'status') {
-                return { changed: false, value: { tasks: Object.values(record.backgroundTasks)
+                return { changed: false, value: { deliveryReportVersion: 2, tasks: Object.values(record.backgroundTasks)
                     .map(({ url, ...task }) => ({ ...task, ai: 'not-requested', clientReceived: null })) } };
             }
             if (input.action === 'delivery') {
-                const task = { key: input.eventId, surface: 'delivery', jobId: input.jobId };
+                const task = { key: input.eventId, surface: 'delivery', jobId: input.jobId,
+                    stage: input.stage, attempt: input.attempt, reason: input.reason, recovered: input.recovered };
                 const rows = saveObservation(record, task, input.status);
                 return { changed: rows.length > 0, rows, value: { journalSaved: true,
                     epoch: record.backgroundEpoch || 0, clientReceived: null } };

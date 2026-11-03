@@ -15,7 +15,9 @@ import { restartDesktop } from './release-apply.mjs';
 import { verifyReleaseSource } from './release-verification.mjs';
 import { releasePreflight } from './release-preflight.mjs';
 import release from '../plugin/shared/release.json' with { type: 'json' };
-import { registerDeliveryReport, settleDeliveryReport, validateDeliveryAgentId } from '../plugin/server/delivery-notifications.mjs';
+import { registerDeliveryReport, resumeDeliveryReport, settleDeliveryReport, validateDeliveryAgentId } from '../plugin/server/delivery-notifications.mjs';
+import { releaseEnvironment } from './release-environment.mjs';
+import { deliveryFailureReason } from '../plugin/server/delivery-status.mjs';
 
 const self = fileURLToPath(import.meta.url);
 const phases = ['verify', 'build', 'artifacts', 'github-draft', 'github-upload',
@@ -39,6 +41,7 @@ export function validateReleaseConfig(input) {
         || config.appTests.some(path => !/^src\/[\w./-]+\.(test|spec)\.tsx?$/.test(path) || path.includes('..')))
         throw new Error('appTests must explicitly name affected app tests');
     config.targets = validateTargets(config.targets);
+    releaseEnvironment(config);
     if (config.notifyAgentId !== undefined) validateDeliveryAgentId(config.notifyAgentId);
     // 데몬 업데이터는 호스트 프로필에 둘 다 있을 때만 배포가 직접 실행한다.
     if ((config.updaterRoot === undefined) !== (config.updaterUnit === undefined)
@@ -65,13 +68,13 @@ export async function waitForIdle(list, { sleep = ms => new Promise(resolve => s
     }
 }
 
-export function detachedCommand(configPath, workspace) {
+export function detachedCommand(configPath, workspace, env = process.env) {
     const id = createHash('sha256').update(workspace).digest('hex').slice(0, 12);
     const args = ['--user', `--unit=paseodog-delivery-${id}`, '--collect',
         '-p', `StandardOutput=append:${join(workspace, 'delivery.log')}`,
         '-p', `StandardError=append:${join(workspace, 'delivery.log')}`];
     for (const key of ['PATH', 'ANDROID_HOME', 'DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY', 'DBUS_SESSION_BUS_ADDRESS'])
-        if (process.env[key]) args.push(`--setenv=${key}=${process.env[key]}`);
+        if (env[key]) args.push(`--setenv=${key}=${env[key]}`);
     return ['systemd-run', [...args, process.execPath, self, '--config', configPath, '--execute']];
 }
 
@@ -112,7 +115,7 @@ export async function startDelivery(configPath, config, { run = runCommand, repo
         const report = await registerDeliveryReport(reportRoot, { workspace: config.workspace, agentId });
         console.log(`Delivery result report registered: ${report.id}`);
     }
-    const [command, args] = detachedCommand(configPath, config.workspace);
+    const [command, args] = detachedCommand(configPath, config.workspace, releaseEnvironment(config));
     try { await run(command, args); }
     catch (error) {
         try { await settleDeliveryReport(reportRoot, config.workspace, 'failed'); }
@@ -123,12 +126,17 @@ export async function startDelivery(configPath, config, { run = runCommand, repo
 
 export async function executeDelivery(config, { preflight = releasePreflight, deliver = deliverRelease,
     reportRoot = journalRoot, retryStage } = {}) {
-    let result;
+    let result, phase = 'preflight';
     try {
+        await resumeDeliveryReport(reportRoot, config.workspace);
         await preflight(config);
+        phase = 'delivery';
         result = await deliver(config, { retryStage });
     } catch (error) {
-        try { await settleDeliveryReport(reportRoot, config.workspace, 'failed'); }
+        try { await settleDeliveryReport(reportRoot, config.workspace, 'failed', {
+            stage: phase === 'preflight' ? 'preflight' : undefined,
+            reason: deliveryFailureReason(error, phase === 'preflight' ? 'preflight-failed' : 'stage-failed'),
+        }); }
         catch (reportError) { throw new AggregateError([error, reportError], 'Delivery and result persistence failed'); }
         throw error;
     }
@@ -186,6 +194,10 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
     build = buildRelease, verifyArtifacts = verifyReleaseArtifacts, launchDesktop = restartDesktop, sleep,
     installedRelease = () => readFile('/opt/PaseoDog/resources/paseodog-runtime/plugin/shared/release.json', 'utf8').then(JSON.parse) } = {}) {
     const config = validateReleaseConfig(input);
+    const env = releaseEnvironment(config);
+    const runWithEnvironment = (command, args, options = {}) => run(command, args, {
+        ...options, env: releaseEnvironment(config, options.env ?? env),
+    });
     const { workspace, version, versionCode } = config;
     await mkdir(workspace, { recursive: true, mode: 0o700 });
     // 같은 workspace에 대한 중복 실행은 상태 파일을 만지기 전에 거부한다.
@@ -194,7 +206,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
     await lock.writeFile(String(process.pid));
     let browserExport;
     try {
-        const capture = (command, args, cwd = root) => run(command, args, { cwd, capture: true });
+        const capture = (command, args, cwd = root) => runWithEnvironment(command, args, { cwd, capture: true });
         const commit = (await capture('git', ['rev-parse', 'HEAD'])).trim();
         if ((await capture('git', ['status', '--porcelain'])).trim()) throw new Error('Release requires a clean checkout');
         const remote = (await capture('git', ['ls-remote', 'origin', 'refs/heads/main'])).split(/\s/)[0];
@@ -202,7 +214,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
         const { stage } = await openReleaseState(workspace, { commit, config,
             signingInitHash: await fileHash(config.signingInit), previousApkHash: await fileHash(config.previousApk) }, { retryStage });
         const execute = (name, command, args, cwd = root, env = process.env) =>
-            run(command, args, { cwd, env, log: join(workspace, `${name}.log`) });
+            runWithEnvironment(command, args, { cwd, env, log: join(workspace, `${name}.log`) });
         const tag = `v${version}`;
         const wrapper = [join(root, 'bin/paseodog.mjs')];
         const listAgents = async () => JSON.parse(await capture(process.execPath, [...wrapper, 'agent', 'ls', '--json']));
@@ -224,7 +236,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             if (keyLines.length !== 1 || !keyLines[0].includes(config.signingKey))
                 throw new Error('Signing init does not reference the existing approved key');
             await stat(config.signingKey);
-            await verifyReleaseSource(config, run);
+            await verifyReleaseSource(config, runWithEnvironment);
             await assertSource();
         });
         // verify 직후 알린다. 버전 커밋 push로 먼저 시작한 업데이터도 같은 리비전의 root 테스트를 건너뛴다.
@@ -254,7 +266,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
             })()]);
         };
         // buildRelease의 각 단계가 자체 체크포인트·산출물 해시를 갖는다.
-        await build({ ...config, targets, checkpoint: stage, onBrowserReady: startBrowserExport });
+        await build({ ...config, env, targets, checkpoint: stage, onBrowserReady: startBrowserExport });
         startBrowserExport();
         await assertSource();
         if (targets.android) await stage('android-manifest', () => execute('android-manifest', 'python3', [
@@ -271,7 +283,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
                     '--dir', join(workspace, 'carry'), '--clobber', ...carried.flatMap(name => ['--pattern', name])]);
             }, { artifacts: carried.map(name => join(workspace, 'carry', name)) });
             // 업로드 직전마다 서명·해시를 다시 확인해 재개 사이 산출물 변조를 차단한다.
-            uploadAssets = await verifyArtifacts(config, run, plan);
+            uploadAssets = await verifyArtifacts(config, runWithEnvironment, plan);
             expected = Object.fromEntries(await Promise.all(uploadAssets.map(async path => [basename(path), (await stat(path)).size])));
             await stage('github-draft', () => execute('github-draft', 'gh', ['release', 'create', tag, '--draft',
                 '--repo', config.repo, '--target', commit, '--title', `PaseoDog ${version}`, '--notes-file', join(root, 'CHANGELOG.md')]),
@@ -342,7 +354,7 @@ export async function deliverRelease(input, { run = runCommand, retryStage, chec
         }
         if (targets.desktop) {
             await waitForApply();
-            await stage('pc-launch', () => launchDesktop(config, run), { mutation: true });
+            await stage('pc-launch', () => launchDesktop(config, runWithEnvironment), { mutation: true });
             const desktopRelease = await installedRelease();
             if (desktopRelease.versionCode !== Number(versionCode)) throw new Error('Installed desktop version mismatch');
         }
