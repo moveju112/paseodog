@@ -16,6 +16,7 @@ export const runtimeFiles = [
     'patches/effort-usage.mjs', 'patches/default-output-style.mjs', 'patches/compaction-summary-route.mjs',
     'patches/session-title-route.mjs', 'patches/builtin-agents.mjs',
     'patches/agent-editor-safety.mjs', 'patches/work-method-rules.mjs',
+    'patches/mixdog-stability.mjs', 'patches/mixdog-stability.json',
     'android/packages/server/src/server/agent/agent-message-policy.ts',
 ];
 

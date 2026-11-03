@@ -242,7 +242,7 @@ test('agent patch rejects drift and partial patches, accepts only exact idempote
         if (spec.edits.length > 1) {
             const previousCounts = (spec.previousEditCounts || [spec.previousEditCount]).filter(Boolean);
             for (let count = 1; count < spec.edits.length; count++) {
-                const partial = spec.edits.slice(0, count).reduce((text, edit) => text.replace(...edit), source);
+                const partial = spec.edits.slice(0, count).reduce((text, [before, after]) => text.replace(before, () => after), source);
                 if (previousCounts.includes(count)) assert.equal(patchedAgentSource(partial, fixtureSpec), patched);
                 else assert.throws(() => patchedAgentSource(partial, fixtureSpec), /Partial/);
             }
