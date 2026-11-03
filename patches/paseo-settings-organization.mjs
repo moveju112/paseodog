@@ -36,6 +36,11 @@ const durationSource = stripTypeScriptTypes(readFileSync(new URL(
     '../android/packages/app/src/screens/settings/turn-duration-settings.ts', import.meta.url), 'utf8'))
     .replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '');
 const durationComponent = `const PaseodogTurnDurationSettings=(()=>{const {createElement,useCallback,useEffect,useRef,useState}=u,{View}=n,{Text}=o,{Pressable}=r,{AdaptiveTextInput}=_r(3930),{settingsStyles}=S,{useHostRuntimeClient,useHostRuntimeIsConnected}=_r(3762);${durationSource};return TurnDurationSettings})();`;
+const computerSource = stripTypeScriptTypes(readFileSync(new URL(
+    '../android/packages/app/src/screens/settings/computer-use-settings.ts', import.meta.url), 'utf8'))
+    .replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '');
+const computerComponent = `const PaseodogComputerUseSettings=(()=>{const {createElement,useCallback,useEffect,useRef,useState}=u,{View}=n,{Text}=o,{Pressable}=r,{Switch}=w,{settingsStyles}=S,{useHostRuntimeClient,useHostRuntimeIsConnected}=_r(3762),{openExternalUrl}=_r(3916);${computerSource};return ComputerUseSettings})();`;
+const computerRow = 'e.section==="tools"?u.createElement(PaseodogComputerUseSettings,{key:"computer:"+e.serverId,serverId:e.serverId}):null,';
 const engineAnchor = '_e.AiEnginePage=function(e){';
 const engineWrapper = `_e.AiEnginePage=function(e){return u.createElement(n.View,{style:{gap:16}},u.createElement(PaseodogBaseAiEnginePage,e),e.section==="workflow"?u.createElement(PaseodogTurnDurationSettings,{key:"duration:"+e.serverId,serverId:e.serverId}):null,e.section==="workflow"?u.createElement(PaseodogAgentMessageSettings,{key:e.serverId,serverId:e.serverId}):null)};function PaseodogBaseAiEnginePage(e){`;
 const previousEngineWrapper = `_e.AiEnginePage=function(e){return u.createElement(n.View,{style:{gap:16}},u.createElement(PaseodogBaseAiEnginePage,e),e.section==="workflow"?u.createElement(PaseodogAgentMessageSettings,{key:e.serverId,serverId:e.serverId}):null)};function PaseodogBaseAiEnginePage(e){`;
@@ -46,10 +51,17 @@ const edits = [
     ['children:[pe,Te,ke,Ve]', 'children:[pe,...(Q?.enabled?[Te,ke,Ve]:[])]'],
     ['handlePlaybackTest:Se});case"about"', 'handlePlaybackTest:Se,serverId:ge});case"about"'],
     [originalDiagnostics, wrappedDiagnostics],
+    // 기존 삽입 뒤에 덧붙여 컴퓨터 사용 이전 릴리즈도 같은 순서로 해제·재적용된다.
+    ['const PaseodogAgentMessageSettings=', `${computerComponent}const PaseodogAgentMessageSettings=`],
+    ['u.createElement(PaseodogBaseAiEnginePage,e),', `u.createElement(PaseodogBaseAiEnginePage,e),${computerRow}`],
 ];
 
 export function withoutSettingsOrganization(source) {
     source = withoutLegacySpeechSettings(source);
+    const computerComponents = source.split(computerComponent).length - 1;
+    const computerRows = source.split(computerRow).length - 1;
+    if (computerComponents > 1 || computerRows > 1 || computerComponents !== computerRows)
+        throw new Error('Partial computer settings organization patch');
     for (const [before, after] of [...edits].reverse()) source = source.replace(after, () => before);
     // 직전 릴리즈의 두 삽입 지점이 모두 일치할 때만 해제한다. 최종 원본 blob 검증은 유지한다.
     const previousComponent = `${messageComponent}const k=[{value:"none",label:`;

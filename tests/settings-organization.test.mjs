@@ -33,6 +33,20 @@ test('settings organization remains hash-gated, reversible and idempotent', () =
     assert.throws(() => withSettingsOrganization(''), /anchor mismatch/);
 });
 
+test('computer settings upgrade the previous bundle and reject partial or changed insertions', () => {
+    const current = withoutSettingsLayout(patched);
+    const start = current.indexOf('const PaseodogComputerUseSettings=');
+    const end = current.indexOf('const PaseodogAgentMessageSettings=', start);
+    assert.ok(start > 0 && end > start);
+    const component = current.slice(start, end);
+    const row = 'e.section==="tools"?u.createElement(PaseodogComputerUseSettings,{key:"computer:"+e.serverId,serverId:e.serverId}):null,';
+    const previous = current.replace(component, '').replace(row, '');
+    assert.equal(patchedComposerSource(previous), patched);
+    assert.throws(() => patchedComposerSource(current.replace(component, '')), /Partial|hash mismatch/);
+    assert.throws(() => patchedComposerSource(current.replace(row, '')), /Partial|hash mismatch/);
+    assert.throws(() => patchedComposerSource(current.replace('기본은 꺼짐이에요.', 'unexpected drift')), /Partial|hash mismatch/);
+});
+
 test('previous workflow settings upgrade without accepting partial patches or source drift', () => {
     const previousLayout = withoutSettingsLayout(patched);
     const durationStart = previousLayout.indexOf('const PaseodogTurnDurationSettings=');

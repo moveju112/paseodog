@@ -19,7 +19,7 @@ test('bypass skips approval for tools but preserves upstream denies and host res
     const session = makeSession();
     session.beforeToolHook = async (input) => input.name === 'blocked'
         ? { action: 'block', reason: 'upstream block' } : { action: 'ask' };
-    attachHostPolicy(session, { mode: 'bypass', orchestration: true });
+    attachHostPolicy(session, { mode: 'bypass', orchestration: true, computerUseEnabled: () => true });
     for (const name of ['read', 'glob', 'write', 'shell', 'mcp_test', 'agent', 'task', 'setup', 'computer', 'goal']) {
         const args = { command: 'printf test' };
         const decision = await session.beforeToolHook({ name, args });
@@ -69,7 +69,7 @@ test('tool categories follow session approval modes and preserve native restrict
         'setup', 'computer', 'goal', 'automation', 'schedule', 'scheduler']) {
         for (const [mode, action] of [['ask', 'ask'], ['review', 'deny'], ['bypass', 'rewrite']]) {
             const session = makeSession();
-            attachHostPolicy(session, { mode });
+            attachHostPolicy(session, { mode, computerUseEnabled: () => true });
             const args = { action: 'create', prompt: 'test' };
             const decision = await session.beforeToolHook({ name, args });
             assert.equal(decision.action, action);

@@ -3,6 +3,7 @@ import { createJsonLineDecoder, encodeFrame } from './json-lines.mjs';
 import { deadline, engineEnvironment } from './util.mjs';
 import { createQuotaRefreshPolicy } from './quota-refresh.mjs';
 import { readTurnMinutes, writeTurnMinutes } from './turn-duration.mjs';
+import { computerUseStatus, writeComputerUse } from './computer-use.mjs';
 
 // 상주형 제어 프로세스와 통신하는 경량 JSONL 클라이언트를 생성한다.
 function createControlDaemon({ launch, spawnProcess, terminateProcess }) {
@@ -210,9 +211,14 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
                     writeTurnMinutes(launch.env, request.maxTurnMinutes);
                     request = { action: 'read' };
                 }
+                // 엔진 프로필을 열지 않고 호스트 토글과 데스크톱 bridge 상태만 다룬다.
+                if (request.action === 'computerUse') {
+                    if (request.enabled !== undefined) writeComputerUse(launch.env, request.enabled);
+                    return { computerUse: computerUseStatus(launch.env) };
+                }
                 const snapshot = await invokeControls(request);
                 if (request.action === 'messagePolicy' || request.action === 'title') return snapshot;
-                return { ...snapshot, maxTurnMinutes: readTurnMinutes(launch.env) };
+                return { ...snapshot, maxTurnMinutes: readTurnMinutes(launch.env), computerUse: computerUseStatus(launch.env) };
             });
             queue = run.catch(() => {});
             return run;
