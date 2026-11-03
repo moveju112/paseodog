@@ -104,6 +104,11 @@ const edits = [
     ['case"diagnostics":return(0,Pe.jsx)(Me,{', 'case"diagnostics":return c.createElement(c.Fragment,null,c.createElement(paseodogDiagnosticTarget,{serverId:ge}),c.createElement(Me,{'],
     ['handlePlaybackTest:Se,serverId:ge});case"about"', 'handlePlaybackTest:Se,serverId:ge}));case"about"'],
     ['function Me(e){const section=PaseodogBaseDiagnostics(e)', `function paseodogDiagnosticTarget({serverId}){const hosts=L.useHosts(),{t}=S.useTranslation();return c.createElement(s.Text,{style:ae.settingsStyles.rowHint,testID:"diagnostic-host-target"},t("settings.diagnosticTarget",{host:hosts.find(host=>host.serverId===serverId)?.label??t("settings.noDiagnosticHost")}))}function Me(e){const section=PaseodogBaseDiagnostics(e)`],
+    // 터미널 스크롤백 줄 수는 앱 소스와 같이 10000으로 고정하고 설정 메뉴·경로를 뺀다.
+    ['{id:"chat",labelKey:"settings.sections.chat",icon:f.MessageSquare,Content:_.ChatSection},{id:"terminal",labelKey:"settings.sections.terminal",icon:f.SquareTerminal,Content:P.TerminalSection},',
+        '{id:"chat",labelKey:"settings.sections.chat",icon:f.MessageSquare,Content:_.ChatSection},/* PaseoDog fixed terminal scrollback */'],
+    ['"chat","terminal","browser"', '"chat","browser"'],
+    ['scrollbackLines:ue.terminalScrollbackLines,', 'scrollbackLines:1e4,'],
 ];
 
 // 번역 리소스의 문자열 객체를 그대로 사용해 앱·웹 메뉴 이름이 갈라지지 않게 한다.

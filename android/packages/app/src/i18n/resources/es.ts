@@ -2138,7 +2138,6 @@ export const es: TranslationResources = {
       chat: "Chat",
       appearance: "Apariencia",
       sidebar: "Barra lateral",
-      terminal: "Terminal",
       browser: "Navegador",
       editor: "Editor",
       shortcuts: "Atajos",
@@ -2242,11 +2241,6 @@ export const es: TranslationResources = {
           inApp: "EnPaseo",
           external: "Navegador externo",
         },
-      },
-      terminalScrollback: {
-        label: "Historial de terminal",
-        description: "Líneas mantenidas en el búfer de terminal incorporado",
-        accessibilityLabel: "Líneas del historial de terminal",
       },
       autoExpandReasoning: {
         label: "Siempre expandir razonamiento",

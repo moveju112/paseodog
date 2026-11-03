@@ -101,6 +101,8 @@ interface TerminalPaneProps {
 const TERMINAL_REFIT_DELAYS_MS = [0, 48, 144, 320];
 const TERMINAL_RESIZE_DEBOUNCE_MS = 100;
 const TERMINAL_KEY_BAR_MAX_WIDTH = 880;
+// 내장 터미널 버퍼 줄 수는 사용자 설정 없이 고정한다.
+const TERMINAL_SCROLLBACK_LINES = 10_000;
 
 const MODIFIER_LABELS = {
   ctrl: "Ctrl",
@@ -1074,7 +1076,7 @@ export function TerminalPane({
             supportsTerminalInputModeReplay={supportsTerminalInputModeReplay}
             testId="terminal-surface"
             xtermTheme={xtermTheme}
-            scrollbackLines={settings.terminalScrollbackLines}
+            scrollbackLines={TERMINAL_SCROLLBACK_LINES}
             fontFamily={terminalFontFamily}
             fontSize={settings.codeFontSize}
             keyboardInset={keyboardInset}

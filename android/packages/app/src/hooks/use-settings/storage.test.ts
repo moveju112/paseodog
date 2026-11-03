@@ -14,7 +14,6 @@ import {
   loadAppSettingsFromStorage,
   loadSettingsFromStorage,
   parseClampedFontSize,
-  parseTerminalScrollbackLines,
   resolveContentMaxWidth,
   saveAppSettings,
   type SettingsDeps,
@@ -540,18 +539,6 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.useLegacyTerminalRenderer).toBe(true);
   });
 
-  it("loads configured terminal scrollback lines from app settings", async () => {
-    const deps = makeDeps({
-      storage: createInMemoryKeyValueStorage({
-        [APP_SETTINGS_KEY]: JSON.stringify({ terminalScrollbackLines: 42_000 }),
-      }),
-    });
-
-    const result = await loadAppSettingsFromStorage(deps);
-
-    expect(result.terminalScrollbackLines).toBe(42_000);
-  });
-
   it("loads configured workspace title source from app settings", async () => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({
@@ -574,18 +561,6 @@ describe("loadAppSettingsFromStorage", () => {
     const result = await loadAppSettingsFromStorage(deps);
 
     expect(result.workspaceTitleSource).toBe("title");
-  });
-
-  it("normalizes terminal scrollback lines from storage", async () => {
-    const deps = makeDeps({
-      storage: createInMemoryKeyValueStorage({
-        [APP_SETTINGS_KEY]: JSON.stringify({ terminalScrollbackLines: 1_000_000.9 }),
-      }),
-    });
-
-    const result = await loadAppSettingsFromStorage(deps);
-
-    expect(result.terminalScrollbackLines).toBe(1_000_000);
   });
 
   it("migrates the legacy theme key into the new settings object", async () => {
@@ -910,26 +885,6 @@ describe("saveAppSettings", () => {
     });
   });
 
-  it("saves terminal scrollback through app settings persistence", async () => {
-    const deps = makeDeps({
-      storage: createInMemoryKeyValueStorage({
-        [APP_SETTINGS_KEY]: JSON.stringify(DEFAULT_CLIENT_SETTINGS),
-      }),
-    });
-    const queryClient = new QueryClient();
-
-    await saveAppSettings({
-      queryClient,
-      updates: { terminalScrollbackLines: 42_000 },
-      deps,
-    });
-
-    expect(JSON.parse(deps.storage.entries.get(APP_SETTINGS_KEY) ?? "null")).toEqual({
-      ...DEFAULT_CLIENT_SETTINGS,
-      terminalScrollbackLines: 42_000,
-    });
-  });
-
   it("normalizes a legacy cached settings shape before saving", async () => {
     const deps = makeDeps();
     const queryClient = new QueryClient();
@@ -977,13 +932,6 @@ describe("saveAppSettings", () => {
     await saveAppSettings({ queryClient, updates: { sidebarRowItems }, deps });
 
     expect((await loadAppSettingsFromStorage(deps)).sidebarRowItems).toEqual(sidebarRowItems);
-  });
-});
-
-describe("parseTerminalScrollbackLines", () => {
-  it("clamps negative values to the minimum and rejects non-numeric strings", () => {
-    expect(parseTerminalScrollbackLines("-10")).toBe(0);
-    expect(parseTerminalScrollbackLines("abc")).toBeNull();
   });
 });
 

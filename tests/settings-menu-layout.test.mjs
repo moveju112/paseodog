@@ -121,6 +121,31 @@ test('all supported host pages have unique menu entries, including restored and 
     for (const id of hostSlugs) assert.ok(id === 'engine-agents' || nativeItems.some(item => item.id === id), id);
 });
 
+// 터미널 스크롤백은 설정 없이 10000줄로 고정하고, 앱·웹 모두 메뉴와 경로에서 뺀다.
+test('app and web fix terminal scrollback at 10000 lines without a settings section', () => {
+    const native = nativeScreen.match(/const SIDEBAR_SECTION_ITEMS: SidebarSectionItem\[\] = (\[[\s\S]*?\n\]);/)[1];
+    const nativeIds = [...native.matchAll(/id: "([\w-]+)"/g)].map(([, id]) => id);
+    const webStart = bundle.indexOf('const Ve=[');
+    const webItems = bundle.slice(webStart, bundle.indexOf(';function De(e,t)', webStart));
+    const webIds = [...webItems.matchAll(/\{id:"([\w-]+)",labelKey/g)].map(([, id]) => id);
+    assert.deepEqual(webIds, nativeIds);
+    assert.ok(nativeIds.includes('chat') && !nativeIds.includes('terminal'));
+    const nativeSlugs = Array.from(runInNewContext(read('android/packages/app/src/utils/host-routes.ts')
+        .match(/export const SETTINGS_SECTION_SLUGS = (\[[\s\S]*?\]) as const;/)[1]));
+    const routes = webModule(3905, { 52: { Buffer }, 3906: {} });
+    assert.deepEqual(nativeSlugs, nativeIds);
+    assert.deepEqual(nativeSlugs.filter(routes.isSettingsSectionSlug), nativeSlugs);
+    assert.equal(routes.isSettingsSectionSlug('terminal'), false);
+
+    const pane = read('android/packages/app/src/components/terminal-pane.tsx');
+    assert.equal(Number(pane.match(/const TERMINAL_SCROLLBACK_LINES = ([\d_]+);/)[1].replaceAll('_', '')), 10000);
+    assert.match(pane, /scrollbackLines=\{TERMINAL_SCROLLBACK_LINES\}/);
+    const webPane = bundle.split('\n__d(').filter(part => part.includes('testId:"terminal-surface"'));
+    assert.equal(webPane.length, 1);
+    assert.equal(runInNewContext(webPane[0].match(/scrollbackLines:([^,]+),/)[1]), 10000);
+    for (const surface of [pane, webPane[0]]) assert.equal(surface.includes('terminalScrollbackLines'), false);
+});
+
 test('app and web routes retain every host-specific control at its new destination', () => {
     const names = ['AiEnginePage', 'HostAgentsPage', 'HostToolsSection', 'HostSkillsSection',
         'AppendSystemPromptCard', 'SettingsSection', 'HostProvidersPage', 'MetadataGenerationPage',

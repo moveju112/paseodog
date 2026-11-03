@@ -24,7 +24,6 @@ const SECTION_LABELS = {
   appearance: "Appearance",
   sidebar: "Sidebar",
   editor: "Editor",
-  terminal: "Terminal",
   browser: "Browser",
   shortcuts: "Shortcuts",
   integrations: "Integrations",

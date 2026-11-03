@@ -2123,7 +2123,6 @@ export const ru: TranslationResources = {
       chat: "Чат",
       appearance: "Оформление",
       sidebar: "Боковая панель",
-      terminal: "Терминал",
       browser: "Браузер",
       editor: "Редактор",
       shortcuts: "Сочетания клавиш",
@@ -2226,11 +2225,6 @@ export const ru: TranslationResources = {
           inApp: "В Paseo",
           external: "Внешний браузер",
         },
-      },
-      terminalScrollback: {
-        label: "Буфер прокрутки терминала",
-        description: "Количество строк, сохраняемых во встроенном буфере терминала",
-        accessibilityLabel: "Количество строк в буфере прокрутки терминала",
       },
       autoExpandReasoning: {
         label: "Всегда разворачивать размышления",
