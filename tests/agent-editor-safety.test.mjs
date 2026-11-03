@@ -6,7 +6,7 @@ import { controlRuntime } from '../engine/src/controls.mjs';
 import { AGENT_PATCHES, gitBlob, patch, patchedAgentSource } from '../scripts/patch-mixdog.mjs';
 import { AGENT_EDITOR_SAFETY_PATCHES } from '../patches/agent-editor-safety.mjs';
 import { createAgentRouteApi } from '../engine/node_modules/mixdog/src/session-runtime/workflow-agents-api/agent-route.mjs';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { COMPOSER_FILE } from '../scripts/patch-paseo-composer.mjs';
 import { composerFixture } from './composer-fixture.mjs';
 import { withoutAgentEditorSafety, withAgentEditorSafety } from '../patches/paseo-agent-editor-safety.mjs';
 

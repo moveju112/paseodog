@@ -4,7 +4,7 @@ import { PassThrough } from 'node:stream';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, existsSync, readFileSync, rmSync, mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createJsonLineDecoder } from '../plugin/server/json-lines.mjs';
 import { serveWorker } from '../engine/src/worker.mjs';

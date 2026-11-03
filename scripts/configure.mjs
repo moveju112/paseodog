@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, lstatSync, copyFile
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { root, stateRoot, paseoHome, mixdogHome, journalRoot, worker } from './paths.mjs';
+import { paseoHome, mixdogHome, journalRoot, worker } from './paths.mjs';
 const DISABLED_BUILTIN_PROVIDERS = ['claude', 'codex', 'copilot', 'opencode', 'pi', 'omp', 'muse', 'antigravity'];
 
 // Mixdog 데이터 디렉터리에 기본 설정값(에이전트 전부 비활성, 지침 ON, 워크트리 OFF, 스킬 OFF)을 시드한다.

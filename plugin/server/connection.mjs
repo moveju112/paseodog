@@ -914,7 +914,7 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
         try {
             await deadline(Promise.resolve(turn.engine?.abort(reason)), stopMs, 'Engine abort timed out');
             if (turn.work) await deadline(Promise.resolve(turn.work).catch(() => {}), stopMs, 'Engine did not stop');
-        } catch (error) {
+        } catch {
             failSession(session, 'Engine force-stopped; external side effects are not rolled back');
             try { await turn.engine?.kill?.(); } catch (killError) {
                 notice(session, 'engine-kill-failed', `Failed to terminate worker group: ${errorText(killError)}`);

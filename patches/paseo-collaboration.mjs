@@ -172,7 +172,6 @@ LEGACY_COLLABORATION_SOURCES.forEach(({ source }, index) => {
     if (createHash('sha256').update(source).digest('hex') !== LEGACY_SHA256[index])
         throw new Error('Paseo collaboration legacy source changed; previous installs could not be removed exactly');
 });
-export const LEGACY_COLLABORATION_SOURCE = LEGACY_COLLABORATION_SOURCES[0].source;
 const PREVIOUS_COLLABORATION_SOURCE = COLLABORATION_STATE + `${collaborationMenu.toString()}
 // OCHE: 검토된 입력창 모듈의 React·기존 트리거·Combobox·lucide 아이콘·테마 훅을 그대로 쓴다.
 function PaseodogCollaboration(props){return (0,J.jsx)(collaborationMenu,{...props,React:s,jsx:J.jsx,jsxs:J.jsxs,View:n.View,Text:t.Text,Trigger:K.AgentControlTrigger,Combobox:A.Combobox,ComboboxItem:A.ComboboxItem,Icon:b.Users,useTheme:f.useUnistyles})}
