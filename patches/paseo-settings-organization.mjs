@@ -1,6 +1,26 @@
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
-import { withSpeechSettings, withoutSpeechSettings } from './paseo-speech-settings.mjs';
+import { createHash } from 'node:crypto';
+
+// 음성인식 제거 전 릴리즈가 넣은 설정 화면만 걷어내며 새로 적용하지 않는다.
+const legacySpeechComponents = new Set([
+    'a047a6384588c337a2d01416fe7b61174b888822b19a587c69bb3cba069416b5',
+    'e5023d4423d17b844bd29e740c32acb7041008d17fccb40ccb72e1b0687bd2f2',
+    '7c5147f49c4d8fcd9838c3926d68e37e1636a39a2fc177db4c2aa5ead4749a3a',
+]);
+const legacySpeechPattern = /const PaseodogSpeechSettings=\(\(\)=>\{[\s\S]*?;return SpeechSettings\}\)\(\);/g;
+const legacySpeechRow = 'e.section==="workflow"?u.createElement(PaseodogSpeechSettings,{key:"speech:"+e.serverId,serverId:e.serverId}):null,';
+
+export function withoutLegacySpeechSettings(source) {
+    const components = [...source.matchAll(legacySpeechPattern)];
+    const rows = source.split(legacySpeechRow).length - 1;
+    if (components.length > 1 || rows > 1 || components.length !== rows)
+        throw new Error('Partial previous speech settings patch');
+    if (!components.length) return source;
+    if (!legacySpeechComponents.has(createHash('sha256').update(components[0][0]).digest('hex')))
+        throw new Error('Speech settings source hash mismatch');
+    return source.replace(components[0][0], () => '').replace(legacySpeechRow, () => '');
+}
 
 // 앱과 고정 웹 번들이 같은 상세 UI를 사용하며 기존 진단·재생 동작은 유지한다.
 const detailsSource = stripTypeScriptTypes(readFileSync(new URL(
@@ -29,7 +49,7 @@ const edits = [
 ];
 
 export function withoutSettingsOrganization(source) {
-    source = withoutSpeechSettings(source);
+    source = withoutLegacySpeechSettings(source);
     for (const [before, after] of [...edits].reverse()) source = source.replace(after, () => before);
     // 직전 릴리즈의 두 삽입 지점이 모두 일치할 때만 해제한다. 최종 원본 blob 검증은 유지한다.
     const previousComponent = `${messageComponent}const k=[{value:"none",label:`;
@@ -47,5 +67,5 @@ export function withSettingsOrganization(source) {
         if (source.split(before).length !== 2) throw new Error('Paseo settings organization anchor mismatch');
         source = source.replace(before, () => after);
     }
-    return withSpeechSettings(source);
+    return source;
 }

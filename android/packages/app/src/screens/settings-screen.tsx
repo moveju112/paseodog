@@ -237,7 +237,6 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
     labelKey: "settings.hostSections.engineExecution",
     icon: SquareTerminal,
   },
-  { id: "engine-speech", labelKey: "settings.hostSections.engineSpeech", icon: Smartphone },
   { id: "engine-memory", labelKey: "settings.hostSections.engineMemory", icon: Sparkles },
   { id: "engine-tokens", labelKey: "settings.hostSections.engineTokens", icon: Sparkles },
   {
@@ -278,7 +277,6 @@ const STANDALONE_ENGINE_SECTIONS: Partial<Record<HostSectionSlug, EngineSection>
   "engine-tokens": "tokens",
   "engine-response": "response",
   "engine-execution": "execution",
-  "engine-speech": "speech",
   "engine-memory": "memory",
 };
 

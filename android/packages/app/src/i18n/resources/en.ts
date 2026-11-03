@@ -2187,7 +2187,6 @@ export const en = {
       engineWorkflow: "Workflows",
       engineResponse: "AI responses & profile",
       engineExecution: "Execution",
-      engineSpeech: "Speech",
       engineMemory: "Memory",
       engineTokens: "Context & tokens",
       engineInstructions: "Instructions & prompts",

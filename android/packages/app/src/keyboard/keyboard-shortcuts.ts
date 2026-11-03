@@ -194,14 +194,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "workspace-pane-close",
   ],
   layout: ["toggle-left-sidebar", "toggle-right-sidebar", "toggle-both-sidebars", "toggle-focus"],
-  "agent-input": [
-    "focus-message-input",
-    "cycle-agent-mode",
-    "voice-toggle",
-    "dictation-toggle",
-    "agent-interrupt",
-    "voice-mute-toggle",
-  ],
+  "agent-input": ["focus-message-input", "cycle-agent-mode", "agent-interrupt"],
 };
 
 const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
@@ -1086,56 +1079,7 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       label: "Cycle agent mode",
     },
   },
-  {
-    id: "message-input-voice-toggle-cmd-shift-d-mac",
-    action: "message-input.action",
-    combo: "Cmd+Shift+D",
-    repeat: false,
-    when: { mac: true, commandCenter: false, terminal: false },
-    payload: { type: "message-input", kind: "voice-toggle" },
-    help: {
-      id: "voice-toggle",
-      section: "agent-input",
-      label: "Toggle voice mode",
-    },
-  },
-  {
-    id: "message-input-voice-toggle-ctrl-shift-d-non-mac",
-    action: "message-input.action",
-    combo: "Ctrl+Shift+D",
-    repeat: false,
-    when: { mac: false, commandCenter: false, terminal: false },
-    payload: { type: "message-input", kind: "voice-toggle" },
-    help: {
-      id: "voice-toggle",
-      section: "agent-input",
-      label: "Toggle voice mode",
-    },
-  },
-  {
-    id: "message-input-dictation-toggle-cmd-d-mac",
-    action: "message-input.action",
-    combo: "Cmd+D",
-    when: { mac: true, commandCenter: false, terminal: false },
-    payload: { type: "message-input", kind: "dictation-toggle" },
-    help: {
-      id: "dictation-toggle",
-      section: "agent-input",
-      label: "Start/stop dictation",
-    },
-  },
-  {
-    id: "message-input-dictation-toggle-ctrl-d-non-mac",
-    action: "message-input.action",
-    combo: "Ctrl+D",
-    when: { mac: false, commandCenter: false, terminal: false },
-    payload: { type: "message-input", kind: "dictation-toggle" },
-    help: {
-      id: "dictation-toggle",
-      section: "agent-input",
-      label: "Start/stop dictation",
-    },
-  },
+  // PaseoDog은 받아쓰기·음성 모드를 지원하지 않으므로 해당 단축키를 등록하지 않는다.
   {
     id: "agent-interrupt",
     action: "agent.interrupt",
@@ -1155,20 +1099,6 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     combo: "Enter",
     when: { commandCenter: false, terminal: false },
     payload: { type: "message-input", kind: "dictation-confirm" },
-  },
-
-  {
-    id: "message-input-voice-mute-toggle",
-    action: "message-input.action",
-    combo: "Space",
-    repeat: false,
-    when: { commandCenter: false, focusScope: "other" },
-    payload: { type: "message-input", kind: "voice-mute-toggle" },
-    help: {
-      id: "voice-mute-toggle",
-      section: "agent-input",
-      label: "Mute/unmute voice mode",
-    },
   },
 ];
 

@@ -73,7 +73,7 @@ function enginePage(platform, request) {
         return runInNewContext(compile(nativeEngine) + ';AiEnginePage', {
             React, ...React, ...elements, isBasicAgent, settingsStyles: {},
             useAiEngineSettings: () => settings,
-            AgentMessageSettings: 'messages', TurnDurationSettings: 'duration', SpeechSettings: 'speech',
+            AgentMessageSettings: 'messages', TurnDurationSettings: 'duration',
         });
     }
     return webModule(5346, {
@@ -106,8 +106,9 @@ test('all supported host pages have unique menu entries, including restored and 
     });
     assert.deepEqual(Array.from(webItems, item => item.id), Array.from(nativeItems, item => item.id));
     assert.equal(new Set(nativeItems.map(item => item.id)).size, nativeItems.length);
-    const expected = ['agents', 'metadata', 'providers', 'plugins', 'engine-response', 'engine-execution', 'engine-speech', 'engine-memory'];
+    const expected = ['agents', 'metadata', 'providers', 'plugins', 'engine-response', 'engine-execution', 'engine-memory'];
     for (const id of expected) assert.ok(nativeItems.some(item => item.id === id), id);
+    assert.ok(!nativeItems.some(item => item.id === 'engine-speech'));
     const routes = read('android/packages/app/src/utils/host-routes.ts');
     const hostSlugs = runInNewContext(routes.match(/export const HOST_SECTION_SLUGS = (\[[\s\S]*?\]) as const;/)[1]);
     for (const id of hostSlugs) assert.ok(id === 'engine-agents' || nativeItems.some(item => item.id === id), id);
@@ -142,7 +143,6 @@ test('app and web routes retain every host-specific control at its new destinati
         'engine-tools': ['AiEnginePage:tools', 'HostToolsSection'],
         'engine-instructions': ['AiEnginePage:instructions', 'AppendSystemPromptCard'],
         'engine-skills': ['AiEnginePage:skills', 'HostSkillsSection'],
-        'engine-speech': ['AiEnginePage:speech'],
         'engine-response': ['AiEnginePage:response'],
         'engine-execution': ['AiEnginePage:execution'],
         'engine-memory': ['AiEnginePage:memory'],

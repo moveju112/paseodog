@@ -57,8 +57,11 @@ export function configure({home=paseoHome, enginePath=worker, nativeHome=mixdogH
         ? {...baseDaemon,agentProfiles:baseDaemon.agentProfiles.filter((profile)=>profile?.provider==='paseodog')}
         : baseDaemon;
     const {defaultProvider:_ignoredDefaultProvider,...restAgents}=previous.agents||{};
+    // 음성인식은 지원하지 않으므로 런처 밖에서 시작한 데몬도 받아쓰기·음성 모드를 쓰지 않게 저장한다.
+    const features={...previous.features,dictation:{...previous.features?.dictation,enabled:false},
+        voiceMode:{...previous.features?.voiceMode,enabled:false}};
     // Never add plugin source entries by hand: Paseo owns their install lifecycle.
-    const config={...previous,version:1,pluginsEnabled:true,daemon,
+    const config={...previous,version:1,pluginsEnabled:true,daemon,features,
         agents:{...restAgents,providers}};
     if(existsSync(file))copyFileSync(file,`${file}.backup-${Date.now()}-${randomUUID().slice(0,8)}`,constants.COPYFILE_EXCL);
     const temp=file+'.'+randomUUID()+'.tmp';writeFileSync(temp,JSON.stringify(config,null,2)+'\n',{mode:0o600,flag:'wx'});renameSync(temp,file);

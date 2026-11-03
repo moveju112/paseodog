@@ -55,7 +55,6 @@ const base=()=>paseodogPreviousHostContent(e,t);
 switch(e.section){
 case"engine-response":return page("response");
 case"engine-execution":return page("execution");
-case"engine-speech":return page("speech");
 case"engine-memory":return page("memory");
 case"engine-agents":case"agents":return c.createElement(c.Fragment,null,page("agents"),c.createElement(pe.HostAgentsPage,{serverId:e.serverId}));
 case"engine-tools":return c.createElement(c.Fragment,null,base(),c.createElement(pe.HostToolsSection,{serverId:e.serverId}));
@@ -78,11 +77,10 @@ const edits = [
     ['const Ae=' + previousHostItems, 'const Ae=' + hostItems],
     ['"mixdog-agents":{section:"workflow",hostSection:"engine-workflow"}', '"mixdog-agents":{section:"agents",hostSection:"agents"}'],
     ['function Re(e,t){switch(e.section)', hostContent],
-    ['const U=["engine-accounts","engine-workflow",', 'const U=["engine-response","engine-execution","engine-speech","engine-memory","engine-accounts","engine-workflow",'],
+    ['const U=["engine-accounts","engine-workflow",', 'const U=["engine-response","engine-execution","engine-memory","engine-accounts","engine-workflow",'],
     ['normalizeHostSectionSlug=function(t){if(C(t))', 'normalizeHostSectionSlug=function(t){if(t==="engine-agents")return"agents";if(C(t))'],
-    ['e.section==="workflow"?u.createElement(PaseodogSpeechSettings', 'e.section==="speech"?u.createElement(PaseodogSpeechSettings'],
     ['e.section==="workflow"?u.createElement(PaseodogTurnDurationSettings', 'e.section==="execution"?u.createElement(PaseodogTurnDurationSettings'],
-    ['u.createElement(PaseodogBaseAiEnginePage,e),', 'e.section==="speech"?null:u.createElement(PaseodogBaseAiEnginePage,{...e,key:e.serverId+":"+e.section}),'],
+    ['u.createElement(PaseodogBaseAiEnginePage,e),', 'u.createElement(PaseodogBaseAiEnginePage,{...e,key:e.serverId+":"+e.section}),'],
     ['function ie(e){const t=(0,c.c)(471)', engineLayout + 'function ie(e){const t=(0,c.c)(471)'],
     ['t[470]=ei):ei=t[470],ei}', 't[470]=ei):ei=t[470],paseodogWorkflowSection(e,ei)}'],
     ['function Se(t){const l=(0,c.c)(13)', sectionBody + 'const l=(0,c.c)(13)'],
@@ -113,12 +111,25 @@ function settingsCopy(locale) {
         noDiagnosticHost: JSON.parse(text.match(/\n    noDiagnosticHost:\s*("(?:[^"\\]|\\.)*"),/)[1]),
     };
 }
-for (const [locale, variable, tail, terminal] of [
-    ['en', 't', '},3119,[]);', 'Terminal display'],
-    ['ko', 'n', '},3124,[3119,3120]);', '터미널 표시'],
+// 음성인식 메뉴가 있던 직전 릴리즈의 배치는 해제만 지원한다.
+const legacySpeechItem = '{ id: "engine-speech", labelKey: "settings.hostSections.engineSpeech", icon:f.Smartphone },\n  ';
+const legacyEdits = [
+    ['const Ae=' + previousHostItems, 'const Ae=' + hostItems.replace('{ id: "engine-memory"', () => legacySpeechItem + '{ id: "engine-memory"')],
+    ['function Re(e,t){switch(e.section)', hostContent.replace('case"engine-memory"', () => 'case"engine-speech":return page("speech");\ncase"engine-memory"')],
+    ['const U=["engine-accounts","engine-workflow",', 'const U=["engine-response","engine-execution","engine-speech","engine-memory","engine-accounts","engine-workflow",'],
+    ['e.section==="workflow"?u.createElement(PaseodogSpeechSettings', 'e.section==="speech"?u.createElement(PaseodogSpeechSettings'],
+    ['u.createElement(PaseodogBaseAiEnginePage,e),', 'e.section==="speech"?null:u.createElement(PaseodogBaseAiEnginePage,{...e,key:e.serverId+":"+e.section}),'],
+];
+for (const [locale, variable, tail, terminal, speech] of [
+    ['en', 't', '},3119,[]);', 'Terminal display', 'Speech'],
+    ['ko', 'n', '},3124,[3119,3120]);', '터미널 표시', '음성'],
 ]) {
     const copy = settingsCopy(locale);
-    edits.push([tail, `;Object.assign(${variable}.settings,${JSON.stringify(copy)});${variable}.settings.sections.terminal=${JSON.stringify(terminal)};${tail}`]);
+    const injected = value => `;Object.assign(${variable}.settings,${JSON.stringify(value)});${variable}.settings.sections.terminal=${JSON.stringify(terminal)};${tail}`;
+    edits.push([tail, injected(copy)]);
+    const hostSections = Object.fromEntries(Object.entries(copy.hostSections)
+        .flatMap(entry => entry[0] === 'engineExecution' ? [entry, ['engineSpeech', speech]] : [entry]));
+    legacyEdits.push([tail, injected({ ...copy, hostSections })]);
 }
 
 export function withSettingsLayout(source) {
@@ -131,6 +142,7 @@ export function withSettingsLayout(source) {
 }
 
 export function withoutSettingsLayout(source) {
+    for (const [before, after] of [...legacyEdits].reverse()) source = source.replace(after, () => before);
     for (const [before, after] of [...edits].reverse()) source = source.replace(after, () => before);
     return source;
 }
