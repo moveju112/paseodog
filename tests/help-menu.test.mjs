@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Script } from 'node:vm';
-import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
+import { COMPOSER_FILE } from '../scripts/patch-paseo-composer.mjs';
 import { HELP_MENU, HELP_MENU_ANCHOR, withoutHelpMenu, withHelpMenu } from '../patches/paseo-help-menu.mjs';
 
 const installed = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
