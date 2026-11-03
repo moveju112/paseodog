@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { prepareRelease } from '../scripts/release-prepare.mjs';
-import { releasePreflight } from '../scripts/release-preflight.mjs';
+import { releasePreflight, releaseDependencyPaths, verifyReleaseDependencies } from '../scripts/release-preflight.mjs';
+import { releaseEnvironment } from '../scripts/release-environment.mjs';
 import { runCommand } from '../scripts/release-command.mjs';
 import { paseoHome, scratchPath } from '../scripts/paths.mjs';
 import { recordDeployment } from '../scripts/release-targets.mjs';
@@ -268,6 +269,71 @@ test('preflight rejects incompatible installed dependencies before test commands
     await assert.rejects(releasePreflight({ signingKey, signingInit, previousApk, androidTools },
         async () => { calls++; }, profile.sourceRoot), /differs from lockfile/);
     assert.equal(calls, 0);
+});
+
+test('preflight catches missing dependency files even when installed lock versions match', async t => {
+    const profile = await fixture(t);
+    const signingKey = join(profile.cacheRoot, 'key'), signingInit = join(profile.cacheRoot, 'init');
+    const previousApk = join(profile.cacheRoot, 'previous.apk'), androidTools = join(profile.cacheRoot, 'tools');
+    await mkdir(androidTools);
+    for (const path of [signingKey, previousApk, ...['apksigner', 'zipalign', 'aapt'].map(name => join(androidTools, name))])
+        await writeFile(path, 'fixture');
+    await writeFile(signingInit, `storeFile = file("${signingKey}")`);
+    for (const directory of ['engine', 'tools', 'plugin', 'android']) {
+        await mkdir(join(profile.sourceRoot, directory, 'node_modules'), { recursive: true });
+        for (const file of ['package-lock.json', 'node_modules/.package-lock.json'])
+            await writeFile(join(profile.sourceRoot, directory, file), JSON.stringify({ packages: {} }));
+    }
+    let calls = 0;
+    await assert.rejects(releasePreflight({ signingKey, signingInit, previousApk, androidTools },
+        async () => { calls++; }, profile.sourceRoot),
+    error => error.code === 'dependency-missing' && /Required dependency file/.test(error.message));
+    assert.equal(calls, 0);
+    for (const path of releaseDependencyPaths()) {
+        const full = join(profile.sourceRoot, path);
+        await mkdir(join(full, '..'), { recursive: true });
+        await writeFile(full, 'fixture');
+    }
+    await assert.rejects(releasePreflight({
+        signingKey, signingInit, previousApk, androidTools, androidHome: join(profile.cacheRoot, 'missing-sdk'),
+    }, async () => { calls++; }, profile.sourceRoot), { code: 'android-sdk-missing' });
+    assert.equal(calls, 0);
+});
+
+test('critical dependency checks use the actual Linux architecture and reject missing library or Vite files', async t => {
+    const profile = await fixture(t);
+    for (const arch of ['x64', 'arm64']) {
+        const root = join(profile.sourceRoot, arch), host = { platform: 'linux', arch };
+        for (const path of releaseDependencyPaths(host)) {
+            const full = join(root, path);
+            await mkdir(join(full, '..'), { recursive: true });
+            await writeFile(full, 'fixture');
+        }
+        await verifyReleaseDependencies(root, host);
+        const library = `android/node_modules/@typescript/native-preview-linux-${arch}/lib/lib.d.ts`;
+        await rm(join(root, library));
+        await assert.rejects(verifyReleaseDependencies(root, host),
+            error => error.code === 'dependency-missing' && error.message.includes(library));
+        await writeFile(join(root, library), 'fixture');
+        const client = 'android/node_modules/vite/dist/client/client.mjs';
+        await writeFile(join(root, client), '');
+        await assert.rejects(verifyReleaseDependencies(root, host),
+            error => error.code === 'dependency-missing' && error.message.includes(client));
+    }
+});
+
+test('release environment is profile-driven, idempotent and does not mutate the caller environment', () => {
+    const caller = { PATH: '/usr/bin:/approved/wine/bin', ANDROID_HOME: '/wrong/sdk', CI: '1' };
+    const config = { androidHome: '/approved/sdk', wineBin: '/approved/wine/bin' };
+    const env = releaseEnvironment(config, caller);
+    assert.equal(env.ANDROID_HOME, '/approved/sdk');
+    assert.equal(env.PATH, '/approved/wine/bin:/usr/bin');
+    assert.deepEqual(releaseEnvironment(config, env), env);
+    assert.equal(caller.ANDROID_HOME, '/wrong/sdk');
+    assert.equal(caller.PATH, '/usr/bin:/approved/wine/bin');
+    assert.deepEqual(releaseEnvironment({}, caller), caller);
+    for (const patch of [{ androidHome: 'relative' }, { androidHome: '/' }, { wineBin: false }])
+        assert.throws(() => releaseEnvironment(patch, caller), /absolute non-root path/);
 });
 
 test('parallel syntax checks keep JSON, JavaScript and shell failure reporting', async t => {

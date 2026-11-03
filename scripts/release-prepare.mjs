@@ -10,6 +10,7 @@ import { advanceReleaseVersion } from './release-version.mjs';
 import { desktopRootPids } from './release-apply.mjs';
 import { deliveryPlan, describePlan, validateTargets } from './release-targets.mjs';
 import { validateDeliveryAgentId } from '../plugin/server/delivery-notifications.mjs';
+import { releaseEnvironment } from './release-environment.mjs';
 
 // 준비된 전용 worktree만 전진시킨다. 의존성/Gradle/Metro 복사나 사용자 트리 정리는 하지 않는다.
 export async function prepareRelease(profile, commit, { run = runCommand, adopt = false, start = false, nextVersion = false,
@@ -17,6 +18,7 @@ export async function prepareRelease(profile, commit, { run = runCommand, adopt 
     notifyAgentId } = {}) {
     const requestStartedAt = new Date().toISOString();
     if (nextVersion && !start) throw new Error('--next-version requires --start');
+    const env = releaseEnvironment(profile);
     if (notifyAgentId !== undefined) validateDeliveryAgentId(notifyAgentId);
     if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('An exact pushed commit is required');
     targets = validateTargets(targets);
@@ -149,9 +151,6 @@ export async function prepareRelease(profile, commit, { run = runCommand, adopt 
             await rm(workspace, { recursive: true, force: true });
             throw error;
         }
-        const env = { ...process.env,
-            ...(profile.androidHome ? { ANDROID_HOME: profile.androidHome } : {}),
-            ...(profile.wineBin ? { PATH: profile.wineBin + delimiter + process.env.PATH } : {}) };
         const nativeChanged = await capture(['diff', '--name-only', before, commit, '--',
             'android/packages/app/app.config.js', 'android/packages/app/package.json',
             'android/package-lock.json', 'android/packages/app/plugins',

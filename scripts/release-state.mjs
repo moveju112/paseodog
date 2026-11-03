@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
+import { deliveryFailureReason } from '../plugin/server/delivery-status.mjs';
 
 export async function fileHash(path, algorithm = 'sha256', encoding = 'hex') {
     const hash = createHash(algorithm);
@@ -69,7 +70,8 @@ export async function openReleaseState(workspace, identity, { retryStage } = {})
                 return result;
             } catch (error) {
                 // 외부 명령의 출력은 단계 로그에만 둔다. 상태에는 자격증명·명령행을 복제하지 않는다.
-                state.stages[name] = { ...state.stages[name], status: 'failed', elapsedMs: Date.now() - started };
+                state.stages[name] = { ...state.stages[name], status: 'failed', elapsedMs: Date.now() - started,
+                    reason: deliveryFailureReason(error) };
                 await save();
                 throw error;
             }
