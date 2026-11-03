@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs';
 const screen = readFileSync(new URL('../android/packages/app/src/screens/settings-screen.tsx', import.meta.url), 'utf8');
 const hostItems = screen.match(/const HOST_SECTION_ITEMS: HostSectionItem\[\] = (\[[\s\S]*?\n\]);/)[1]
     .replace(/\bicon: (\w+)/g, 'icon:f.$1');
+const previousManagedHostItems = hostItems
+    .replace('  { id: "agents",', '  { id: "providers", labelKey: "settings.hostSections.providers", icon:f.Bot },\n  { id: "agents",')
+    .replace('  { id: "host",', '  { id: "plugins", labelKey: "settings.hostSections.plugins", icon:f.Puzzle },\n  { id: "host",');
 const previousHostItems = '[{id:"agents",labelKey:"settings.hostSections.agents",icon:f.Bot},{id:"engine-accounts",labelKey:"settings.hostSections.engineAccounts",icon:f.KeyRound},{id:"engine-workflow",labelKey:"settings.hostSections.engineWorkflow",icon:f.Workflow},{id:"engine-tokens",labelKey:"settings.hostSections.engineTokens",icon:f.Sparkles},{id:"engine-instructions",labelKey:"settings.hostSections.engineInstructions",icon:f.FileText},{id:"engine-tools",labelKey:"settings.hostSections.engineTools",icon:f.Puzzle},{id:"engine-skills",labelKey:"settings.hostSections.engineSkills",icon:f.Bot},{id:"host",labelKey:"settings.hostSections.host",icon:f.Server},{id:"projects",labelKey:"settings.hostSections.projects",icon:f.FolderGit2},{id:"workspaces",labelKey:"settings.hostSections.workspaces",icon:f.FolderGit2},{id:"usage",labelKey:"settings.hostSections.usage",icon:f.Gauge},{id:"terminals",labelKey:"settings.hostSections.terminals",icon:f.SquareTerminal},{id:"connections",labelKey:"settings.hostSections.connections",icon:f.Network},{id:"pair-device",labelKey:"openProject.tiles.pairDevice.title",icon:f.Smartphone}]';
 
 const engineLayout = `
@@ -14,8 +17,8 @@ function paseodogWorkflowSection(props,content){
     const profileCard=profile.props.children;
     const profileRows=profileCard.props.children;
     switch(props.section){
-        case "workflow":return u.createElement(u.Fragment,null,rules,u.createElement(paseodogOrchestration,{...orchestration.props,disabled:props.disabled}),rulesEditor);
-        case "agents":return u.createElement(u.Fragment,null,u.cloneElement(basic,{},basicHint,u.cloneElement(basicCard,{},roles)),u.cloneElement(agents,{title:"하위 에이전트"}),agentEditor);
+        case "workflow":return u.createElement(u.Fragment,null,rules,u.cloneElement(basic,{},basicHint,u.cloneElement(basicCard,{},roles)),u.createElement(paseodogOrchestration,{...orchestration.props,disabled:props.disabled}),rulesEditor,agentEditor);
+        case "agents":return u.createElement(u.Fragment,null,u.cloneElement(agents,{title:"하위 에이전트"}),agentEditor);
         case "tools":return u.createElement(u.Fragment,null,u.cloneElement(basic,{title:"웹 검색 모델"},u.cloneElement(basicCard,{},search)),searchEditor);
         case "response":return u.cloneElement(profile,{},u.cloneElement(profileCard,{},...profileRows.slice(0,3)));
         case "generation":return u.cloneElement(profile,{title:"세션 제목"},u.cloneElement(profileCard,{},profileRows[3]));
@@ -37,16 +40,15 @@ function paseodogToolsSection(props){
                 onValueChange:recap=>props.request({action:"features",recap})}));
         return u.cloneElement(content,{title:"메모리"},u.cloneElement(card,{},memory,recap));
     }
-    const local=props.scope==="providers";
-    return u.cloneElement(content,{title:local?"로컬 모델 확장":content.props.title},u.cloneElement(card,{},
-        local?null:web,...modules.filter(row=>(row.key==="localProvider")===local),
-        ...installs.filter(row=>(row.key==="install-localProvider")===local)));
+    return u.cloneElement(content,{},u.cloneElement(card,{},
+        web,...modules.filter(row=>row.key!=="localProvider"),
+        ...installs.filter(row=>row.key!=="install-localProvider")));
 }
 `;
 const sectionBody = `function Se(t){switch(t.section){
 case"workflow":case"agents":case"response":case"execution":case"generation":return u.createElement(ie,t);
 case"tools":return u.createElement(u.Fragment,null,u.createElement(paseodogToolsSection,t),u.createElement(ie,t));
-case"memory":case"providers":return u.createElement(paseodogToolsSection,{...t,scope:t.section});
+case"memory":return u.createElement(paseodogToolsSection,{...t,scope:t.section});
 default:return paseodogPreviousSectionBody(t);
 }}function paseodogPreviousSectionBody(t){`;
 const hostContent = `function Re(e,t){
@@ -61,7 +63,6 @@ case"engine-tools":return c.createElement(c.Fragment,null,base(),c.createElement
 case"engine-skills":return c.createElement(c.Fragment,null,base(),c.createElement(pe.HostSkillsSection,{serverId:e.serverId}));
 case"engine-instructions":return c.createElement(c.Fragment,null,base(),c.createElement(T.SettingsSection,{title:"공통 시스템 프롬프트"},c.createElement(pe.AppendSystemPromptCard,{serverId:e.serverId})));
 case"metadata":return c.createElement(c.Fragment,null,page("generation"),base());
-case"providers":return c.createElement(c.Fragment,null,page("providers"),base());
 default:return base();
 }}function paseodogPreviousHostContent(e,t){switch(e.section)`;
 const chatLayout = `function paseodogChatLayout(content,translate){
@@ -78,7 +79,13 @@ const edits = [
     ['"mixdog-agents":{section:"workflow",hostSection:"engine-workflow"}', '"mixdog-agents":{section:"agents",hostSection:"agents"}'],
     ['function Re(e,t){switch(e.section)', hostContent],
     ['const U=["engine-accounts","engine-workflow",', 'const U=["engine-response","engine-execution","engine-memory","engine-accounts","engine-workflow",'],
-    ['normalizeHostSectionSlug=function(t){if(C(t))', 'normalizeHostSectionSlug=function(t){if(t==="engine-agents")return"agents";if(C(t))'],
+    ['normalizeHostSectionSlug=function(t){if(C(t))', 'normalizeHostSectionSlug=function(t){if(t==="engine-agents")return"agents";if(t==="providers")return"engine-accounts";if(t==="plugins")return"host";if(C(t))'],
+    ['return`/settings/hosts/${f(o)}/${n}`', 'return`/settings/hosts/${f(o)}/${e.normalizeHostSectionSlug(n)}`'],
+    ['"workspaces","providers","usage","terminals","plugins","host"]', '"workspaces","usage","terminals","host"]'],
+    ['case"workspaces":return(0,Pe.jsx)(pe.HostWorkspacesPage,{serverId:e.serverId});case"providers":return(0,Pe.jsx)(pe.HostProvidersPage,{serverId:e.serverId});case"usage":',
+        'case"workspaces":return(0,Pe.jsx)(pe.HostWorkspacesPage,{serverId:e.serverId});case"usage":'],
+    ['case"plugins":return(0,Pe.jsx)(ye.HostPluginsPage,{serverId:e.serverId});case"host":return(0,Pe.jsx)(pe.HostSettingsPage,{serverId:e.serverId,onHostRemoved:t})',
+        '/* PaseoDog bundled plugins */case"host":return(0,Pe.jsx)(pe.HostSettingsPage,{serverId:e.serverId,onHostRemoved:t})'],
     ['e.section==="workflow"?u.createElement(PaseodogTurnDurationSettings', 'e.section==="execution"?u.createElement(PaseodogTurnDurationSettings'],
     ['u.createElement(PaseodogBaseAiEnginePage,e),', 'u.createElement(PaseodogBaseAiEnginePage,{...e,key:e.serverId+":"+e.section}),'],
     ['function ie(e){const t=(0,c.c)(471)', engineLayout + 'function ie(e){const t=(0,c.c)(471)'],
@@ -111,11 +118,31 @@ function settingsCopy(locale) {
         noDiagnosticHost: JSON.parse(text.match(/\n    noDiagnosticHost:\s*("(?:[^"\\]|\\.)*"),/)[1]),
     };
 }
-// 음성인식 메뉴가 있던 직전 릴리즈의 배치는 해제만 지원한다.
+// 이전 메뉴 배치는 해제만 지원하며 마지막 원본 blob 검증은 composer가 수행한다.
+const previousEngineLayout = engineLayout
+    .replace('case "workflow":return u.createElement(u.Fragment,null,rules,u.cloneElement(basic,{},basicHint,u.cloneElement(basicCard,{},roles)),u.createElement(paseodogOrchestration,{...orchestration.props,disabled:props.disabled}),rulesEditor,agentEditor);',
+        'case "workflow":return u.createElement(u.Fragment,null,rules,u.createElement(paseodogOrchestration,{...orchestration.props,disabled:props.disabled}),rulesEditor);')
+    .replace('case "agents":return u.createElement(u.Fragment,null,u.cloneElement(agents,{title:"하위 에이전트"}),agentEditor);',
+        'case "agents":return u.createElement(u.Fragment,null,u.cloneElement(basic,{},basicHint,u.cloneElement(basicCard,{},roles)),u.cloneElement(agents,{title:"하위 에이전트"}),agentEditor);')
+    .replace(`    return u.cloneElement(content,{},u.cloneElement(card,{},
+        web,...modules.filter(row=>row.key!=="localProvider"),
+        ...installs.filter(row=>row.key!=="install-localProvider")));`,
+        `    const local=props.scope==="providers";
+    return u.cloneElement(content,{title:local?"로컬 모델 확장":content.props.title},u.cloneElement(card,{},
+        local?null:web,...modules.filter(row=>(row.key==="localProvider")===local),
+        ...installs.filter(row=>(row.key==="install-localProvider")===local)));`);
+const previousSectionBody = sectionBody.replace('case"memory":return', 'case"memory":case"providers":return');
+const previousHostContent = hostContent.replace('default:return base();',
+    'case"providers":return c.createElement(c.Fragment,null,page("providers"),base());\ndefault:return base();');
 const legacySpeechItem = '{ id: "engine-speech", labelKey: "settings.hostSections.engineSpeech", icon:f.Smartphone },\n  ';
 const legacyEdits = [
-    ['const Ae=' + previousHostItems, 'const Ae=' + hostItems.replace('{ id: "engine-memory"', () => legacySpeechItem + '{ id: "engine-memory"')],
-    ['function Re(e,t){switch(e.section)', hostContent.replace('case"engine-memory"', () => 'case"engine-speech":return page("speech");\ncase"engine-memory"')],
+    ['const Ae=' + previousHostItems, 'const Ae=' + previousManagedHostItems],
+    ['const Ae=' + previousHostItems, 'const Ae=' + previousManagedHostItems.replace('{ id: "engine-memory"', () => legacySpeechItem + '{ id: "engine-memory"')],
+    ['function Re(e,t){switch(e.section)', previousHostContent],
+    ['function Re(e,t){switch(e.section)', previousHostContent.replace('case"engine-memory"', () => 'case"engine-speech":return page("speech");\ncase"engine-memory"')],
+    ['function ie(e){const t=(0,c.c)(471)', previousEngineLayout + 'function ie(e){const t=(0,c.c)(471)'],
+    ['function Se(t){const l=(0,c.c)(13)', previousSectionBody + 'const l=(0,c.c)(13)'],
+    ['normalizeHostSectionSlug=function(t){if(C(t))', 'normalizeHostSectionSlug=function(t){if(t==="engine-agents")return"agents";if(C(t))'],
     ['const U=["engine-accounts","engine-workflow",', 'const U=["engine-response","engine-execution","engine-speech","engine-memory","engine-accounts","engine-workflow",'],
     ['e.section==="workflow"?u.createElement(PaseodogSpeechSettings', 'e.section==="speech"?u.createElement(PaseodogSpeechSettings'],
     ['u.createElement(PaseodogBaseAiEnginePage,e),', 'e.section==="speech"?null:u.createElement(PaseodogBaseAiEnginePage,{...e,key:e.serverId+":"+e.section}),'],

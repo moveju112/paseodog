@@ -292,6 +292,56 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("native host AI engine settings", () => {
+  it("restores basic workflow roles with editable saved routes and keeps subagents separate", async () => {
+    const roles = [
+      ["title-generator", "Title Generator"],
+      ["context-explorer", "Context Explorer"],
+      ["failure-analyst", "Failure Analyst"],
+      ["handoff-summarizer", "Handoff Summarizer"],
+      ["context-compressor", "Context Compressor"],
+      ["maintainer", "Maintainer"],
+      ["reviewer", "Reviewer"],
+    ];
+    const configured = {
+      ...snapshot,
+      agents: [
+        ...snapshot.agents,
+        ...roles.map(([id, label]) => ({ id, label, disabled: true, route })),
+      ],
+      agentDefinition: {
+        ...snapshot.agentDefinition,
+        id: "title-generator",
+        name: "Title Generator",
+      },
+    };
+    host.invokePluginRpc.mockResolvedValue(configured);
+    const view = render(<AiEnginePage serverId="workflow-roles" section="workflow" />);
+    for (const [, label] of roles) {
+      expect(await screen.findByRole("button", { name: `에이전트 ${label}` })).toBeTruthy();
+    }
+    expect(screen.queryByRole("button", { name: "에이전트 Worker" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "에이전트 Title Generator" }));
+    await waitFor(() => expect(screen.queryByText("원본을 불러오는 중입니다.")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() =>
+      expect(host.invokePluginRpc).toHaveBeenCalledWith(
+        "paseodog-provider",
+        "engine-controls",
+        expect.objectContaining({
+          action: "agentSave",
+          agent: "title-generator",
+          expectedRevision: snapshot.agentDefinition.revision,
+          route: expect.objectContaining({ ...route, disabled: true }),
+        }),
+      ),
+    );
+    view.rerender(<AiEnginePage serverId="workflow-roles" section="agents" />);
+    expect(await screen.findByRole("button", { name: "에이전트 Worker" })).toBeTruthy();
+    for (const [, label] of roles) {
+      expect(screen.queryByRole("button", { name: `에이전트 ${label}` })).toBeNull();
+    }
+  });
+
   it("preserves duplicate fallback row identity after removal and saves only route data", async () => {
     const fallback = { provider: "subscription", model: "small", effort: "medium", fast: false };
     host.invokePluginRpc.mockResolvedValue({
@@ -611,7 +661,6 @@ describe("native host AI engine settings", () => {
       execution: "실행 쉘",
       memory: "메모리",
       generation: "세션 제목",
-      providers: "로컬 모델 확장",
     };
     for (const section of Object.keys(markers) as EngineSection[]) {
       clearAiEngineSnapshotCache();

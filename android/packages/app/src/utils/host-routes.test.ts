@@ -9,6 +9,7 @@ import {
   resolveKnownHostRoute,
   buildSessionsRoute,
   buildSettingsAddHostRoute,
+  buildSettingsHostSectionRoute,
   buildProjectSettingsRoute,
   buildProjectsSettingsRoute,
   decodeFilePathFromPathSegment,
@@ -251,9 +252,16 @@ describe("host settings section slugs", () => {
     expect(normalizeHostSectionSlug("metadata")).toBe("metadata");
     expect(normalizeHostSectionSlug("workspaces")).toBe("workspaces");
     expect(normalizeHostSectionSlug("projects")).toBe("projects");
-    expect(normalizeHostSectionSlug("providers")).toBe("providers");
+    expect(normalizeHostSectionSlug("providers")).toBe("engine-accounts");
+    expect(normalizeHostSectionSlug("plugins")).toBe("host");
     expect(normalizeHostSectionSlug("usage")).toBe("usage");
     expect(normalizeHostSectionSlug("host")).toBe("host");
+    expect(buildSettingsHostSectionRoute("host-one", "providers")).toBe(
+      "/settings/hosts/host-one/engine-accounts",
+    );
+    expect(buildSettingsHostSectionRoute("host-one", "plugins")).toBe(
+      "/settings/hosts/host-one/host",
+    );
   });
 
   it("maps old host settings sections to their new names", () => {

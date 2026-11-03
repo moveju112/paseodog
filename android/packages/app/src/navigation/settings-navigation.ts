@@ -34,7 +34,7 @@ export function returnFromSettings(view: SettingsView): void {
   }
 
   let parent: Href = buildSettingsRoute();
-  if (view.kind === "plugin") parent = buildSettingsHostSectionRoute(view.serverId, "plugins");
+  if (view.kind === "plugin") parent = buildSettingsHostSectionRoute(view.serverId, "host");
   if (view.kind === "project") parent = buildProjectsSettingsRoute(view.serverId);
   router.dismissTo(parent as Href);
 }
