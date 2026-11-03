@@ -55,6 +55,20 @@ test('permission event round-trips allow and deny across an actual child process
 test('child crash rejects pending inference; no implicit respawn or replay',async()=>{
     const e=await factory().create(args);await assert.rejects(e.ask('crash',{}),/exited/);await assert.rejects(e.ask('normal',{}),/unavailable/);await e.close();
 });
+test('zero exit during a pending turn remains a failure with its in-flight request evidence', async () => {
+    const engine = await factory().create(args);
+    const crashes = [];
+    engine.onCrash(error => crashes.push(error));
+    try {
+        await assert.rejects(engine.ask('exit-zero', {}), error => {
+            assert.deepEqual(error.exit, { code: 0, signal: null, pendingRequests: 1 });
+            return true;
+        });
+        assert.equal(crashes.length, 1);
+        assert.deepEqual(crashes[0].exit, { code: 0, signal: null, pendingRequests: 1 });
+        await assert.rejects(engine.ask('normal', {}), /unavailable/);
+    } finally { await engine.close(); }
+});
 test('interrupt uses a separate RPC while ask is pending',async()=>{
     const e=await factory().create(args);const ask=e.ask('wait',{});const rejection=assert.rejects(ask,/aborted/);await delay(30);await e.abort();await rejection;await e.close();
 });

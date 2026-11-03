@@ -4871,6 +4871,17 @@ export class AgentManager {
       return;
     }
 
+    // 복구된 전용 세션에 남은 오류 알림이 이후 정상 상태를 가리지 않게 한다.
+    if (
+      agent.provider === "paseodog" &&
+      currentStatus === "idle" &&
+      !agent.lastError &&
+      agent.attention.requiresAttention &&
+      agent.attention.attentionReason === "error"
+    ) {
+      agent.attention = { requiresAttention: false };
+    }
+
     // Skip if already requires attention
     if (agent.attention.requiresAttention) {
       return;

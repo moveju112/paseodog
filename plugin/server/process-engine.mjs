@@ -140,9 +140,9 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
             if (signal?.aborted) onAbort();
             child.stdout.on('data', (chunk) => decoder.write(chunk));
             child.stdin.on('error', (error) => failAndStop(error));
-            const exitError = (code, signalName) => new Error(
+            const exitError = (code, signalName) => Object.assign(new Error(
                 `Engine exited (${signalName || code}); request outcome may be uncertain`
-            );
+            ), { exit: { code, signal: signalName, pendingRequests: pending.size } });
             child.on('error', (error) => { failAndStop(error); exited.resolve(); });
             // 'close' waits for descendant-held pipe handles. 'exit' doesn't:
             // fail outstanding requests and stop the whole scope immediately.
