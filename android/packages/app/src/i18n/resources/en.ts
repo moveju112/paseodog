@@ -2118,7 +2118,6 @@ export const en = {
       shortcuts: "Shortcuts",
       integrations: "Integrations",
       notifications: "Notifications",
-      permissions: "Permissions",
       diagnostics: "Diagnostics",
       about: "About",
     },
@@ -2401,15 +2400,6 @@ export const en = {
           },
         },
       },
-      legacyTerminalRenderer: {
-        label: "Use legacy terminal renderer",
-        description: "Use the previous WebView terminal after reopening a terminal",
-        accessibilityLabel: "Use legacy terminal renderer",
-      },
-      testAudio: "Test audio",
-      playTest: "Play test",
-      playing: "Playing...",
-      playbackFailed: "Playback failed: {{message}}",
       app: {
         title: "App diagnostic",
         rowTitle: "App diagnostic",
@@ -2623,11 +2613,8 @@ export const en = {
       },
     },
     permissions: {
-      title: "Permissions",
-      microphone: "Microphone",
       refresh: "Refresh",
       refreshing: "Refreshing...",
-      refreshAccessibility: "Refresh desktop permissions",
       actions: {
         granted: "Granted",
         request: "Request",

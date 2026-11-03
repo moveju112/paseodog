@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { Buffer } from "buffer";
 import {
   ArrowLeft,
   Settings,
@@ -28,13 +27,11 @@ import {
   Stethoscope,
   Info,
   Bell,
-  Shield,
   Puzzle,
   Plus,
   FolderGit2,
   SquareTerminal,
   Code2,
-  Smartphone,
   Sparkles,
   KeyRound,
   Workflow,
@@ -74,9 +71,7 @@ import { EditorSection } from "@/screens/settings/editor-section";
 import { ClientErrorReportingSection } from "@/screens/settings/client-error-reporting-section";
 import { DiagnosticDetails } from "@/screens/settings/diagnostic-details";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { DesktopPermissionsSection } from "@/desktop/components/desktop-permissions-section";
 import { DesktopNotificationsSection } from "@/desktop/components/desktop-notifications-section";
 import { AndroidNotificationsSection } from "@/screens/settings/android-notifications-section";
 import { BrowserDataSection } from "@/desktop/browser/settings/browser-data-section";
@@ -88,8 +83,6 @@ import { resolveAppVersion } from "@/utils/app-version";
 import { useAppVersionText, useHostVersionText } from "@/utils/use-version-labels";
 import { useAppDiagnosticStore } from "@/diagnostics/store";
 import { settingsStyles } from "@/styles/settings";
-import { THINKING_TONE_NATIVE_PCM_BASE64 } from "@/utils/thinking-tone.native-pcm";
-import { useVoiceAudioEngineOptional } from "@/contexts/voice-context";
 import {
   LANGUAGE_OPTIONS,
   formatLanguageOptionLabel,
@@ -129,7 +122,7 @@ import {
 } from "@/utils/host-routes";
 import { useLastWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { returnFromSettings, type SettingsView } from "@/navigation/settings-navigation";
-import { isNative, isWeb } from "@/constants/platform";
+import { isWeb } from "@/constants/platform";
 import { PaseodogUpdateRow } from "@/components/paseodog-update-row";
 
 // ---------------------------------------------------------------------------
@@ -196,13 +189,6 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
     desktopOnly: Platform.OS !== "android",
     Content: Platform.OS === "android" ? AndroidNotificationsSection : DesktopNotificationsSection,
   },
-  {
-    id: "permissions",
-    labelKey: "settings.sections.permissions",
-    icon: Shield,
-    desktopOnly: true,
-    Content: DesktopPermissionsSection,
-  },
   { id: "diagnostics", labelKey: "settings.sections.diagnostics", icon: Stethoscope },
   { id: "about", labelKey: "settings.sections.about", icon: Info },
 ];
@@ -243,7 +229,6 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "usage", labelKey: "settings.hostSections.usage", icon: Gauge },
   { id: "terminals", labelKey: "settings.hostSections.terminals", icon: SquareTerminal },
   { id: "connections", labelKey: "settings.hostSections.connections", icon: Network },
-  { id: "pair-device", labelKey: "openProject.tiles.pairDevice.title", icon: Smartphone },
 ];
 
 // PaseoDog 플러그인 설정 화면을 같은 네이티브 엔진 설정 항목으로 연결한다.
@@ -322,9 +307,12 @@ function renderHostSettingsContent(
     case "projects":
       return <ProjectsScreen serverId={view.serverId} />;
     case "connections":
-      return <HostConnectionsPage serverId={view.serverId} />;
-    case "pair-device":
-      return <HostPairDevicePage serverId={view.serverId} />;
+      return (
+        <>
+          <HostConnectionsPage serverId={view.serverId} />
+          <HostPairDevicePage serverId={view.serverId} />
+        </>
+      );
     case "metadata":
       return (
         <>
@@ -444,53 +432,12 @@ function GeneralSection({ settings, handleLanguageChange }: GeneralSectionProps)
   );
 }
 
-interface DiagnosticsSectionProps {
-  serverId: string | null;
-  useLegacyTerminalRenderer: boolean;
-  onUseLegacyTerminalRendererChange: (value: boolean) => void;
-  voiceAudioEngine: ReturnType<typeof useVoiceAudioEngineOptional>;
-  isPlaybackTestRunning: boolean;
-  playbackTestResult: string | null;
-  handlePlaybackTest: () => Promise<void>;
-}
-
-function DiagnosticsSection({
-  serverId,
-  useLegacyTerminalRenderer,
-  onUseLegacyTerminalRendererChange,
-  voiceAudioEngine,
-  isPlaybackTestRunning,
-  playbackTestResult,
-  handlePlaybackTest,
-}: DiagnosticsSectionProps) {
+function DiagnosticsSection({ serverId }: { serverId: string | null }) {
   const { t } = useTranslation();
   const openAppDiagnostic = useAppDiagnosticStore((state) => state.open);
-  const handlePlayPress = useCallback(() => {
-    void handlePlaybackTest();
-  }, [handlePlaybackTest]);
   return (
     <SettingsSection title={t("settings.diagnostics.title")}>
       <View style={settingsStyles.card}>
-        {isNative ? (
-          <View style={settingsStyles.row} testID="legacy-terminal-renderer-row">
-            <View style={settingsStyles.rowContent}>
-              <Text style={settingsStyles.rowTitle}>
-                {t("settings.diagnostics.legacyTerminalRenderer.label")}
-              </Text>
-              <Text style={settingsStyles.rowHint}>
-                {t("settings.diagnostics.legacyTerminalRenderer.description")}
-              </Text>
-            </View>
-            <Switch
-              value={useLegacyTerminalRenderer}
-              onValueChange={onUseLegacyTerminalRendererChange}
-              accessibilityLabel={t(
-                "settings.diagnostics.legacyTerminalRenderer.accessibilityLabel",
-              )}
-              testID="legacy-terminal-renderer-switch"
-            />
-          </View>
-        ) : null}
         <View style={settingsStyles.row} testID="app-diagnostic-row">
           <View style={settingsStyles.rowContent}>
             <Text style={settingsStyles.rowTitle}>{t("settings.diagnostics.app.rowTitle")}</Text>
@@ -500,26 +447,8 @@ function DiagnosticsSection({
             {t("settings.diagnostics.app.run")}
           </Button>
         </View>
-        <DiagnosticDetails serverId={serverId}>
-          <View style={settingsStyles.row}>
-            <View style={settingsStyles.rowContent}>
-              <Text style={settingsStyles.rowTitle}>{t("settings.diagnostics.testAudio")}</Text>
-              {playbackTestResult ? (
-                <Text style={settingsStyles.rowHint}>{playbackTestResult}</Text>
-              ) : null}
-            </View>
-            <Button
-              variant="secondary"
-              size="sm"
-              onPress={handlePlayPress}
-              disabled={!voiceAudioEngine || isPlaybackTestRunning}
-            >
-              {isPlaybackTestRunning
-                ? t("settings.diagnostics.playing")
-                : t("settings.diagnostics.playTest")}
-            </Button>
-          </View>
-        </DiagnosticDetails>
+        {/* 상세 UI는 웹 번들과 공유하므로 추가 행 없이 원본 조회 도구만 연다. */}
+        <DiagnosticDetails serverId={serverId}>{null}</DiagnosticDetails>
       </View>
     </SettingsSection>
   );
@@ -1116,14 +1045,11 @@ function AppSettingsSaveError() {
 export default function SettingsScreen({ view, openAddHostIntent = null }: SettingsScreenProps) {
   const router = useRouter();
   const { t } = useTranslation();
-  const voiceAudioEngine = useVoiceAudioEngineOptional();
   const { settings, isLoading: settingsLoading, updateSettings } = useAppSettings();
   const [isAddHostMethodVisible, setIsAddHostMethodVisible] = useState(false);
   const [isDirectHostVisible, setIsDirectHostVisible] = useState(false);
   const [isRemoteSshVisible, setIsRemoteSshVisible] = useState(false);
   const [isPasteLinkVisible, setIsPasteLinkVisible] = useState(false);
-  const [isPlaybackTestRunning, setIsPlaybackTestRunning] = useState(false);
-  const [playbackTestResult, setPlaybackTestResult] = useState<string | null>(null);
   const lastOpenedAddHostIntentRef = useRef<string | null>(null);
   const isDesktopApp = isElectronRuntime();
   const appVersion = resolveAppVersion();
@@ -1169,42 +1095,6 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
     },
     [updateSettings],
   );
-
-  const handleUseLegacyTerminalRendererChange = useCallback(
-    (useLegacyTerminalRenderer: boolean) => {
-      void updateSettings({ useLegacyTerminalRenderer });
-    },
-    [updateSettings],
-  );
-
-  const handlePlaybackTest = useCallback(async () => {
-    if (!voiceAudioEngine || isPlaybackTestRunning) {
-      return;
-    }
-
-    setIsPlaybackTestRunning(true);
-    setPlaybackTestResult(null);
-
-    try {
-      const bytes = Buffer.from(THINKING_TONE_NATIVE_PCM_BASE64, "base64");
-      await voiceAudioEngine.initialize();
-      voiceAudioEngine.stop();
-      await voiceAudioEngine.play({
-        type: "audio/pcm;rate=16000;bits=16",
-        size: bytes.byteLength,
-        async arrayBuffer() {
-          return Uint8Array.from(bytes).buffer;
-        },
-      });
-      setPlaybackTestResult(null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error("[Settings] Playback test failed", error);
-      setPlaybackTestResult(t("settings.diagnostics.playbackFailed", { message }));
-    } finally {
-      setIsPlaybackTestRunning(false);
-    }
-  }, [isPlaybackTestRunning, t, voiceAudioEngine]);
 
   const closeAddConnectionFlow = useCallback(() => {
     setIsAddHostMethodVisible(false);
@@ -1417,15 +1307,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
                     t("settings.noDiagnosticHost"),
                 })}
               </Text>
-              <DiagnosticsSection
-                serverId={activeHostServerId}
-                useLegacyTerminalRenderer={settings.useLegacyTerminalRenderer}
-                onUseLegacyTerminalRendererChange={handleUseLegacyTerminalRendererChange}
-                voiceAudioEngine={voiceAudioEngine}
-                isPlaybackTestRunning={isPlaybackTestRunning}
-                playbackTestResult={playbackTestResult}
-                handlePlaybackTest={handlePlaybackTest}
-              />
+              <DiagnosticsSection serverId={activeHostServerId} />
               <ClientErrorReportingSection serverId={activeHostServerId} />
             </>
           );

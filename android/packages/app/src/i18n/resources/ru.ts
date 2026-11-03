@@ -2128,7 +2128,6 @@ export const ru: TranslationResources = {
       shortcuts: "Сочетания клавиш",
       integrations: "Интеграции",
       notifications: "Уведомления",
-      permissions: "Разрешения",
       diagnostics: "Диагностика",
       about: "О приложении",
     },
@@ -2274,15 +2273,6 @@ export const ru: TranslationResources = {
     diagnostics: {
       title: "Диагностика",
       errorReporting: en.settings.diagnostics.errorReporting,
-      legacyTerminalRenderer: {
-        label: "Использовать прежний рендерер терминала",
-        description: "Использовать прежний WebView-терминал после повторного открытия",
-        accessibilityLabel: "Использовать прежний рендерер терминала",
-      },
-      testAudio: "Проверка звука",
-      playTest: "Воспроизвести тестовый звук",
-      playing: "Воспроизведение...",
-      playbackFailed: "Ошибка воспроизведения: {{message}}",
       app: {
         title: "Диагностика приложения",
         rowTitle: "Диагностика приложения",
@@ -2501,11 +2491,8 @@ export const ru: TranslationResources = {
       },
     },
     permissions: {
-      title: "Разрешения",
-      microphone: "Микрофон",
       refresh: "Обновить",
       refreshing: "Обновление...",
-      refreshAccessibility: "Обновить разрешения рабочего стола",
       actions: {
         granted: "Предоставлено",
         request: "Запросить",

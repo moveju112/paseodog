@@ -2069,7 +2069,6 @@ export const zhCN: TranslationResources = {
       shortcuts: "快捷键",
       integrations: "集成",
       notifications: "通知",
-      permissions: "权限",
       diagnostics: "诊断",
       about: "关于",
     },
@@ -2208,15 +2207,6 @@ export const zhCN: TranslationResources = {
     diagnostics: {
       title: "诊断",
       errorReporting: en.settings.diagnostics.errorReporting,
-      legacyTerminalRenderer: {
-        label: "使用旧版终端渲染器",
-        description: "重新打开终端后使用之前的 WebView 终端",
-        accessibilityLabel: "使用旧版终端渲染器",
-      },
-      testAudio: "测试音频",
-      playTest: "播放测试",
-      playing: "正在播放...",
-      playbackFailed: "播放失败：{{message}}",
       app: {
         title: "App diagnostic",
         rowTitle: "App diagnostic",
@@ -2428,11 +2418,8 @@ export const zhCN: TranslationResources = {
       },
     },
     permissions: {
-      title: "权限",
-      microphone: "麦克风",
       refresh: "刷新",
       refreshing: "正在刷新...",
-      refreshAccessibility: "刷新桌面端权限",
       actions: {
         granted: "已授权",
         request: "请求",

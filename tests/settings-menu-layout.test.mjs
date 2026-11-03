@@ -112,7 +112,7 @@ test('all supported host pages have unique menu entries, including restored and 
     assert.equal(new Set(nativeItems.map(item => item.id)).size, nativeItems.length);
     const expected = ['agents', 'metadata', 'engine-response', 'engine-execution', 'engine-memory'];
     for (const id of expected) assert.ok(nativeItems.some(item => item.id === id), id);
-    for (const id of ['providers', 'plugins']) {
+    for (const id of ['providers', 'plugins', 'pair-device']) {
         assert.ok(!nativeItems.some(item => item.id === id), id);
     }
     assert.ok(!nativeItems.some(item => item.id === 'engine-speech'));
@@ -130,6 +130,8 @@ test('app and web fix terminal scrollback at 10000 lines without a settings sect
     const webIds = [...webItems.matchAll(/\{id:"([\w-]+)",labelKey/g)].map(([, id]) => id);
     assert.deepEqual(webIds, nativeIds);
     assert.ok(nativeIds.includes('chat') && !nativeIds.includes('terminal'));
+    // 음성 기능 제거로 마이크 권한만 남던 권한 메뉴도 앱·웹 모두에서 뺀다.
+    assert.ok(nativeIds.includes('notifications') && !nativeIds.includes('permissions'));
     const nativeSlugs = Array.from(runInNewContext(read('android/packages/app/src/utils/host-routes.ts')
         .match(/export const SETTINGS_SECTION_SLUGS = (\[[\s\S]*?\]) as const;/)[1]));
     const routes = webModule(3905, { 52: { Buffer }, 3906: {} });
@@ -179,6 +181,7 @@ test('app and web routes retain every host-specific control at its new destinati
         'engine-execution': ['AiEnginePage:execution'],
         'engine-memory': ['AiEnginePage:memory'],
         metadata: ['AiEnginePage:generation', 'MetadataGenerationPage'],
+        connections: ['HostConnectionsPage', 'HostPairDevicePage'],
         providers: [],
         plugins: [],
     };
@@ -187,6 +190,9 @@ test('app and web routes retain every host-specific control at its new destinati
             assert.deepEqual(leaves(render({ kind: 'host', serverId: 'selected-host', section }, () => {})), types);
         }
     }
+    // 이전 기기 페어링 주소도 연결 페이지와 같은 화면을 연다(앱은 경로 정규화로 연결 페이지로 보낸다).
+    assert.deepEqual(leaves(web({ kind: 'host', serverId: 'selected-host', section: 'pair-device' }, () => {})),
+        expected.connections);
 });
 
 test('web legacy provider and plugin links resolve to fixed settings without management routes', () => {
