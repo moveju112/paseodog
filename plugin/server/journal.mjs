@@ -1,8 +1,8 @@
-import { constants, existsSync, lstatSync, mkdirSync, openSync, readFileSync, writeFileSync, closeSync, fsyncSync, renameSync, unlinkSync, rmdirSync, readdirSync } from 'node:fs';
+import { constants, existsSync, lstatSync, mkdirSync, openSync, readFileSync, closeSync, renameSync, unlinkSync, rmdirSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
-import { safeKey, plainObject } from './util.mjs';
+import { safeKey, plainObject, writeFileAtomicSync } from './util.mjs';
 
 const MAX_BYTES = 16 * 1024 * 1024;
 const MAX_ITEMS = 2000;
@@ -51,20 +51,7 @@ function readJson(path) {
 function atomicJson(path, data) {
     if (existsSync(path) && lstatSync(path).isSymbolicLink()) throw new Error('Refusing symlink journal');
     if (data.length > MAX_BYTES) throw new Error('Session journal full; archive this session and open a new one');
-    const tmp = `${path}.${randomUUID()}.tmp`;
-    let fd;
-    try {
-        fd = openSync(tmp, 'wx', 0o600);
-        writeFileSync(fd, data); fsyncSync(fd); closeSync(fd); fd = undefined;
-        renameSync(tmp, path);
-        if (process.platform !== 'win32') {
-            const parent = openSync(resolve(path, '..'), 'r');
-            try { fsyncSync(parent); } finally { closeSync(parent); }
-        }
-    } finally {
-        if (fd !== undefined) closeSync(fd);
-        try { unlinkSync(tmp); } catch {}
-    }
+    writeFileAtomicSync(path, data);
 }
 export class JournalStore {
     constructor(root) { this.root = resolve(root); privateDir(this.root); this.summaryCache = new Map(); }

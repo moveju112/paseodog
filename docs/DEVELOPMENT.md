@@ -45,10 +45,8 @@ npm --prefix android run build:protocol
 ## 고정 패치 적용
 
 ```bash
-for patch in mixdog paseo-usage paseo-steer paseo-agent-messages paseo-assistant-phase \
-    paseo-workspace-name paseo-session-titles paseo-relay-password paseo-composer; do
-    node "scripts/patch-${patch}.mjs" && node "scripts/patch-${patch}.mjs" --check
-done
+# 설치·CI와 같은 패치 목록(scripts/install.mjs의 PATCHES)을 순서대로 적용하고 검증합니다.
+node scripts/install.mjs --patches-only
 ```
 
 pull 뒤 `Mixdog <버전> required; found <버전>` 오류가 나면 고정 버전이 바뀐 것입니다. 위 engine 설치와 `patch-mixdog` 단계를 다시 실행하세요.
@@ -64,6 +62,18 @@ npm run typecheck                         # plugin TypeScript
 
 변경 종류별 필요한 검사는 [CODING_RULES](ai-rules/CODING_RULES.md)를 따릅니다.
 `npm run test:live`, `npm run test:native`처럼 실제 모델을 호출하는 smoke는 과금이 발생할 수 있어 기본 검사에 포함하지 않습니다.
+
+## 성능 비교 도구
+
+기본 검사에 포함하지 않는 수동 도구입니다. 비교 기준 체크아웃과 현재 체크아웃을 번갈아 같은 입력으로 측정합니다.
+
+```bash
+# 저널 비공개 복사본으로 세션 목록 조회·저장 성능을 비교합니다 (--trials 기본 4).
+node tests/session-list-benchmark.mjs --baseline <기준 체크아웃> --journals <저널 폴더>
+node tests/journal-save-benchmark.mjs --baseline <기준 체크아웃> --journals <저널 폴더>
+# 실제 측정한 실행 기록 JSON 두 개의 토큰·성공률·시간을 비교합니다.
+node scripts/benchmark-report.mjs <baseline.json> <candidate.json>
+```
 
 ## 로컬 규칙
 

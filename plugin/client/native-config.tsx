@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
 import { ScrollView } from '@getpaseo/plugin/client/react-native';
 import { useRpc, type PluginSurfaceProps } from '@getpaseo/plugin/client';

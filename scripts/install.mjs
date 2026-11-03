@@ -26,6 +26,14 @@ export function engineInstallSteps() {
     ];
 }
 
+// 고정 업스트림 패치를 순서대로 적용한 뒤 검증한다. 설치와 CI가 같은 목록을 쓴다.
+export function patchSteps() {
+    return PATCHES.flatMap((name) => [
+        { command: process.execPath, args: [`scripts/patch-${name}.mjs`] },
+        { command: process.execPath, args: [`scripts/patch-${name}.mjs`, '--check'] },
+    ]);
+}
+
 // 설치 단계 목록 (잠금 파일 의존성 -> 패치 적용·검증 -> 검사 -> 프로필 설정)
 // full은 기존 전체 회귀 테스트를 포함한다(외부 데몬 업데이터 호환). install은 root 테스트만 뺀다:
 // root 테스트는 릴리스 호스트 스크래치 경로·Android 의존성·Playwright를 전제하며 CI·릴리스가 실행한다.
@@ -39,7 +47,7 @@ export function installSteps(platform = process.platform, { scope = 'full' } = {
         node('scripts/prepare-paseo-web-ui.mjs'),
         ...engineInstallSteps(),
         npm('--prefix', 'plugin', 'ci'),
-        ...PATCHES.flatMap((name) => [node(`scripts/patch-${name}.mjs`), node(`scripts/patch-${name}.mjs`, '--check')]),
+        ...patchSteps(),
         npm('run', 'check'),
         // Root tests assume POSIX tooling (bash, python3, mode bits, symlinks).
         ...(platform === 'win32' || scope === 'install' ? [] : [npm('test')]),
@@ -122,6 +130,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         const argv = process.argv.slice(2);
         if (argv.includes('--engine-dependencies-only')) {
             for (const step of engineInstallSteps()) run(step);
+        } else if (argv.includes('--patches-only')) {
+            for (const step of patchSteps()) run(step);
         } else {
             await install(argv);
         }

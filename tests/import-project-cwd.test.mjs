@@ -5,10 +5,9 @@ import { Script } from 'node:vm';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import { composerFixture } from './composer-fixture.mjs';
 import { IMPORT_CWD, IMPORT_CWD_ANCHOR, SOURCE_IMPORT_CWD, IMPORT_MENU_INSERT, IMPORT_LAUNCHER } from '../patches/paseo-import-cwd.mjs';
-import { IMPORT_SOURCE_FILE, patchedImportSource } from '../scripts/patch-paseo-import-cwd.mjs';
 
 const source = readFileSync(new URL('../tools/node_modules/@getpaseo/server/' + COMPOSER_FILE, import.meta.url), 'utf8');
-const nativeSource = readFileSync(new URL('../android/' + IMPORT_SOURCE_FILE, import.meta.url), 'utf8');
+const nativeSource = readFileSync(new URL('../android/packages/app/src/screens/new-workspace-screen.tsx', import.meta.url), 'utf8');
 
 test('web + menu reuses workspace import availability and callback without creating a tab', () => {
     const patched = composerFixture(source);
@@ -91,11 +90,10 @@ test('project import passes the selected cwd through the shared request and pres
     }
 });
 
-test('shared Android source patch matches the bundle semantics and rejects drift', () => {
-    const patched = patchedImportSource(nativeSource);
-    assert.equal(patchedImportSource(patched), patched);
-    assert.equal(patched.split(SOURCE_IMPORT_CWD).length, 2);
-    assert.throws(() => patchedImportSource(nativeSource + '\n'), /source hash mismatch/);
+// 공유 앱 소스는 번들 패치와 같은 cwd 전달을 한 곳에서만 갖는다.
+test('shared Android source passes the selected cwd like the bundle patch', () => {
+    assert.equal(nativeSource.split(SOURCE_IMPORT_CWD).length, 2);
+    assert.equal(nativeSource.split('useImportSession(').length, 2);
     for (const cwd of ['/repo/current', null]) {
         const options = new Script(SOURCE_IMPORT_CWD).runInNewContext({
             useImportSession: (value) => value,

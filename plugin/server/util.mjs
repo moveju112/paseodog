@@ -1,5 +1,30 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { closeSync, fsyncSync, openSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import release from '../shared/release.json' with { type: 'json' };
+
+// 고유 임시 파일을 fsync한 뒤 rename해 중단 시에도 이전 내용 또는 새 내용만 남긴다.
+// 실패하면 임시 파일만 지우고 원래 오류를 그대로 던진다.
+export function writeFileAtomicSync(path, data) {
+    const temporary = `${path}.${randomUUID()}.tmp`;
+    let fd;
+    try {
+        fd = openSync(temporary, 'wx', 0o600);
+        writeFileSync(fd, data);
+        fsyncSync(fd);
+        closeSync(fd);
+        fd = undefined;
+        renameSync(temporary, path);
+    } catch (error) {
+        if (fd !== undefined) try { closeSync(fd); } catch {}
+        try { unlinkSync(temporary); } catch {}
+        throw error;
+    }
+    if (process.platform !== 'win32') {
+        const parent = openSync(dirname(path), 'r');
+        try { fsyncSync(parent); } finally { closeSync(parent); }
+    }
+}
 
 export const VERSION = release.version;
 export const UPSTREAM_VERSIONS = release.paseodogUpstream;
