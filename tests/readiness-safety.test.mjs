@@ -23,7 +23,7 @@ test('Linux scopes follow their actual user service or scope, including daemon s
         await scope.preflight();
         const separator = scope.args.indexOf('--');
         assert.ok(scope.args.slice(0, separator).includes(`--property=BindsTo=${owner}`));
-        assert.ok(scope.args.slice(0, separator).includes(`--property=After=${owner}`));
+        assert.ok(scope.args.slice(0, separator).includes(`--property=Before=${owner}`));
     }
 });
 

@@ -287,8 +287,14 @@ test('session-title daemon patch is exact-blob gated, idempotent and rejects par
         assert.equal(patchedSessionTitleSource(patched, spec), patched);
         assert.throws(() => patchedSessionTitleSource(patched + '// drift', spec), /hash mismatch/);
         if (spec.edits.length > 1) {
-            const [before, after] = spec.edits.at(-1);
+            const [before, after] = spec.edits[0];
             assert.throws(() => patchedSessionTitleSource(patched.replace(after, before), spec), /Partial/);
+        }
+        if (spec.previousEditCount) {
+            let previous = patched;
+            for (const [before, after] of spec.edits.slice(spec.previousEditCount).reverse())
+                previous = previous.replace(after, before);
+            assert.equal(patchedSessionTitleSource(previous, spec), patched);
         }
         // 작업공간 이름까지 바꾸던 이전 패치도 현재 패치로 교체된다.
         for (const [legacy, current] of spec.legacy ?? [])

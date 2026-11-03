@@ -320,6 +320,21 @@ export function createProviderConnection({ capabilities = CAPABILITIES, engineFa
             // A child that dies after opening is not an ordinary model error.
             // Do not queue another turn against its dead IPC transport.
             session.unsubscribeCrash = session.engine.onCrash?.((error) => {
+                if (session.closed || session.closing) return;
+                const exit = error?.exit;
+                // 유휴 정상 종료는 복원 가능한 닫힘이다. 미완료 요청·턴의 실패는 숨기지 않는다.
+                if (exit?.pendingRequests === 0 && (exit.code === 0 || exit.signal === 'SIGTERM' || exit.signal === 'SIGINT')
+                    && !session.active && !session.record.active && !session.configuring) {
+                    track(closeSession(session).then(() => {
+                        if (sessions.get(session.id) === session) sessions.delete(session.id);
+                        emit({ type: 'session.closed', sessionId: session.id });
+                    }, (cause) => {
+                        reportContainmentFailure(session, cause);
+                        emit({ type: 'session.runtime_failed', sessionId: session.id,
+                            error: { message: 'PaseoDog worker termination could not be confirmed' } });
+                    }));
+                    return;
+                }
                 failSession(session, `PaseoDog worker exited: ${errorText(error)}`);
             }) || null;
             if (session.broken) throw new Error('PaseoDog engine exited during session open');

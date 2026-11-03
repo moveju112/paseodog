@@ -29,6 +29,7 @@ const server=serveWorker({input:process.stdin,output:process.stdout,onExit:()=>p
             steering.length = 0;
             if(args.config.env.ASK_LOG) appendFileSync(args.config.env.ASK_LOG, JSON.stringify({text})+'\n');
             if(text==='crash') process.exit(42);
+            if(text==='exit-zero') process.exit(0);
             if(text==='hang') return new Promise(()=>{});
             if(text==='wait'){await new Promise(r=>{release=r;});if(aborted)throw new Error('aborted');}
             callbacks.onIdentity?.({id:'sess_child',state:{model:'fixture'}});

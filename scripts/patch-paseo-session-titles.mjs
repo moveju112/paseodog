@@ -53,7 +53,7 @@ export const SESSION_TITLE_PATCHES = [
         ['            workspaceId: intent.workspaceId,\n            owner: input.owner,',
             '            workspaceId: intent.workspaceId,\n            initialTitle: resolveCreateAgentTitles({ initialPrompt: trimmedPrompt }).provisionalTitle,\n            owner: input.owner,'],
     ] },
-    { file: 'agent/agent-storage.js', blob: '57727b9a773b43fda41ac59d27fda479ca5e4da0', edits: [
+    { file: 'agent/agent-storage.js', blob: '57727b9a773b43fda41ac59d27fda479ca5e4da0', previousEditCount: 5, edits: [
         ['    title: z.string().nullable().optional(),',
             '    title: z.string().nullable().optional(),\n    titleOrigin: z.enum(["provisional", "generated", "user"]).optional(),'],
         ['            await this.writeRecord(record);', '            if (record) await this.writeRecord(record);'],
@@ -63,13 +63,27 @@ export const SESSION_TITLE_PATCHES = [
             + '            return record;\n        });\n    }\n    async setTitle('],
         ['        await this.upsert({ ...record, title });', '        await this.upsert({ ...record, title, titleOrigin: "user" });'],
         ['    async flush() {', storageMethod + '    async flush() {'],
+        ['export function parseStoredAgentRecord(value) {\n    return STORED_AGENT_SCHEMA.parse(value);\n}',
+            'export function parseStoredAgentRecord(value) {\n'
+            + '    const record = STORED_AGENT_SCHEMA.parse(value);\n'
+            + '    if (record.provider === "paseodog" && record.lastStatus === "idle" && !record.lastError && record.attentionReason === "error") {\n'
+            + '        record.requiresAttention = false;\n'
+            + '        record.attentionReason = null;\n'
+            + '        record.attentionTimestamp = null;\n'
+            + '    }\n'
+            + '    return record;\n}'],
     ] },
-    { file: 'agent/agent-manager.js', blob: '0055aa5201583fa24bdc61327b182104640aff6c', edits: [
+    { file: 'agent/agent-manager.js', blob: '0055aa5201583fa24bdc61327b182104640aff6c', previousEditCount: 3, edits: [
         ['        await this.persistSnapshot(agent, { title: normalizedTitle });',
             '        await this.persistSnapshot(agent, { title: normalizedTitle, titleOrigin: "user" });'],
         ['    async setLabels(agentId, labels) {', managerMethod + '    async setLabels(agentId, labels) {'],
         ['            ...(patch.title ? { title: patch.title } : {}),',
             '            ...(patch.title ? { title: patch.title, titleOrigin: "user" } : {}),'],
+        ['        // Skip if already requires attention\n        if (agent.attention.requiresAttention) {',
+            '        if (agent.provider === "paseodog" && currentStatus === "idle" && !agent.lastError && agent.attention.requiresAttention && agent.attention.attentionReason === "error") {\n'
+            + '            agent.attention = { requiresAttention: false };\n'
+            + '        }\n'
+            + '        // Skip if already requires attention\n        if (agent.attention.requiresAttention) {'],
     ] },
     { file: 'workspace-registry.js', blob: '2356056fc5daf5aeb06eaf66aa73a3ef3abd6027', edits: [
         ['const PersistedWorkspaceRecordSchema = z.object({\n    workspaceId: z.string(),',
@@ -104,7 +118,11 @@ export function patchedSessionTitleSource(source, spec) {
         if (result.split(before).length !== 2) throw new Error(`Paseo session-title anchor mismatch: ${spec.file}`);
         result = result.replace(before, after);
     }
-    if (source !== original && source !== result) throw new Error(`Partial Paseo session-title patch: ${spec.file}`);
+    const previous = spec.previousEditCount
+        ? spec.edits.slice(0, spec.previousEditCount).reduce((text, [before, after]) => text.replace(before, after), original)
+        : null;
+    if (source !== original && source !== result && source !== previous)
+        throw new Error(`Partial Paseo session-title patch: ${spec.file}`);
     return hadIdentity ? withMcpIdentity(result, MCP_BOOTSTRAP_IDENTITY_EDITS) : result;
 }
 

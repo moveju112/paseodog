@@ -97,7 +97,8 @@ export function createProcessScope({ launch, platform = process.platform, mode =
         get args() {
             return ['--user', '--scope', '--collect', '--quiet', `--unit=${unitName}`,
                 '--property=KillMode=control-group',
-                ...(ownerUnit ? [`--property=BindsTo=${ownerUnit}`, `--property=After=${ownerUnit}`] : []),
+                // 정지는 시작의 역순이다. 소유자가 세션을 닫은 뒤 남은 scope를 회수한다.
+                ...(ownerUnit ? [`--property=BindsTo=${ownerUnit}`, `--property=Before=${ownerUnit}`] : []),
                 '--', launch.command, ...(launch.args || []), '--stdio'];
         },
         async preflight() {
