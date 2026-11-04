@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { COMPOSER_FILE, patchedComposerSource } from '../scripts/patch-paseo-composer.mjs';
 import {
-    SINGLE_WORKSPACE_EDITS, WORKSPACE_HEADER_EDITS, withSingleWorkspace, withoutSingleWorkspace,
+    SINGLE_WORKSPACE_EDITS, WORKSPACE_HEADER_EDITS, WORKSPACE_CREATE_ENTRY_EDITS,
+    withSingleWorkspace, withoutSingleWorkspace,
 } from '../patches/paseo-single-workspace.mjs';
 
 const app = new URL('../android/packages/app/', import.meta.url);
@@ -34,6 +35,106 @@ function sourceRowModel() {
 }
 
 const webRowModel = evaluateModule(patched, 4355, [{}]).buildSidebarProjectRowModel;
+
+for (const platform of ['source', 'web']) {
+    test(`${platform}: single mode hides new workspace without hiding other navigation`, () => {
+        let groupMode = 'project';
+        let items = [
+            { kind: 'builtin', id: 'new-workspace', key: 'new', visible: true },
+            { kind: 'builtin', id: 'history', key: 'history', visible: true },
+            { kind: 'builtin', id: 'search', key: 'search', visible: false },
+            { kind: 'plugin', key: 'plugin', visible: true },
+        ];
+        const store = (select) => select({ groupMode });
+        const jsx = (type, props, ...children) => platform === 'source'
+            ? { type, props: { ...props, children: children[0] }, key: props?.key }
+            : { type, props, key: children[0] };
+        const react = { useRef: () => ({}), useMemo: (fn) => fn() };
+        const nav = { useSidebarNavItems: () => ({ items }) };
+        const rows = { 'new-workspace': 'new', history: 'history', search: 'search' };
+        const cache = Array(9).fill(Symbol.for('react.memo_cache_sentinel'));
+        let code;
+        let bindings;
+        if (platform === 'source') {
+            const source = readApp('components/sidebar/sidebar-nav-rows.tsx');
+            code = transformSync(source.slice(source.indexOf('export function SidebarNavRows('),
+                source.indexOf('const SidebarNewWorkspaceRow =')).replace('export ', ''),
+            { loader: 'tsx', jsxFactory: 'jsx' }).code + ';return SidebarNavRows;';
+            bindings = { ...react, ...nav, useSidebarViewStore: store, jsx, View: 'view',
+                PluginSidebarItem: 'plugin', BUILTIN_ROWS: rows };
+        } else {
+            const start = patched.indexOf('e.SidebarNavRows=function(');
+            code = 'const e={};' + patched.slice(start, patched.indexOf(';var t=', start))
+                + ';return e.SidebarNavRows;';
+            bindings = { r: () => ({ useSidebarViewStore: store }), s: { c: () => cache },
+                S: nav, c: react, I: (item) => item.visible, j: { jsx }, t: { View: 'view' },
+                h: { PluginSidebarItem: 'plugin' }, K: rows };
+        }
+        const render = new Function(...Object.keys(bindings), code)(...Object.values(bindings));
+        assert.deepEqual(render({}).props.children.map((child) => child.key), ['new', 'history', 'plugin']);
+        groupMode = 'single';
+        assert.deepEqual(render({}).props.children.map((child) => child.key), ['history', 'plugin']);
+        groupMode = 'status';
+        assert.deepEqual(render({}).props.children.map((child) => child.key), ['new', 'history', 'plugin']);
+        items = [items[0]];
+        groupMode = 'single';
+        assert.equal(render({}), null);
+    });
+
+    test(`${platform}: single mode disables keyboard creation and rejects stale handlers`, () => {
+        let groupMode = 'project';
+        let handler;
+        const routes = [];
+        const store = (select) => select({ groupMode });
+        store.getState = () => ({ groupMode });
+        const bindings = {
+            useSidebarViewStore: store, useCallback: (fn) => fn,
+            useActiveWorkspaceSelection: () => null, useHosts: () => [{}],
+            useWorkspace: () => null, useHostFeature: () => true,
+            canCreateWorktreeForProjectKind: () => true,
+            router: { navigate: (route) => routes.push(route) },
+            buildNewWorkspaceRoute: () => '/new',
+            useKeyboardActionHandler: (value) => { handler = value; },
+        };
+        let render;
+        if (platform === 'source') {
+            const source = readApp('hooks/use-global-new-workspace-action.ts');
+            const code = transformSync(source.slice(source.indexOf('const WORKSPACE_NEW_ACTIONS'))
+                .replace('export function', 'function'), { loader: 'ts' }).code;
+            render = new Function(...Object.keys(bindings), code + ';return useGlobalNewWorkspaceAction;')(
+                ...Object.values(bindings));
+        } else {
+            const start = patched.indexOf('e.useGlobalNewWorkspaceAction=function(');
+            const code = 'const e={};' + patched.slice(start, patched.indexOf(';var o=', start))
+                + ';return e.useGlobalNewWorkspaceAction;';
+            const cache = Array(11).fill(Symbol.for('react.memo_cache_sentinel'));
+            const webBindings = { r: () => bindings, o: { c: () => cache },
+                u: bindings, l: bindings, p: bindings, s: bindings, n: bindings,
+                t: bindings, k: bindings, c: bindings, w: ['workspace.new'] };
+            render = new Function(...Object.keys(webBindings), code)(...Object.values(webBindings));
+        }
+        render();
+        assert.equal(handler.enabled, true);
+        assert.equal(handler.handle(), true);
+        groupMode = 'single';
+        assert.equal(handler.handle(), false);
+        render();
+        assert.equal(handler.enabled, false);
+        assert.deepEqual(routes, ['/new']);
+        groupMode = 'project';
+        render();
+        assert.equal(handler.enabled, true);
+    });
+}
+
+test('creation entry upgrade restores old patches and rejects partial application', () => {
+    let previous = patched;
+    for (const [before, after] of [...WORKSPACE_CREATE_ENTRY_EDITS].reverse())
+        previous = previous.replace(after, () => before);
+    assert.equal(patchedComposerSource(previous), patched);
+    const [before, after] = WORKSPACE_CREATE_ENTRY_EDITS[0];
+    assert.throws(() => withoutSingleWorkspace(patched.replace(after, before)), /Partial/);
+});
 
 function headerHarness(platform) {
     let compact = false;

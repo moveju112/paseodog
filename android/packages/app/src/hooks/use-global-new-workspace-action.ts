@@ -7,11 +7,13 @@ import { useHostFeature } from "@/runtime/host-features";
 import { useHosts } from "@/runtime/host-runtime";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
+import { useSidebarViewStore } from "@/stores/sidebar-view-store";
 import { buildNewWorkspaceRoute } from "@/utils/host-routes";
 
 const WORKSPACE_NEW_ACTIONS: readonly KeyboardActionId[] = ["workspace.new"];
 
 export function useGlobalNewWorkspaceAction() {
+  const singleWorkspaceMode = useSidebarViewStore((state) => state.groupMode === "single");
   const selection = useActiveWorkspaceSelection();
   const serverId = selection?.serverId ?? null;
   const workspaceId = selection?.workspaceId ?? null;
@@ -24,7 +26,7 @@ export function useGlobalNewWorkspaceAction() {
   );
 
   const handle = useCallback(() => {
-    if (hosts.length === 0) {
+    if (hosts.length === 0 || useSidebarViewStore.getState().groupMode === "single") {
       return false;
     }
     router.navigate(
@@ -46,7 +48,7 @@ export function useGlobalNewWorkspaceAction() {
   useKeyboardActionHandler({
     handlerId: "workspace-new-global",
     actions: WORKSPACE_NEW_ACTIONS,
-    enabled: hosts.length > 0,
+    enabled: hosts.length > 0 && !singleWorkspaceMode,
     priority: 0,
     handle,
   });
