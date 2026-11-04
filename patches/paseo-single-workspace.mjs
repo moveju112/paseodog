@@ -56,8 +56,20 @@ export const WORKSPACE_HEADER_EDITS = [
         'workspacesSectionHeader:isCompact=>({flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:e.spacing[2],paddingLeft:e.spacing[2],paddingRight:isCompact?e.spacing[2]+1.5+32+8:4,paddingTop:e.spacing[1],paddingBottom:e.spacing[1],uni__dependencies:[0]})'],
 ];
 
+export const WORKSPACE_CREATE_ENTRY_EDITS = [
+    ['e.SidebarNavRows=function(o){const n=(0,s.c)(8)',
+        'e.SidebarNavRows=function(o){const singleWorkspaceMode=(0,r(4072).useSidebarViewStore)(s=>"single"===s.groupMode),n=(0,s.c)(9)'],
+    ['n[0]!==b?(p=b.filter(I),n[0]=b,n[1]=p):p=n[1]',
+        'n[8]!==singleWorkspaceMode||n[0]!==b?(p=b.filter(t=>I(t)&&!(singleWorkspaceMode&&"builtin"===t.kind&&"new-workspace"===t.id)),n[8]=singleWorkspaceMode,n[0]=b,n[1]=p):p=n[1]'],
+    ['e.useGlobalNewWorkspaceAction=function(){const v=',
+        'e.useGlobalNewWorkspaceAction=function(){const singleWorkspaceMode=(0,r(4072).useSidebarViewStore)(s=>"single"===s.groupMode);const v='],
+    ['A=()=>0!==j.length&&(t.router.navigate',
+        'A=()=>0!==j.length&&"single"!==r(4072).useSidebarViewStore.getState().groupMode&&(t.router.navigate'],
+    ['const H=A,K=j.length>0;', 'const H=A,K=j.length>0&&!singleWorkspaceMode;'],
+];
+
 export function withSingleWorkspace(source) {
-    for (const [before, after] of [...SINGLE_WORKSPACE_EDITS, ...WORKSPACE_HEADER_EDITS]) {
+    for (const [before, after] of [...SINGLE_WORKSPACE_EDITS, ...WORKSPACE_HEADER_EDITS, ...WORKSPACE_CREATE_ENTRY_EDITS]) {
         if (source.split(before).length !== 2 || source.includes(after))
             throw new Error('Paseo single workspace anchor mismatch');
         source = source.replace(before, () => after);
@@ -66,7 +78,7 @@ export function withSingleWorkspace(source) {
 }
 
 export function withoutSingleWorkspace(source) {
-    for (const edits of [WORKSPACE_HEADER_EDITS, SINGLE_WORKSPACE_EDITS]) {
+    for (const edits of [WORKSPACE_CREATE_ENTRY_EDITS, WORKSPACE_HEADER_EDITS, SINGLE_WORKSPACE_EDITS]) {
         const counts = edits.map(([, after]) => source.split(after).length - 1);
         if (counts.some((count) => count > 1)) throw new Error('Paseo single workspace drift');
         if (counts.includes(0) && counts.includes(1)) throw new Error('Partial Paseo single workspace patch');

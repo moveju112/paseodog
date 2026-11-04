@@ -17,6 +17,7 @@ import { useSidebarNavItems } from "@/sidebar-nav/use-sidebar-nav-items";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
+import { useSidebarViewStore } from "@/stores/sidebar-view-store";
 import {
   buildNewWorkspaceRoute,
   buildSchedulesRoute,
@@ -39,7 +40,16 @@ interface SidebarNavRowsProps extends SidebarNavRowProps {
  */
 export function SidebarNavRows({ style, onBeforeNavigate }: SidebarNavRowsProps) {
   const { items } = useSidebarNavItems("header");
-  const visibleItems = useMemo(() => items.filter((item) => item.visible), [items]);
+  const singleWorkspaceMode = useSidebarViewStore((state) => state.groupMode === "single");
+  const visibleItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          item.visible &&
+          !(singleWorkspaceMode && item.kind === "builtin" && item.id === "new-workspace"),
+      ),
+    [items, singleWorkspaceMode],
+  );
   const groupRef = useRef<View | null>(null);
 
   if (visibleItems.length === 0) return null;
