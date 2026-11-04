@@ -13,15 +13,25 @@ async function connectReportClient(options) {
 export async function sendDeliveryReport(id, { stateRoot = journalRoot, home = paseoHome,
     connect = connectReportClient } = {}) {
     const report = await readDeliveryReport(stateRoot, id);
-    if (!report?.result) throw new Error('Delivery report has no terminal result');
+    if (!report?.result) throw new Error('Delivery report has no result');
     const client = await connect({ target: { kind: 'instance', home } });
     try {
         const snapshot = await client.fetchAgent({ agentId: report.agentId });
         const agent = snapshot?.agent;
         if (!agent || agent.archivedAt || agent.provider !== 'paseodog') return false;
+        // 설치 전 데몬은 기존 strict RPC만 안다. 버전 합의 없이 새 필드를 보내거나 거절 후 재전송하지 않는다.
+        const capabilities = await client.invokePluginRpc('paseodog-provider', 'background-results', {
+            action: 'status', agentId: report.agentId,
+        });
+        const detailed = capabilities?.deliveryReportVersion === 2;
+        if (!detailed && report.result.status === 'running') return false;
         const saved = await client.invokePluginRpc('paseodog-provider', 'background-results', {
             action: 'delivery', agentId: report.agentId, jobId: report.id.slice(0, 12),
-            eventId: report.eventId, status: report.result.status === 'complete' ? 'completed' : 'failed',
+            eventId: report.eventId, status: report.result.status === 'complete' ? 'completed' : report.result.status,
+            ...(detailed ? {
+                stage: report.result.stage ?? undefined, attempt: report.result.attempt ?? undefined,
+                reason: report.result.reason ?? undefined, recovered: report.result.recovered ?? false,
+            } : {}),
         });
         if (!saved?.journalSaved) throw new Error('Delivery result journal was not confirmed');
         return { journalSaved: true, clientReceived: null, ai: 'not-requested' };

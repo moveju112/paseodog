@@ -5,7 +5,7 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { promises as fs } from "node:fs";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
-import { AgentStorage } from "./agent-storage.js";
+import { AgentStorage, parseStoredAgentRecord } from "./agent-storage.js";
 import { buildConfigOverrides, buildSessionConfig } from "../persistence-hooks.js";
 import type { ManagedAgent } from "./agent-manager.js";
 import type {
@@ -172,6 +172,42 @@ describe("AgentStorage", () => {
 
   afterEach(() => {
     rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test("restart reconciles healthy PaseoDog idle errors without clearing genuine failures", async () => {
+    const record = {
+      id: "recovered",
+      provider: "paseodog",
+      cwd: "/test",
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      lastStatus: "idle" as const,
+      lastError: null,
+      requiresAttention: true,
+      attentionReason: "error" as const,
+      attentionTimestamp: "2026-01-01T00:00:00Z",
+      labels: {},
+      config: null,
+      persistence: null,
+    };
+    await storage.upsert(record);
+    const reopened = new AgentStorage(storagePath, logger);
+    expect(await reopened.get(record.id)).toMatchObject({
+      lastStatus: "idle",
+      lastError: null,
+      requiresAttention: false,
+      attentionReason: null,
+      attentionTimestamp: null,
+    });
+    for (const patch of [
+      { lastStatus: "error" },
+      { lastError: "unresolved failure" },
+      { provider: "codex" },
+      { attentionReason: "permission" },
+      { attentionReason: "finished" },
+    ]) {
+      expect(parseStoredAgentRecord({ ...record, ...patch }).requiresAttention).toBe(true);
+    }
   });
 
   test("applySnapshot persists configs and snapshot metadata", async () => {

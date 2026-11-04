@@ -49,7 +49,6 @@ import {
   useHostRuntimeSnapshot,
   useHosts,
 } from "@/runtime/host-runtime";
-import { ProvidersSection } from "@/screens/settings/providers-section";
 import { HostUsageSection } from "@/usage";
 import { HostAppearanceSection } from "@/screens/settings/host-appearance-section";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
@@ -315,20 +314,6 @@ export function HostWorkspacesPage({ serverId }: { serverId: string }) {
           <Text style={styles.emptyText}>{t("settings.host.workspaces.unavailable")}</Text>
         </View>
       )}
-    </View>
-  );
-}
-
-export function HostProvidersPage({ serverId }: { serverId: string }) {
-  const host = useHostProfile(serverId);
-
-  if (!host) {
-    return <HostNotFound />;
-  }
-
-  return (
-    <View>
-      <ProvidersSection serverId={serverId} />
     </View>
   );
 }

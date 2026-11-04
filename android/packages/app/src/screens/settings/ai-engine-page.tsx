@@ -16,9 +16,7 @@ import {
 } from "./ai-engine-contract";
 import { useAiEngineSettings } from "./use-ai-engine-settings";
 import { EngineAccounts } from "./engine-accounts";
-import { AgentMessageSettings } from "./agent-message-settings";
 import { TurnDurationSettings } from "./turn-duration-settings";
-import { SpeechSettings } from "./speech-settings";
 import { isBasicAgent } from "./basic-agent-roles";
 
 // 호스트 설정 목록의 개별 항목과 1:1로 대응하는 엔진 설정 구역
@@ -27,10 +25,8 @@ export type EngineSection =
   | "workflow"
   | "response"
   | "execution"
-  | "speech"
   | "memory"
   | "generation"
-  | "providers"
   | "tokens"
   | "instructions"
   | "tools"
@@ -276,7 +272,6 @@ const builtinToolMeta = [
   { id: "tidy", label: "코드 정리 (Tidy)", hint: "포맷팅·린트 자동 정리" },
   { id: "visualize", label: "시각화 도구", hint: "다이어그램·구조 시각화 생성" },
   { id: "media", label: "미디어 처리", hint: "이미지·오디오 파일 분석 및 변환" },
-  { id: "localProvider", label: "로컬 모델 공급자", hint: "Ollama·LM Studio 등 로컬 추론 연결" },
 ] as const;
 
 const defaultEffortLabels: Record<string, string> = {
@@ -462,11 +457,9 @@ function ToolsSection({
   disabled,
   request,
   scope = "tools",
-}: SectionProps & { scope?: "tools" | "memory" | "providers" }) {
+}: SectionProps & { scope?: "tools" | "memory" }) {
   const toolModules = snapshot.toolModules;
-  const tools = builtinToolMeta.filter((tool) =>
-    scope === "providers" ? tool.id === "localProvider" : tool.id !== "localProvider",
-  );
+  const tools = builtinToolMeta;
   const uninstalledModules = tools.filter((tool) => toolModules?.[tool.id]?.installed === false);
   const toggleWebSearch = useCallback(
     (webSearch: boolean) => {
@@ -516,9 +509,7 @@ function ToolsSection({
   }
 
   return (
-    <SettingsSection
-      title={scope === "providers" ? "로컬 모델 확장" : "내장 도구 모듈 (Built-in Tools)"}
-    >
+    <SettingsSection title="내장 도구 모듈 (Built-in Tools)">
       <View style={settingsStyles.card}>
         {scope === "tools" && (
           <SettingRow title="웹 검색 도구" hint="실시간 웹 검색 및 문서 조회 허용">
@@ -1466,9 +1457,9 @@ function WorkflowSection({
         )}
 
         {/* 2. 역할별 기본 에이전트 */}
-        {(section === "agents" || section === "tools") && (
+        {(section === "workflow" || section === "tools") && (
           <SettingsSection title={section === "tools" ? "웹 검색 모델" : "기본 에이전트"}>
-            {section === "agents" && (
+            {section === "workflow" && (
               <Text style={settingsStyles.rowHint}>
                 기본값은 모두 off이며 역할마다 모델을 따로 선택해 켤 수 있어요. 필요한 조건에서만
                 호출하며, 탐색·실패 분석·인계·검토는 메인이 필요할 때 위임해요.
@@ -1507,7 +1498,7 @@ function WorkflowSection({
                   </View>
                 </Pressable>
               )}
-              {section === "agents" &&
+              {section === "workflow" &&
                 basicAgents.map((agent) => (
                   <AgentListRow
                     key={agent.id}
@@ -1998,36 +1989,8 @@ function WorkflowSection({
       {renderPreferences()}
       {section === "workflow" && renderWorkflowModal()}
       {section === "tools" && renderWebSearchModal()}
-      {section === "agents" && renderAgentModal()}
+      {(section === "workflow" || section === "agents") && renderAgentModal()}
     </>
-  );
-}
-
-// 열린 세션별 컨텍스트 사용 토큰 표시 (값 없음 -> 확인 대기)
-function formatUsedTokens(usedTokens: number | undefined) {
-  return usedTokens === undefined ? "확인 대기" : `${Math.round(usedTokens).toLocaleString()} 토큰`;
-}
-
-// 열린 엔진 세션의 컨텍스트 사용량 목록
-function SessionUsage({ sessions }: { sessions: EngineSnapshot["sessions"] }) {
-  return (
-    <SettingsSection title="열린 세션 컨텍스트 사용량">
-      <View style={settingsStyles.card}>
-        {sessions.length === 0 ? (
-          <View style={settingsStyles.row}>
-            <Text style={settingsStyles.rowHint}>현재 메모리에 열린 엔진 세션이 없어요.</Text>
-          </View>
-        ) : (
-          sessions.map((session) => (
-            <SettingRow key={session.id} title={session.model || "열린 세션"} hint={session.id}>
-              <Text style={settingsStyles.rowTitle}>
-                {formatUsedTokens(session.context?.usedTokens)}
-              </Text>
-            </SettingRow>
-          ))
-        )}
-      </View>
-    </SettingsSection>
   );
 }
 
@@ -2213,8 +2176,6 @@ function TokensSection({ snapshot, disabled, request }: SectionProps) {
           )}
         </View>
       </SettingsSection>
-
-      <SessionUsage sessions={snapshot.sessions} />
     </>
   );
 }
@@ -2223,7 +2184,7 @@ function TokensSection({ snapshot, disabled, request }: SectionProps) {
 function SectionBody({
   section,
   ...props
-}: SectionProps & { section: Exclude<EngineSection, "accounts" | "speech"> }) {
+}: SectionProps & { section: Exclude<EngineSection, "accounts"> }) {
   switch (section) {
     case "workflow":
     case "agents":
@@ -2243,7 +2204,6 @@ function SectionBody({
         </>
       );
     case "memory":
-    case "providers":
       return <ToolsSection {...props} scope={section} />;
     case "skills":
       return <SkillsSection {...props} />;
@@ -2252,19 +2212,12 @@ function SectionBody({
 
 // 선택한 호스트의 Mixdog 엔진 설정 중 해당 구역의 컨트롤만 지연 없이 제어한다 (기본 모델은 채팅에서 선택).
 export function AiEnginePage({ serverId, section }: { serverId: string; section: EngineSection }) {
-  if (section === "speech") return <SpeechSettings key={serverId} serverId={serverId} />;
   return (
     <EngineSettingsPage key={`${serverId}:${section}`} serverId={serverId} section={section} />
   );
 }
 
-function EngineSettingsPage({
-  serverId,
-  section,
-}: {
-  serverId: string;
-  section: Exclude<EngineSection, "speech">;
-}) {
+function EngineSettingsPage({ serverId, section }: { serverId: string; section: EngineSection }) {
   const { snapshot, busy, connected, message, error, request } = useAiEngineSettings(serverId);
   const disabled = !connected;
   const refresh = useCallback(() => {
@@ -2314,7 +2267,6 @@ function EngineSettingsPage({
       {section === "execution" && (
         <TurnDurationSettings key={`duration:${serverId}`} serverId={serverId} />
       )}
-      {section === "workflow" && <AgentMessageSettings key={serverId} serverId={serverId} />}
     </View>
   );
 }

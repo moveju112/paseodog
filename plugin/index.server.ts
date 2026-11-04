@@ -10,17 +10,13 @@ import { createClientErrorCollector } from './server/client-errors.mjs';
 import { daemonRelease, daemonUpdate } from './shared/controls.js';
 import { DAEMON_RELEASE } from './server/util.mjs';
 import { createDaemonUpdater } from './server/daemon-update.mjs';
-import { agentMessagePolicy } from './shared/message-policy.js';
 import { scheduleTurnRecovery } from './server/turn-recovery.mjs';
 import { scheduleDeliveryReports } from './server/delivery-notifications.mjs';
 import { createBackgroundResults } from './server/background-results.mjs';
 import { backgroundResults } from './shared/background-results.js';
 import { join } from 'node:path';
-import { speechSettings } from './shared/speech-settings.js';
-import { handleSpeechSettings } from './server/speech-settings.mjs';
 // 전용 엔진의 설정과 현재 세션 상태를 Paseo 플러그인 RPC에 연결한다.
 export default function contribute(server: PluginServerContext) {
-    server.handle(speechSettings, request => handleSpeechSettings(request));
     server.handle(daemonRelease, () => DAEMON_RELEASE);
     const updater = createDaemonUpdater({ versionCode: DAEMON_RELEASE.versionCode });
     server.handle(daemonUpdate, request => request.action === 'status' ? updater.status() : updater.request(request));
@@ -32,8 +28,6 @@ export default function contribute(server: PluginServerContext) {
         if (!resultService) throw new Error('Dedicated background result service is unavailable');
         return resultService.request(request);
     });
-    server.handle(agentMessagePolicy, ({ action, ...request }) =>
-        controls.read({ ...request, action: 'messagePolicy', operation: action }));
     const clientErrorCollector = createClientErrorCollector();
     server.handle(clientErrors, (request) => clientErrorCollector.handle(request));
     server.registerUsageSource(createClaudeUsageSource(controls));
@@ -45,14 +39,7 @@ export default function contribute(server: PluginServerContext) {
     server.handle(engineStatus, async () => ({ sessions: await controls.sessions(), observedAt: Date.now() }));
     server.handle(engineMetrics, (request) => controls.metrics(request));
     server.handle(nativeConfigView, (request) => readNativeConfig(request));
-    server.handle(engineControls, async (request) => {
-        const snapshot = await controls.read(request);
-        const mutation = Boolean(request?.action && request.action !== 'read');
-        return {
-            ...snapshot,
-            sessions: mutation ? controls.peekSessions() : await controls.sessions(),
-        };
-    });
+    server.handle(engineControls, request => controls.read(request));
     server.registerProvider(createMixdogProvider(controls));
     // 데몬 재시작으로 중단된 턴은 시작 후 한 번만 이어가기 지시를 보낸다.
     const stopRecovery = scheduleTurnRecovery();

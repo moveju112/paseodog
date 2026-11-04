@@ -211,7 +211,7 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
                     request = { action: 'read' };
                 }
                 const snapshot = await invokeControls(request);
-                if (request.action === 'messagePolicy' || request.action === 'title') return snapshot;
+                if (request.action === 'title') return snapshot;
                 return { ...snapshot, maxTurnMinutes: readTurnMinutes(launch.env) };
             });
             queue = run.catch(() => {});
@@ -238,10 +238,6 @@ export function createEngineControls({ execCommand, spawnProcess, terminateProce
             if (startedAt !== null) run.then((value) => quotaRefresh.settle(startedAt, value), () => quotaRefresh.settle(startedAt, null));
             queue = run.catch(() => {});
             return run;
-        },
-        peekSessions() {
-            void this.sessions().catch(() => {});
-            return lastSessions;
         },
         async sessions() {
             if (!statusRequest) {

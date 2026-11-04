@@ -51,6 +51,12 @@ const snapshot = {
     orchestration: 'none', instructionFiles: 'all', workflows: [],
     agents: [
         { id: 'context-explorer', label: 'Context Explorer', description: 'Explore', route },
+        { id: 'title-generator', label: 'Title Generator', description: 'Titles', route, disabled: true },
+        { id: 'context-compressor', label: 'Context Compressor', description: 'Compact', route },
+        { id: 'maintainer', label: 'Maintainer', description: 'Memory', route },
+        { id: 'failure-analyst', label: 'Failure Analyst', description: 'Failures', route },
+        { id: 'handoff-summarizer', label: 'Handoff Summarizer', description: 'Handoff', route },
+        { id: 'reviewer', label: 'Reviewer', description: 'Review', route },
         { id: 'worker', label: 'Worker', description: 'Work', route },
     ],
     compaction: { auto: true }, sessions: [], outputStyles: [{ id: 'minimal', label: 'Minimal' }],
@@ -61,9 +67,7 @@ const snapshot = {
 function enginePage(platform, request) {
     const settings = { snapshot, busy: false, connected: true, request };
     const client = {
-        invokePluginRpc: async (_plugin, method) => method === 'agent-message-policy'
-            ? { allowUnrelatedSessions: false }
-            : { maxTurnMinutes: 120 },
+        invokePluginRpc: async () => ({ maxTurnMinutes: 120 }),
     };
     const runtime = {
         useHostRuntimeClient: () => client,
@@ -73,7 +77,7 @@ function enginePage(platform, request) {
         return runInNewContext(compile(nativeEngine) + ';AiEnginePage', {
             React, ...React, ...elements, isBasicAgent, settingsStyles: {},
             useAiEngineSettings: () => settings,
-            AgentMessageSettings: 'messages', TurnDurationSettings: 'duration', SpeechSettings: 'speech',
+            TurnDurationSettings: 'duration',
         });
     }
     return webModule(5346, {
@@ -106,11 +110,42 @@ test('all supported host pages have unique menu entries, including restored and 
     });
     assert.deepEqual(Array.from(webItems, item => item.id), Array.from(nativeItems, item => item.id));
     assert.equal(new Set(nativeItems.map(item => item.id)).size, nativeItems.length);
-    const expected = ['agents', 'metadata', 'providers', 'plugins', 'engine-response', 'engine-execution', 'engine-speech', 'engine-memory'];
+    const expected = ['agents', 'metadata', 'engine-response', 'engine-execution', 'engine-memory'];
     for (const id of expected) assert.ok(nativeItems.some(item => item.id === id), id);
+    for (const id of ['providers', 'plugins', 'pair-device']) {
+        assert.ok(!nativeItems.some(item => item.id === id), id);
+    }
+    assert.ok(!nativeItems.some(item => item.id === 'engine-speech'));
     const routes = read('android/packages/app/src/utils/host-routes.ts');
     const hostSlugs = runInNewContext(routes.match(/export const HOST_SECTION_SLUGS = (\[[\s\S]*?\]) as const;/)[1]);
     for (const id of hostSlugs) assert.ok(id === 'engine-agents' || nativeItems.some(item => item.id === id), id);
+});
+
+// 터미널 스크롤백은 설정 없이 10000줄로 고정하고, 앱·웹 모두 메뉴와 경로에서 뺀다.
+test('app and web fix terminal scrollback at 10000 lines without a settings section', () => {
+    const native = nativeScreen.match(/const SIDEBAR_SECTION_ITEMS: SidebarSectionItem\[\] = (\[[\s\S]*?\n\]);/)[1];
+    const nativeIds = [...native.matchAll(/id: "([\w-]+)"/g)].map(([, id]) => id);
+    const webStart = bundle.indexOf('const Ve=[');
+    const webItems = bundle.slice(webStart, bundle.indexOf(';function De(e,t)', webStart));
+    const webIds = [...webItems.matchAll(/\{id:"([\w-]+)",labelKey/g)].map(([, id]) => id);
+    assert.deepEqual(webIds, nativeIds);
+    assert.ok(nativeIds.includes('chat') && !nativeIds.includes('terminal'));
+    // 음성 기능 제거로 마이크 권한만 남던 권한 메뉴도 앱·웹 모두에서 뺀다.
+    assert.ok(nativeIds.includes('notifications') && !nativeIds.includes('permissions'));
+    const nativeSlugs = Array.from(runInNewContext(read('android/packages/app/src/utils/host-routes.ts')
+        .match(/export const SETTINGS_SECTION_SLUGS = (\[[\s\S]*?\]) as const;/)[1]));
+    const routes = webModule(3905, { 52: { Buffer }, 3906: {} });
+    assert.deepEqual(nativeSlugs, nativeIds);
+    assert.deepEqual(nativeSlugs.filter(routes.isSettingsSectionSlug), nativeSlugs);
+    assert.equal(routes.isSettingsSectionSlug('terminal'), false);
+
+    const pane = read('android/packages/app/src/components/terminal-pane.tsx');
+    assert.equal(Number(pane.match(/const TERMINAL_SCROLLBACK_LINES = ([\d_]+);/)[1].replaceAll('_', '')), 10000);
+    assert.match(pane, /scrollbackLines=\{TERMINAL_SCROLLBACK_LINES\}/);
+    const webPane = bundle.split('\n__d(').filter(part => part.includes('testId:"terminal-surface"'));
+    assert.equal(webPane.length, 1);
+    assert.equal(runInNewContext(webPane[0].match(/scrollbackLines:([^,]+),/)[1]), 10000);
+    for (const surface of [pane, webPane[0]]) assert.equal(surface.includes('terminalScrollbackLines'), false);
 });
 
 test('app and web routes retain every host-specific control at its new destination', () => {
@@ -142,18 +177,30 @@ test('app and web routes retain every host-specific control at its new destinati
         'engine-tools': ['AiEnginePage:tools', 'HostToolsSection'],
         'engine-instructions': ['AiEnginePage:instructions', 'AppendSystemPromptCard'],
         'engine-skills': ['AiEnginePage:skills', 'HostSkillsSection'],
-        'engine-speech': ['AiEnginePage:speech'],
         'engine-response': ['AiEnginePage:response'],
         'engine-execution': ['AiEnginePage:execution'],
         'engine-memory': ['AiEnginePage:memory'],
         metadata: ['AiEnginePage:generation', 'MetadataGenerationPage'],
-        providers: ['AiEnginePage:providers', 'HostProvidersPage'],
-        plugins: ['HostPluginsPage'],
+        connections: ['HostConnectionsPage', 'HostPairDevicePage'],
+        providers: [],
+        plugins: [],
     };
     for (const render of [native, web]) {
         for (const [section, types] of Object.entries(expected)) {
             assert.deepEqual(leaves(render({ kind: 'host', serverId: 'selected-host', section }, () => {})), types);
         }
+    }
+    // 이전 기기 페어링 주소도 연결 페이지와 같은 화면을 연다(앱은 경로 정규화로 연결 페이지로 보낸다).
+    assert.deepEqual(leaves(web({ kind: 'host', serverId: 'selected-host', section: 'pair-device' }, () => {})),
+        expected.connections);
+});
+
+test('web legacy provider and plugin links resolve to fixed settings without management routes', () => {
+    const routes = webModule(3905, { 52: { Buffer }, 3906: {} });
+    for (const [legacy, current] of [['providers', 'engine-accounts'], ['plugins', 'host']]) {
+        assert.equal(routes.isHostSectionSlug(legacy), false);
+        assert.equal(routes.normalizeHostSectionSlug(legacy), current);
+        assert.equal(routes.buildSettingsHostSectionRoute('host-one', legacy), `/settings/hosts/host-one/${current}`);
     }
 });
 
@@ -163,15 +210,14 @@ for (const platform of ['app', 'web']) {
         const calls = [];
         const Page = enginePage(platform, async command => { calls.push(command); return true; });
         const sections = {
-            workflow: ['작업 규칙', '자동 오케스트레이터 (Orchestration)'],
-            agents: ['기본 에이전트', '하위 에이전트'],
+            workflow: ['작업 규칙', '기본 에이전트', '자동 오케스트레이터 (Orchestration)'],
+            agents: ['하위 에이전트'],
             response: ['출력 스타일 및 사용자 프로필'],
             execution: ['실행 쉘'],
             generation: ['세션 제목'],
             memory: ['메모리'],
-            providers: ['로컬 모델 확장'],
             tools: ['내장 도구 모듈 (Built-in Tools)', '웹 검색 모델'],
-            tokens: ['Mixdog 토큰 절감 기술', '유휴 세션 자동 비우기 (Auto-Clear)', '열린 세션 컨텍스트 사용량'],
+            tokens: ['Mixdog 토큰 절감 기술', '유휴 세션 자동 비우기 (Auto-Clear)'],
         };
         let tree;
         await act(async () => { tree = create(null); });
@@ -185,8 +231,10 @@ for (const platform of ['app', 'web']) {
             const labels = tree.root.findAllByType('switch').map(node => node.props.accessibilityLabel);
             assert.equal(labels.includes('장기 메모리 도구'), section === 'memory');
             assert.equal(labels.includes('백그라운드 메모리'), section === 'memory');
-            assert.equal(labels.includes('로컬 모델 공급자'), section === 'providers');
+            assert.equal(labels.includes('로컬 모델 공급자'), false);
             assert.equal(labels.includes('웹 검색 도구'), section === 'tools');
+            assert.equal(labels.includes('컴퓨터 사용'), false);
+            assert.equal(labels.includes('무관한 세션 간 메시지 허용'), false);
             assert.equal(labels.includes('AI 세션 제목 자동 생성'), section === 'generation');
             assert.equal(tree.root.findAllByType('segments').length, 0);
             if (section === 'memory') {
@@ -197,5 +245,31 @@ for (const platform of ['app', 'web']) {
         assert.deepEqual(calls.map(command => ({ ...command })), [
             { action: 'features', memoryTools: false }, { action: 'features', recap: false },
         ]);
+    });
+
+    test(`${platform}: workflow restores basic roles and their existing editor without duplicating subagents`, async t => {
+        globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+        const calls = [];
+        const Page = enginePage(platform, async command => { calls.push(command); return true; });
+        let tree;
+        await act(async () => { tree = create(React.createElement(Page, { serverId: 'roles-host', section: 'workflow' })); });
+        t.after(async () => {
+            await act(async () => tree.unmount());
+            delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+        });
+        const roles = ['Context Explorer', 'Title Generator', 'Context Compressor', 'Maintainer',
+            'Failure Analyst', 'Handoff Summarizer', 'Reviewer'];
+        assert.deepEqual(tree.root.findAllByType('pressable')
+            .map(node => node.props.accessibilityLabel).filter(label => label?.startsWith('에이전트 ')),
+        roles.map(label => `에이전트 ${label}`));
+        await act(async () => tree.root.findByProps({ accessibilityLabel: '에이전트 Title Generator' }).props.onPress());
+        assert.ok(tree.root.findByType('dialog'));
+        assert.deepEqual(calls.map(command => ({ ...command })), [
+            { action: 'agentDefinition', agent: 'title-generator' },
+        ]);
+        await act(async () => tree.update(React.createElement(Page, { key: 'agents', serverId: 'roles-host', section: 'agents' })));
+        assert.deepEqual(tree.root.findAllByType('pressable')
+            .map(node => node.props.accessibilityLabel).filter(label => label?.startsWith('에이전트 ')),
+        ['에이전트 Worker']);
     });
 }

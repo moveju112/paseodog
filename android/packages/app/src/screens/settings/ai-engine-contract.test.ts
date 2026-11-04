@@ -15,7 +15,6 @@ describe("host AI engine settings", () => {
       "engine-skills",
       "engine-response",
       "engine-execution",
-      "engine-speech",
       "engine-memory",
       "agents",
     ]) {

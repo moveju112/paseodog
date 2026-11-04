@@ -9,6 +9,7 @@ import {
   resolveKnownHostRoute,
   buildSessionsRoute,
   buildSettingsAddHostRoute,
+  buildSettingsHostSectionRoute,
   buildProjectSettingsRoute,
   buildProjectsSettingsRoute,
   decodeFilePathFromPathSegment,
@@ -246,19 +247,26 @@ describe("global routes", () => {
 describe("host settings section slugs", () => {
   it("keeps current host settings sections", () => {
     expect(normalizeHostSectionSlug("connections")).toBe("connections");
-    expect(normalizeHostSectionSlug("pair-device")).toBe("pair-device");
     expect(normalizeHostSectionSlug("agents")).toBe("agents");
     expect(normalizeHostSectionSlug("metadata")).toBe("metadata");
     expect(normalizeHostSectionSlug("workspaces")).toBe("workspaces");
     expect(normalizeHostSectionSlug("projects")).toBe("projects");
-    expect(normalizeHostSectionSlug("providers")).toBe("providers");
+    expect(normalizeHostSectionSlug("providers")).toBe("engine-accounts");
+    expect(normalizeHostSectionSlug("plugins")).toBe("host");
     expect(normalizeHostSectionSlug("usage")).toBe("usage");
     expect(normalizeHostSectionSlug("host")).toBe("host");
+    expect(buildSettingsHostSectionRoute("host-one", "providers")).toBe(
+      "/settings/hosts/host-one/engine-accounts",
+    );
+    expect(buildSettingsHostSectionRoute("host-one", "plugins")).toBe(
+      "/settings/hosts/host-one/host",
+    );
   });
 
   it("maps old host settings sections to their new names", () => {
     expect(normalizeHostSectionSlug("orchestration")).toBe("agents");
     expect(normalizeHostSectionSlug("daemon")).toBe("host");
+    expect(normalizeHostSectionSlug("pair-device")).toBe("connections");
   });
 });
 

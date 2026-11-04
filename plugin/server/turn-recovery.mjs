@@ -1,9 +1,9 @@
 import { execFile } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { lockOwnerAlive } from './journal.mjs';
-import { safeKey } from './util.mjs';
+import { safeKey, writeFileAtomicSync } from './util.mjs';
 
 // 원래 요청은 다시 보내지 않는다. 중단 사실을 알리고 상태 확인 후 남은 일만 잇게 한다.
 export const CONTINUE_PROMPT = '[PaseoDog 자동 이어가기] 직전 턴이 데몬 재시작으로 중단됐어요. '
@@ -75,9 +75,7 @@ export async function resumeInterruptedTurns({ stateRoot, paseoHome, cli, send =
         const agentId = agents.get(turn.sessionId);
         if (attempted[key] || !agentId) continue;
         attempted[key] = new Date().toISOString();
-        const temporary = `${markerPath}.${process.pid}.tmp`;
-        writeFileSync(temporary, JSON.stringify(attempted, null, 2) + '\n', { mode: 0o600 });
-        renameSync(temporary, markerPath);
+        writeFileAtomicSync(markerPath, JSON.stringify(attempted, null, 2) + '\n');
         try {
             await send(cli, agentId);
             resumed.push(agentId);

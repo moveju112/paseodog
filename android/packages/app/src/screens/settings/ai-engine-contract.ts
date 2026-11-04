@@ -202,15 +202,6 @@ export const engineSnapshotSchema = z.object({
       minContextPercent: z.number(),
     })
     .optional(),
-  sessions: z.array(
-    z.object({
-      id: z.string(),
-      model: z.string().optional(),
-      state: z.string().optional(),
-      compaction: z.object({ auto: z.boolean() }).optional(),
-      context: z.record(z.string(), z.number()).optional(),
-    }),
-  ),
 });
 
 export type EngineSnapshot = z.infer<typeof engineSnapshotSchema>;

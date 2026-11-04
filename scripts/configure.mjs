@@ -1,8 +1,9 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync, lstatSync, copyFileSync, constants, renameSync } from 'node:fs';
+import { mkdirSync, readFileSync, existsSync, lstatSync, copyFileSync, constants } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { root, stateRoot, paseoHome, mixdogHome, journalRoot, worker } from './paths.mjs';
+import { paseoHome, mixdogHome, journalRoot, worker } from './paths.mjs';
+import { writeFileAtomicSync } from '../plugin/server/util.mjs';
 const DISABLED_BUILTIN_PROVIDERS = ['claude', 'codex', 'copilot', 'opencode', 'pi', 'omp', 'muse', 'antigravity'];
 
 // Mixdog 데이터 디렉터리에 기본 설정값(에이전트 전부 비활성, 지침 ON, 워크트리 OFF, 스킬 OFF)을 시드한다.
@@ -30,9 +31,7 @@ function seedMixdogData(nativeHome) {
         defaultsVersion: raw.defaultsVersion || 2,
         agent: agentSection,
     };
-    const tmp = cfgFile + '.' + randomUUID() + '.tmp';
-    writeFileSync(tmp, JSON.stringify(nextRaw, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
-    renameSync(tmp, cfgFile);
+    writeFileAtomicSync(cfgFile, JSON.stringify(nextRaw, null, 2) + '\n');
 }
 
 // PaseoDog 전용 공급자만 활성화하고 기본 내장·ACP 외부 공급자 및 타 공급자 프로필을 정리한다.
@@ -45,8 +44,8 @@ export function configure({home=paseoHome, enginePath=worker, nativeHome=mixdogH
     if(existsSync(file)&&lstatSync(file).isSymbolicLink())throw new Error('Refusing symlink config');
     const previous=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):{version:1};
     const providers={...(previous.agents?.providers||{})};
-    for(const [id, entry] of Object.entries(providers)) {
-        if(id!=='paseodog' && entry && typeof entry==='object' && entry.extends) delete providers[id];
+    for(const id of Object.keys(providers)) {
+        if(id!=='paseodog' && !DISABLED_BUILTIN_PROVIDERS.includes(id)) delete providers[id];
     }
     for(const id of DISABLED_BUILTIN_PROVIDERS) {
         providers[id]={...(providers[id]||{}),enabled:false};
@@ -57,11 +56,14 @@ export function configure({home=paseoHome, enginePath=worker, nativeHome=mixdogH
         ? {...baseDaemon,agentProfiles:baseDaemon.agentProfiles.filter((profile)=>profile?.provider==='paseodog')}
         : baseDaemon;
     const {defaultProvider:_ignoredDefaultProvider,...restAgents}=previous.agents||{};
+    // 음성인식은 지원하지 않으므로 런처 밖에서 시작한 데몬도 받아쓰기·음성 모드를 쓰지 않게 저장한다.
+    const features={...previous.features,dictation:{...previous.features?.dictation,enabled:false},
+        voiceMode:{...previous.features?.voiceMode,enabled:false}};
     // Never add plugin source entries by hand: Paseo owns their install lifecycle.
-    const config={...previous,version:1,pluginsEnabled:true,daemon,
+    const config={...previous,version:1,pluginsEnabled:true,daemon,features,
         agents:{...restAgents,providers}};
     if(existsSync(file))copyFileSync(file,`${file}.backup-${Date.now()}-${randomUUID().slice(0,8)}`,constants.COPYFILE_EXCL);
-    const temp=file+'.'+randomUUID()+'.tmp';writeFileSync(temp,JSON.stringify(config,null,2)+'\n',{mode:0o600,flag:'wx'});renameSync(temp,file);
+    writeFileAtomicSync(file,JSON.stringify(config,null,2)+'\n');
     return file;
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){

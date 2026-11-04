@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { scratchPath } from '../scripts/paths.mjs';
-import { registerDeliveryReport, readDeliveryReport, settleDeliveryReport, dispatchDeliveryReports,
+import { registerDeliveryReport, readDeliveryReport, resumeDeliveryReport, settleDeliveryReport, dispatchDeliveryReports,
     scheduleDeliveryReports } from '../plugin/server/delivery-notifications.mjs';
 import { sendDeliveryReport } from '../scripts/delivery-notify.mjs';
 import { startDelivery, executeDelivery } from '../scripts/release-pipeline.mjs';
@@ -42,6 +42,66 @@ test('the original recipient is captured before detachment and never replaced by
     await f.agent(otherId);
     await assert.rejects(registerDeliveryReport(f.stateRoot, { workspace: f.workspace, agentId: otherId }), /recipient changed/);
     assert.equal((await readDeliveryReport(f.stateRoot, report.id)).agentId, agentId);
+});
+
+test('detached delivery restores the saved SDK and Wine paths instead of relying on the caller shell', async t => {
+    const f = await fixture(t);
+    const calls = [];
+    await startDelivery('/config.json', {
+        workspace: f.workspace, androidHome: '/approved/sdk', wineBin: '/approved/wine/bin',
+    }, { reportRoot: f.stateRoot, run: async (...args) => calls.push(args) });
+    const args = calls[0][1];
+    assert.ok(args.includes('--setenv=ANDROID_HOME=/approved/sdk'));
+    assert.ok(args.some(arg => arg.startsWith('--setenv=PATH=/approved/wine/bin:')));
+});
+
+test('retry reporting distinguishes the failed stage, retry and recovery without copying errors', async t => {
+    const f = await fixture(t);
+    const registered = await f.register();
+    await f.snapshot({ 'build-android': { status: 'failed', attempt: 1, reason: 'android-sdk-missing' } });
+    const failed = await settleDeliveryReport(f.stateRoot, f.workspace, 'failed');
+    assert.equal(failed.result.reason, 'android-sdk-missing');
+    assert.equal(failed.result.attempt, 1);
+    await executeDelivery({ workspace: f.workspace }, {
+        reportRoot: f.stateRoot,
+        preflight: async () => {
+            const resumed = await readDeliveryReport(f.stateRoot, registered.id);
+            assert.equal(resumed.result.status, 'running');
+            assert.equal(resumed.result.stage, 'build-android');
+            assert.equal(resumed.result.attempt, 2);
+            assert.notEqual(resumed.eventId, failed.eventId);
+        },
+        deliver: async () => {
+            await f.snapshot({ 'build-android': { status: 'complete', attempt: 2 } });
+        },
+    });
+    const completed = await readDeliveryReport(f.stateRoot, registered.id);
+    assert.equal(completed.result.status, 'complete');
+    assert.equal(completed.result.recovered, true);
+});
+
+test('preflight retries keep distinct attempt identities and do not blame an older failed build', async t => {
+    const f = await fixture(t);
+    const registered = await f.register();
+    await f.snapshot({ 'build-android': { status: 'failed', attempt: 1 } });
+    await settleDeliveryReport(f.stateRoot, f.workspace, 'failed');
+    const results = [];
+    for (const attempt of [1, 2]) {
+        await assert.rejects(executeDelivery({ workspace: f.workspace }, {
+            reportRoot: f.stateRoot,
+            preflight: async () => {
+                throw Object.assign(new Error('private path or credential'), { code: 'dependency-missing' });
+            },
+            deliver: async () => assert.fail('preflight must stop delivery'),
+        }), /private path or credential/);
+        const report = await readDeliveryReport(f.stateRoot, registered.id);
+        assert.equal(report.result.stage, 'preflight');
+        assert.equal(report.result.reason, 'dependency-missing');
+        assert.equal(report.result.attempt, attempt);
+        assert.doesNotMatch(JSON.stringify(report), /private path or credential/);
+        results.push(report.eventId);
+    }
+    assert.notEqual(results[0], results[1]);
 });
 
 test('delivery start failure retains a terminal result without storing raw errors', async t => {
@@ -221,6 +281,7 @@ test('the dedicated authenticated client saves results during active turns and m
         fetchAgent: async () => ({ agent: { provider: 'paseodog', status: state, pendingPermissions: [] } }),
         sendAgentMessage: async () => assert.fail('Result reporting must never start inference'),
         invokePluginRpc: async (...args) => {
+            if (args[2].action === 'status') return { deliveryReportVersion: 2 };
             messages.push(args); if (fail) throw new Error('ACK lost');
             return { journalSaved: true };
         },
@@ -241,6 +302,65 @@ test('the dedicated authenticated client saves results during active turns and m
     assert.equal(messages[0][0], 'paseodog-provider');
     assert.equal(messages[0][2].agentId, agentId);
     assert.equal(messages[0][2].eventId, messages[1][2].eventId);
+});
+
+test('legacy strict RPC remains usable before runtime apply and never receives a retry as a false failure', async t => {
+    const f = await fixture(t);
+    const registered = await f.register();
+    await f.snapshot({ 'build-android': { status: 'failed', attempt: 1, reason: 'android-sdk-missing' } });
+    await settleDeliveryReport(f.stateRoot, f.workspace, 'failed');
+    const messages = [];
+    const client = {
+        fetchAgent: async () => ({ agent: { provider: 'paseodog' } }),
+        invokePluginRpc: async (_plugin, _rpc, input) => {
+            if (input.action === 'status') return { tasks: [] };
+            messages.push(input);
+            assert.deepEqual(Object.keys(input).sort(), ['action', 'agentId', 'eventId', 'jobId', 'status']);
+            return { journalSaved: true };
+        },
+        close: async () => {},
+    };
+    const options = { stateRoot: f.stateRoot, home: f.paseoHome, connect: async () => client };
+    await sendDeliveryReport(registered.id, options);
+    assert.equal(messages[0].status, 'failed');
+    await resumeDeliveryReport(f.stateRoot, f.workspace);
+    assert.equal(await sendDeliveryReport(registered.id, options), false);
+    assert.equal(messages.length, 1);
+    await settleDeliveryReport(f.stateRoot, f.workspace, 'complete');
+    await sendDeliveryReport(registered.id, options);
+    assert.equal(messages[1].status, 'completed');
+});
+
+test('detailed RPC receives stage and safe cause, then the retry and recovery states with stable event IDs', async t => {
+    const f = await fixture(t);
+    const registered = await f.register();
+    await f.snapshot({ 'build-android': { status: 'failed', attempt: 1, reason: 'android-sdk-missing' } });
+    await settleDeliveryReport(f.stateRoot, f.workspace, 'failed');
+    const messages = [];
+    const client = {
+        fetchAgent: async () => ({ agent: { provider: 'paseodog' } }),
+        invokePluginRpc: async (_plugin, _rpc, input) => {
+            if (input.action === 'status') return { deliveryReportVersion: 2 };
+            messages.push(input);
+            return { journalSaved: true };
+        },
+        close: async () => {},
+    };
+    const options = { stateRoot: f.stateRoot, home: f.paseoHome, connect: async () => client };
+    await sendDeliveryReport(registered.id, options);
+    await sendDeliveryReport(registered.id, options);
+    assert.equal(messages[0].eventId, messages[1].eventId);
+    assert.equal(messages[0].reason, 'android-sdk-missing');
+    assert.equal(messages[0].stage, 'build-android');
+    await resumeDeliveryReport(f.stateRoot, f.workspace);
+    await sendDeliveryReport(registered.id, options);
+    assert.equal(messages[2].status, 'running');
+    assert.equal(messages[2].attempt, 2);
+    await f.snapshot({ 'build-android': { status: 'complete', attempt: 2 } });
+    await settleDeliveryReport(f.stateRoot, f.workspace, 'complete');
+    await sendDeliveryReport(registered.id, options);
+    assert.equal(messages[3].status, 'completed');
+    assert.equal(messages[3].recovered, true);
 });
 
 test('missing or malformed recipients are rejected without creating a report', async t => {

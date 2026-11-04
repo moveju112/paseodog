@@ -33,13 +33,26 @@ test('settings organization remains hash-gated, reversible and idempotent', () =
     assert.throws(() => withSettingsOrganization(''), /anchor mismatch/);
 });
 
+test('removed settings reject partial legacy insertions and unreviewed component contents', () => {
+    for (const [component, row] of [
+        ['const PaseodogComputerUseSettings=(()=>{const unknown=0;return ComputerUseSettings})();',
+            'e.section==="tools"?u.createElement(PaseodogComputerUseSettings,{key:"computer:"+e.serverId,serverId:e.serverId}):null,'],
+        ['const PaseodogAgentMessageSettings=(()=>{const unknown=0;return AgentMessageSettings})();',
+            ',e.section==="workflow"?u.createElement(PaseodogAgentMessageSettings,{key:e.serverId,serverId:e.serverId}):null'],
+    ]) {
+        assert.throws(() => withoutSettingsOrganization(component), /Partial/);
+        assert.throws(() => withoutSettingsOrganization(row), /Partial/);
+        assert.throws(() => withoutSettingsOrganization(component + row), /source hash mismatch/);
+    }
+});
+
 test('previous workflow settings upgrade without accepting partial patches or source drift', () => {
     const previousLayout = withoutSettingsLayout(patched);
     const durationStart = previousLayout.indexOf('const PaseodogTurnDurationSettings=');
     const durationEnd = previousLayout.indexOf('const k=[{value:"none",label:', durationStart);
     assert.ok(durationStart > 0 && durationEnd > durationStart);
     const duration = previousLayout.slice(durationStart, durationEnd);
-    const row = 'e.section==="workflow"?u.createElement(PaseodogTurnDurationSettings,{key:"duration:"+e.serverId,serverId:e.serverId}):null,';
+    const row = ',e.section==="workflow"?u.createElement(PaseodogTurnDurationSettings,{key:"duration:"+e.serverId,serverId:e.serverId}):null';
     assert.ok(previousLayout.includes(row));
     const previous = previousLayout.replace(duration, '').replace(row, '');
     assert.equal(patchedComposerSource(previous), patched);
@@ -50,7 +63,8 @@ test('previous workflow settings upgrade without accepting partial patches or so
 });
 
 // 실제 공통 진단과 고정 웹 컴포넌트의 클릭·표시·호스트 연결을 함께 검증한다.
-test('shared and web diagnostic details keep playback explicit and open the selected host viewer', async (t) => {
+// 오디오 재생 테스트와 레거시 터미널 렌더러 토글은 어느 쪽에도 렌더하지 않는다.
+test('shared and web diagnostic details open only the selected host viewer', async (t) => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     t.after(() => { delete globalThis.IS_REACT_ACT_ENVIRONMENT; });
     let connected = true;
@@ -87,43 +101,37 @@ test('shared and web diagnostic details keep playback explicit and open the sele
         ce: { useAppDiagnosticStore: () => () => {} }, We() {}, Ce: { isNative: false },
     });
     for (const Component of [Native, Web]) {
-        let played = 0;
-        const props = {
-            serverId: 'host/one', voiceAudioEngine: {}, isPlaybackTestRunning: false,
-            playbackTestResult: 'playback failure', handlePlaybackTest: async () => { played++; },
-            useLegacyTerminalRenderer: false, onUseLegacyTerminalRendererChange() {},
-        };
+        const props = { serverId: 'host/one' };
         let tree;
         await act(async () => { tree = create(React.createElement(Component, props)); });
         try {
             const buttons = () => tree.root.findAllByType('button');
             const button = (label) => buttons().find((node) => node.props.accessibilityLabel === label || node.props.children === label);
-            assert.equal(button('settings.diagnostics.playTest'), undefined);
+            const removed = () => {
+                const text = JSON.stringify(tree.toJSON());
+                for (const key of ['testAudio', 'playTest', 'playing', 'legacyTerminalRenderer'])
+                    assert.equal(text.includes(`settings.diagnostics.${key}`), false, key);
+                assert.equal(tree.root.findAllByType('switch').length, 0);
+            };
             assert.equal(button('원본 스킬·훅 보기'), undefined);
             assert.ok(button('settings.diagnostics.app.run'));
+            removed();
             await act(async () => button('진단 상세').props.onPress());
-            assert.equal(played, 0);
-            assert.match(JSON.stringify(tree.toJSON()), /playback failure/);
-            await act(async () => button('settings.diagnostics.playTest').props.onPress());
-            assert.equal(played, 1);
+            removed();
             await act(async () => button('원본 스킬·훅 보기').props.onPress());
             assert.equal(routes.at(-1), '/h/host%2Fone/plugin/paseodog-provider/surface/paseodog-native-config');
             await act(async () => tree.update(React.createElement(Component, { ...props, serverId: 'host-two' })));
             await act(async () => button('원본 스킬·훅 보기').props.onPress());
             assert.equal(routes.at(-1), '/h/host-two/plugin/paseodog-provider/surface/paseodog-native-config');
             connected = false;
-            await act(async () => tree.update(React.createElement(Component, { ...props, voiceAudioEngine: null })));
+            await act(async () => tree.update(React.createElement(Component, { ...props })));
             assert.equal(button('원본 스킬·훅 보기').props.disabled, true);
-            assert.equal(button('settings.diagnostics.playTest').props.disabled, true);
             connected = true;
             installed = false;
-            await act(async () => tree.update(React.createElement(Component, { ...props, isPlaybackTestRunning: true })));
+            await act(async () => tree.update(React.createElement(Component, { ...props, serverId: 'host-two' })));
             assert.equal(button('원본 스킬·훅 보기').props.disabled, true);
-            assert.equal(button('settings.diagnostics.playing').props.disabled, true);
             await act(async () => button('진단 상세').props.onPress());
             assert.equal(button('원본 스킬·훅 보기'), undefined);
-            assert.equal(button('settings.diagnostics.playing'), undefined);
-            assert.equal(played, 1);
         } finally {
             await act(async () => tree.unmount());
             connected = true;
@@ -137,13 +145,13 @@ test('web Auto-Clear details follow the switch without changing thresholds', () 
     const anchor = patched.indexOf('children:[pe,...(Q?.enabled?[Te,ke,Ve]:[])]');
     const start = patched.lastIndexOf('function we(', anchor);
     const end = patched.indexOf('function je(', anchor);
-    const cache = memo(104);
+    const cache = memo(101);
     const element = (type, props) => ({ type, ...props });
     const Tokens = runInNewContext('(' + patched.slice(start, end) + ')', {
         c: { c: () => cache }, C: { jsx: element, jsxs: element, Fragment: 'fragment' },
         I: 'row', D: 'select', w: { Switch: 'switch' }, j: { Button: 'button' },
         b: { SettingsSection: 'section' }, n: { View: 'view' }, S: { settingsStyles: {} },
-        M: [], _: [], E: [], z: [], P: [], L: [], fe: 'usage', je: (value) => value,
+        M: [], _: [], E: [], z: [], P: [], L: [], je: (value) => value,
     });
     const nodes = (node) => {
         if (!node || typeof node !== 'object') return [];

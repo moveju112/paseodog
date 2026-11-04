@@ -2136,13 +2136,11 @@ export const fr: TranslationResources = {
       chat: "Discussion",
       appearance: "Apparence",
       sidebar: "Barre latérale",
-      terminal: "Terminal",
       browser: "Navigateur",
       editor: "Éditeur",
       shortcuts: "Raccourcis",
       integrations: "Intégrations",
       notifications: "Notifications",
-      permissions: "Autorisations",
       diagnostics: "Diagnostic",
       about: "À propos",
     },
@@ -2240,11 +2238,6 @@ export const fr: TranslationResources = {
           external: "Navigateur externe",
         },
       },
-      terminalScrollback: {
-        label: "Historique du terminal",
-        description: "Lignes conservées dans le tampon du terminal intégré",
-        accessibilityLabel: "Lignes d’historique du terminal",
-      },
       autoExpandReasoning: {
         label: "Toujours afficher le raisonnement",
         description: "Afficher par défaut le raisonnement de l’agent entièrement déplié",
@@ -2292,15 +2285,6 @@ export const fr: TranslationResources = {
     diagnostics: {
       title: "Diagnostic",
       errorReporting: en.settings.diagnostics.errorReporting,
-      legacyTerminalRenderer: {
-        label: "Utiliser l’ancien rendu du terminal",
-        description: "Utilise l’ancien terminal WebView après la réouverture d’un terminal",
-        accessibilityLabel: "Utiliser l’ancien rendu du terminal",
-      },
-      testAudio: "Tester le son",
-      playTest: "Lancer le test",
-      playing: "Lecture…",
-      playbackFailed: "Échec de la lecture : {{message}}",
       app: {
         title: "Diagnostic de l’app",
         rowTitle: "Diagnostic de l’app",
@@ -2521,11 +2505,8 @@ export const fr: TranslationResources = {
       },
     },
     permissions: {
-      title: "Autorisations",
-      microphone: "Microphone",
       refresh: "Actualiser",
       refreshing: "Actualisation…",
-      refreshAccessibility: "Actualiser les autorisations du bureau",
       actions: {
         granted: "Accordée",
         request: "Demander",

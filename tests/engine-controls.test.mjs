@@ -400,7 +400,10 @@ test('control daemon stdin failures reject uncertain writes without retrying mut
         old.emit('exit', 1);
         old.stdout.emit('error', new Error('old stdout error'));
         fresh.stdout.write(JSON.stringify({ id: 'ctl_1', ok: true, value: { saved: true } }) + '\n');
-        assert.deepEqual(await next, { saved: true, maxTurnMinutes: 120 });
+        const snapshot = await next;
+        assert.equal(snapshot.saved, true);
+        assert.equal(snapshot.maxTurnMinutes, 120);
+        assert.equal(Object.hasOwn(snapshot, 'computerUse'), false);
         assert.equal(fallbacks, 0);
     } finally {
         await controls.close();

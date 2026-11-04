@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 import { Icon } from '@getpaseo/plugin/client/react-native';
 import type { PluginSurfaceProps } from '@getpaseo/plugin/client';

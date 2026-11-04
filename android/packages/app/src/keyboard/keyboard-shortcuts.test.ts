@@ -313,25 +313,11 @@ describe("keyboard-shortcuts", () => {
       action: "sidebar.toggle.both",
     },
     {
-      name: "routes Mod+D to message-input action outside terminal",
-      event: { key: "d", code: "KeyD", metaKey: true },
-      context: { isMac: true, focusScope: "message-input" },
-      action: "message-input.action",
-      payload: { kind: "dictation-toggle" },
-    },
-    {
       name: "routes Shift+Tab to cycle agent mode from the message input",
       event: { key: "Tab", code: "Tab", shiftKey: true },
       context: { focusScope: "message-input" },
       action: "message-input.action",
       payload: { kind: "mode-cycle" },
-    },
-    {
-      name: "routes space to voice mute toggle outside editable scopes",
-      event: { key: " ", code: "Space" },
-      context: { focusScope: "other" },
-      action: "message-input.action",
-      payload: { kind: "voice-mute-toggle" },
     },
     {
       name: "routes Escape to agent interrupt outside terminal focus",
@@ -543,6 +529,22 @@ describe("keyboard-shortcuts", () => {
       name: "does not cycle theme on macOS when Cmd is missing (Alt+T alone)",
       event: { key: "\u2020", code: "KeyT", altKey: true },
       context: { isMac: true },
+    },
+    // PaseoDog은 받아쓰기·음성 모드 단축키를 등록하지 않는다.
+    ...[
+      { key: "d", code: "KeyD", metaKey: true, isMac: true },
+      { key: "d", code: "KeyD", ctrlKey: true, isMac: false },
+      { key: "D", code: "KeyD", metaKey: true, shiftKey: true, isMac: true },
+      { key: "D", code: "KeyD", ctrlKey: true, shiftKey: true, isMac: false },
+    ].map(({ isMac, ...event }) => ({
+      name: `does not start dictation or voice mode from ${JSON.stringify(event)}`,
+      event,
+      context: { isMac, focusScope: "message-input" as const },
+    })),
+    {
+      name: "does not toggle voice mute from space outside editable scopes",
+      event: { key: " ", code: "Space" },
+      context: { focusScope: "other" },
     },
   ];
 

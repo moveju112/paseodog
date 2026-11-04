@@ -39,7 +39,8 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
         async create(args, { signal } = {}) {
             if (signal?.aborted) throw new Error('Engine startup canceled');
             if (!launch?.command) throw new Error('paseodog-engine executable not resolved');
-            const env = { ...launch.env, ...args.config.env };
+            // 지원하지 않는 화면 제어 도구는 기존 설정이나 세션 env로 다시 노출하지 않는다.
+            const env = { ...launch.env, ...args.config.env, MIXDOG_FEATURE_COMPUTER: '0' };
             for (const key of ['MIXDOG_HOME', 'MIXDOG_DATA_DIR', 'PASEO_HOME', 'PASEODOG_STATE_DIR', 'OPENAI_OAUTH_CREDENTIALS_PATH']) {
                 if (launch.env?.[key] !== undefined) env[key] = launch.env[key];
                 else delete env[key];
@@ -139,9 +140,9 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
             if (signal?.aborted) onAbort();
             child.stdout.on('data', (chunk) => decoder.write(chunk));
             child.stdin.on('error', (error) => failAndStop(error));
-            const exitError = (code, signalName) => new Error(
+            const exitError = (code, signalName) => Object.assign(new Error(
                 `Engine exited (${signalName || code}); request outcome may be uncertain`
-            );
+            ), { exit: { code, signal: signalName, pendingRequests: pending.size } });
             child.on('error', (error) => { failAndStop(error); exited.resolve(); });
             // 'close' waits for descendant-held pipe handles. 'exit' doesn't:
             // fail outstanding requests and stop the whole scope immediately.
@@ -177,10 +178,10 @@ export function processEngineFactory({ launch, spawnProcess, terminateProcess, t
                     if (crashReason) queueMicrotask(() => { if (listeners.has(listener)) listener(crashReason); });
                     return () => listeners.delete(listener);
                 },
-                ask(text, callbacks, source, quotaRetry = false) {
-                    return send('ask', { text, quotaRetry, ...(source ? { source } : {}) }, { waitMs: 0, callbacks });
+                ask(text, callbacks, quotaRetry = false) {
+                    return send('ask', { text, quotaRetry }, { waitMs: 0, callbacks });
                 },
-                steer(text, source) { return send('steer', { text, token: activeToken, ...(source ? { source } : {}) }, { fatalOnTimeout: false }); },
+                steer(text) { return send('steer', { text, token: activeToken }, { fatalOnTimeout: false }); },
                 compact(callbacks = {}) { return send('compact', {}, { waitMs: 0, callbacks }); },
                 status() { return send('status', {}, { waitMs: 5000, fatalOnTimeout: false }); },
                 async configure(changes) {

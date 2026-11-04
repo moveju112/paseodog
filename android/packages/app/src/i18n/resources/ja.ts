@@ -2109,13 +2109,11 @@ export const ja: TranslationResources = {
       chat: "チャット",
       appearance: "外観",
       sidebar: "サイドバー",
-      terminal: "ターミナル",
       browser: "ブラウザ",
       editor: "エディター",
       shortcuts: "ショートカット",
       integrations: "連携",
       notifications: "通知",
-      permissions: "権限",
       diagnostics: "診断",
       about: "アプリ情報",
     },
@@ -2210,11 +2208,6 @@ export const ja: TranslationResources = {
           external: "外部ブラウザ",
         },
       },
-      terminalScrollback: {
-        label: "ターミナルスクロールバック",
-        description: "組み込みターミナルバッファに保持する行数",
-        accessibilityLabel: "ターミナルスクロールバック行数",
-      },
       autoExpandReasoning: {
         label: "常に思考プロセスを展開",
         description: "デフォルトでAIのエージェント思考・推論ブロックを完全に展開して表示します",
@@ -2262,15 +2255,6 @@ export const ja: TranslationResources = {
     diagnostics: {
       title: "診断",
       errorReporting: en.settings.diagnostics.errorReporting,
-      legacyTerminalRenderer: {
-        label: "以前のターミナルレンダラーを使用",
-        description: "ターミナルを開き直した後、以前の WebView ターミナルを使用します",
-        accessibilityLabel: "以前のターミナルレンダラーを使用",
-      },
-      testAudio: "音声をテスト",
-      playTest: "テスト再生",
-      playing: "再生中...",
-      playbackFailed: "再生に失敗しました: {{message}}",
       app: {
         title: "App diagnostic",
         rowTitle: "App diagnostic",
@@ -2487,11 +2471,8 @@ export const ja: TranslationResources = {
       },
     },
     permissions: {
-      title: "権限",
-      microphone: "マイク",
       refresh: "更新",
       refreshing: "更新中...",
-      refreshAccessibility: "デスクトップの権限を更新",
       actions: {
         granted: "許可済み",
         request: "許可を求める",

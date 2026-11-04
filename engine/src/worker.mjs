@@ -120,7 +120,7 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
             if (op === 'status') { reply(id, await engine.status()); return; }
             if (op === 'steer') {
                 if (!active || !live(active) || active.token !== args.token) throw new Error('Stale steering turn');
-                reply(id, await engine.steer(args.text, args.source)); return;
+                reply(id, await engine.steer(args.text)); return;
             }
             if (op === 'configure') {
                 // 응답 중 설정은 엔진이 다음 턴 적용 가능 여부를 판단하고, 압축·다른 설정 중에는 거절한다.
@@ -233,7 +233,7 @@ export function serveWorker({ input, output, engineFactory = createNativeEngine,
                         turnEvent(turn, 'permission', { id: permissionId, info });
                         return pending.promise;
                     };
-                    value = await engine.ask(args.text, callbacks, args.source, args.quotaRetry === true);
+                    value = await engine.ask(args.text, callbacks, args.quotaRetry === true);
                 }
                 const result = value?.result || value;
                 reply(id, { result: op === 'compact' ? compactSummary(value) :

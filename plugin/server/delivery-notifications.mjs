@@ -5,6 +5,7 @@ import { link, lstat, mkdir, readFile, readdir, rename, unlink, writeFile } from
 import { isAbsolute, join } from 'node:path';
 import { agentsBySession, defaultCli } from './turn-recovery.mjs';
 import { hash } from './util.mjs';
+import { DELIVERY_REASONS } from './delivery-status.mjs';
 
 const DIRECTORY = 'delivery-reports';
 const ID = /^[a-f0-9]{64}$/;
@@ -41,7 +42,7 @@ export async function readDeliveryReport(stateRoot, id) {
     validateDeliveryAgentId(report.agentId);
     if (report.version !== 1 || report.id !== id || !isAbsolute(report.workspace || '')
         || hash(report.workspace) !== id
-        || (report.result ? !['complete', 'failed'].includes(report.result.status)
+        || (report.result ? !['complete', 'failed', 'running'].includes(report.result.status)
             || report.eventId !== `delivery-result:${hash({ reportId: id, ...report.result })}`
             : report.eventId !== null))
         throw new Error('Invalid delivery report');
@@ -71,7 +72,7 @@ export async function registerDeliveryReport(stateRoot, { workspace, agentId }) 
 }
 
 // 원문 오류·명령행은 복제하지 않는다. 보고가 배포 workspace 정리보다 오래 남도록 별도로 보존한다.
-export async function settleDeliveryReport(stateRoot, workspace, status) {
+export async function settleDeliveryReport(stateRoot, workspace, status, { stage, reason } = {}) {
     if (!['complete', 'failed'].includes(status)) throw new Error('Invalid delivery report outcome');
     const report = await readDeliveryReport(stateRoot, hash(workspace));
     if (!report) return null;
@@ -80,11 +81,30 @@ export async function settleDeliveryReport(stateRoot, workspace, status) {
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     const stages = Object.entries(state?.stages || {});
     const failed = stages.find(([, stage]) => stage.status === 'failed');
+    const failureStage = stage ?? failed?.[0] ?? 'preflight';
+    const failureReason = failed?.[0] === failureStage ? failed[1].reason ?? reason : reason;
+    const attempt = state?.stages?.[failureStage]?.attempt
+        ?? (report.result?.stage === failureStage ? report.result.attempt : null) ?? 1;
+    const safeReason = Object.hasOwn(DELIVERY_REASONS, failureReason) ? failureReason : 'stage-failed';
     report.result = {
         status, commit: state?.identity?.commit ?? null,
-        stage: status === 'failed' ? failed?.[0] ?? 'preflight' : null,
+        stage: status === 'failed' ? failureStage : null,
+        attempt: status === 'failed' ? attempt : null,
+        reason: status === 'failed' ? safeReason : null,
+        recovered: status === 'complete' && (report.result?.status === 'running'
+            || report.result?.recovered === true || stages.some(([, value]) => value.attempt > 1)),
         attempts: Object.fromEntries(stages.map(([name, stage]) => [name, stage.attempt ?? 0])),
     };
+    report.eventId = `delivery-result:${hash({ reportId: report.id, ...report.result })}`;
+    await writeReport(stateRoot, report);
+    return report;
+}
+
+export async function resumeDeliveryReport(stateRoot, workspace) {
+    const report = await readDeliveryReport(stateRoot, hash(workspace));
+    if (!report || report.result?.status !== 'failed') return report;
+    report.result = { ...report.result, status: 'running', reason: null,
+        attempt: (report.result.attempt ?? 1) + 1 };
     report.eventId = `delivery-result:${hash({ reportId: report.id, ...report.result })}`;
     await writeReport(stateRoot, report);
     return report;

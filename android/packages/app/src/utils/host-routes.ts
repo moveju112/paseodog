@@ -494,13 +494,11 @@ export const SETTINGS_SECTION_SLUGS = [
   "appearance",
   "sidebar",
   "chat",
-  "terminal",
   "browser",
   "editor",
   "shortcuts",
   "integrations",
   "notifications",
-  "permissions",
   "diagnostics",
   "about",
 ] as const;
@@ -516,7 +514,6 @@ export const HOST_SECTION_SLUGS = [
   "engine-workflow",
   "engine-response",
   "engine-execution",
-  "engine-speech",
   "engine-memory",
   "engine-tokens",
   "engine-instructions",
@@ -525,14 +522,11 @@ export const HOST_SECTION_SLUGS = [
   "engine-agents",
   "projects",
   "connections",
-  "pair-device",
   "agents",
   "metadata",
   "workspaces",
-  "providers",
   "usage",
   "terminals",
-  "plugins",
   "host",
 ] as const;
 
@@ -542,6 +536,9 @@ const LEGACY_HOST_SECTION_SLUGS: Record<string, HostSectionSlug> = {
   orchestration: "agents",
   daemon: "host",
   "ai-engine": "engine-workflow",
+  providers: "engine-accounts",
+  plugins: "host",
+  "pair-device": "connections",
 };
 
 export function isHostSectionSlug(value: string): value is HostSectionSlug {
@@ -576,12 +573,15 @@ export function buildSettingsHostRoute(serverId: string) {
   return `/settings/hosts/${encodeSegment(normalized)}` as const;
 }
 
-export function buildSettingsHostSectionRoute(serverId: string, section: HostSectionSlug) {
+export function buildSettingsHostSectionRoute(
+  serverId: string,
+  section: HostSectionSlug | "providers" | "plugins",
+) {
   const normalized = trimNonEmpty(serverId);
   if (!normalized) {
     throw new Error("buildSettingsHostSectionRoute requires a non-empty serverId");
   }
-  return `/settings/hosts/${encodeSegment(normalized)}/${section}` as const;
+  return `/settings/hosts/${encodeSegment(normalized)}/${normalizeHostSectionSlug(section)}` as const;
 }
 
 export function buildProjectsSettingsRoute(serverId: string) {

@@ -41,6 +41,8 @@ export function attachHostPolicy(session, { mode = 'ask', systemPrompt = '', onI
         const rewritten = ['ask', 'modify', 'rewrite'].includes(action);
         const name = rewritten && decision?.name ? decision.name : input.name;
         const args = rewritten && decision?.args ? decision.args : input.args;
+        if (String(name).toLowerCase() === 'computer')
+            return { action: 'deny', reason: 'Computer Use is not supported in PaseoDog' };
         const agentTool = ['agent', 'task'].includes(String(name).toLowerCase());
         // 단독 모드도 기본 역할 spawn은 협업 모드의 위임과 같은 정책으로 처리한다.
         const managed = agentTool && (orchestration || (args?.type === 'spawn' && SOLO_BASIC_ROLE_IDS.includes(args?.agent)));

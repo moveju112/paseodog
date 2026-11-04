@@ -92,7 +92,19 @@ export type SerializableAgentConfig = Pick<
 
 export type StoredAgentRecord = z.infer<typeof STORED_AGENT_SCHEMA>;
 export function parseStoredAgentRecord(value: unknown): StoredAgentRecord {
-  return STORED_AGENT_SCHEMA.parse(value);
+  const record = STORED_AGENT_SCHEMA.parse(value);
+  // 정상 대기로 복구된 전용 세션의 오류 알림만 정리하고 실제 실패·미확인 완료는 보존한다.
+  if (
+    record.provider === "paseodog" &&
+    record.lastStatus === "idle" &&
+    !record.lastError &&
+    record.attentionReason === "error"
+  ) {
+    record.requiresAttention = false;
+    record.attentionReason = null;
+    record.attentionTimestamp = null;
+  }
+  return record;
 }
 
 export class AgentStorage {

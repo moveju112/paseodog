@@ -101,11 +101,6 @@ const TOOL_SPECS: Readonly<Record<string, ToolDetailSpec>> = {
     inputOrder: AGENT_FIELDS,
     outputFields: ["agentId", "status", "currentModeId", "cwd"],
   },
-  send_agent_prompt: {
-    promptField: "prompt",
-    inputOrder: AGENT_FIELDS,
-    outputFields: ["status", "lastMessage", "permission"],
-  },
   get_agent_status: { inputOrder: ["agentId"] },
   list_agents: { inputOrder: ["cwd", "statuses", "sinceHours", "limit", "includeArchived"] },
   cancel_agent: { inputOrder: ["agentId"] },

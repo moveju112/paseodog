@@ -2138,13 +2138,11 @@ export const es: TranslationResources = {
       chat: "Chat",
       appearance: "Apariencia",
       sidebar: "Barra lateral",
-      terminal: "Terminal",
       browser: "Navegador",
       editor: "Editor",
       shortcuts: "Atajos",
       integrations: "Integraciones",
       notifications: "Notificaciones",
-      permissions: "Permisos",
       diagnostics: "Diagnóstico",
       about: "Acerca de",
     },
@@ -2243,11 +2241,6 @@ export const es: TranslationResources = {
           external: "Navegador externo",
         },
       },
-      terminalScrollback: {
-        label: "Historial de terminal",
-        description: "Líneas mantenidas en el búfer de terminal incorporado",
-        accessibilityLabel: "Líneas del historial de terminal",
-      },
       autoExpandReasoning: {
         label: "Siempre expandir razonamiento",
         description:
@@ -2296,15 +2289,6 @@ export const es: TranslationResources = {
     diagnostics: {
       title: "Diagnóstico",
       errorReporting: en.settings.diagnostics.errorReporting,
-      legacyTerminalRenderer: {
-        label: "Usar el renderizador de terminal anterior",
-        description: "Usa el terminal WebView anterior al volver a abrir un terminal",
-        accessibilityLabel: "Usar el renderizador de terminal anterior",
-      },
-      testAudio: "audio de prueba",
-      playTest: "Prueba de juego",
-      playing: "Jugando...",
-      playbackFailed: "Error de reproducción:{{message}}",
       app: {
         title: "App diagnostic",
         rowTitle: "App diagnostic",
@@ -2521,11 +2505,8 @@ export const es: TranslationResources = {
       },
     },
     permissions: {
-      title: "Permisos",
-      microphone: "Micrófono",
       refresh: "Refrescar",
       refreshing: "Refrescante...",
-      refreshAccessibility: "Actualizar permisos de escritorio",
       actions: {
         granted: "Otorgada",
         request: "Pedido",

@@ -2064,13 +2064,11 @@ export const zhCN: TranslationResources = {
       chat: "聊天",
       appearance: "外观",
       sidebar: "侧边栏",
-      terminal: "终端",
       browser: "浏览器",
       editor: "编辑器",
       shortcuts: "快捷键",
       integrations: "集成",
       notifications: "通知",
-      permissions: "权限",
       diagnostics: "诊断",
       about: "关于",
     },
@@ -2163,11 +2161,6 @@ export const zhCN: TranslationResources = {
           external: "外部浏览器",
         },
       },
-      terminalScrollback: {
-        label: "终端回滚",
-        description: "内置终端缓冲区保留的行数",
-        accessibilityLabel: "终端回滚行数",
-      },
       autoExpandReasoning: {
         label: "始终展开推理过程",
         description: "默认情况下完全展开 AI 的思考和推理过程",
@@ -2214,15 +2207,6 @@ export const zhCN: TranslationResources = {
     diagnostics: {
       title: "诊断",
       errorReporting: en.settings.diagnostics.errorReporting,
-      legacyTerminalRenderer: {
-        label: "使用旧版终端渲染器",
-        description: "重新打开终端后使用之前的 WebView 终端",
-        accessibilityLabel: "使用旧版终端渲染器",
-      },
-      testAudio: "测试音频",
-      playTest: "播放测试",
-      playing: "正在播放...",
-      playbackFailed: "播放失败：{{message}}",
       app: {
         title: "App diagnostic",
         rowTitle: "App diagnostic",
@@ -2434,11 +2418,8 @@ export const zhCN: TranslationResources = {
       },
     },
     permissions: {
-      title: "权限",
-      microphone: "麦克风",
       refresh: "刷新",
       refreshing: "正在刷新...",
-      refreshAccessibility: "刷新桌面端权限",
       actions: {
         granted: "已授权",
         request: "请求",

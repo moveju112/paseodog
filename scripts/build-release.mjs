@@ -5,6 +5,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import release from '../plugin/shared/release.json' with { type: 'json' };
+import { releaseEnvironment } from './release-environment.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -46,7 +47,7 @@ export async function runReleaseBuild(run, { android = true, desktop = true, web
 }
 // 고유 산출물 폴더와 재사용 캐시를 분리하고 플랫폼별 Metro 임시 경로를 고정한다.
 export async function buildRelease({ workspace, cacheRoot, signingInit, versionCode, version, metroWorkers, checkpoint, targets,
-    onBrowserReady }) {
+    androidHome, wineBin, env: inheritedEnv = process.env, onBrowserReady }) {
     for (const value of [workspace, cacheRoot, signingInit]) {
         if (!value || !isAbsolute(value)) throw new Error('workspace, cache-root and signing-init must be absolute');
     }
@@ -59,6 +60,7 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
     }
     if (Number(versionCode) !== release.versionCode || version !== `${release.version}.${release.versionCode}`)
         throw new Error('Release arguments must match plugin/shared/release.json');
+    const env = releaseEnvironment({ androidHome, wineBin }, inheritedEnv);
     await mkdir(workspace, { recursive: true });
     const androidRoot = join(root, 'android');
     const desktopRoot = join(androidRoot, 'packages/desktop');
@@ -87,7 +89,7 @@ export async function buildRelease({ workspace, cacheRoot, signingInit, versionC
             const child = spawn('systemd-run', ['--user', '--scope', '-q',
                 '-p', 'MemoryHigh=16G', '-p', 'MemorySwapMax=2G', ...command], {
                 cwd,
-                env: { ...process.env, TMPDIR: temporary, CI: '1',
+                env: { ...env, TMPDIR: temporary, CI: '1',
                     PASEODOG_BUILD_CACHE_ROOT: cacheRoot,
                     PASEODOG_RELEASE_METRICS: join(workspace, `${name}-metrics.jsonl`),
                     ...(name === 'windows' ? { ELECTRON_BUILDER_COMPRESSION_LEVEL: '1' } : {}),
