@@ -42,11 +42,24 @@ test('work-method patches accept pinned originals and reject drift and partial a
         assert.equal(patchedAgentSource(patched, spec), patched);
         assert.throws(() => patchedAgentSource(`${original}\nDRIFT\n`, spec), /source hash mismatch/);
         if (spec.edits.length > 1) {
-            const [before, after] = spec.edits[0];
+            const [before, after] = spec.edits.at(-1);
             assert.throws(() => patchedAgentSource(original.replace(before, after), spec),
                 /Partial Mixdog patch/);
         }
     }
+});
+
+test('destructive rules allow existing-file cleanup when upgrading an earlier installation', async () => {
+    const spec = specFor('src/rules/shared/45-destructive.md');
+    const original = originalSource(await readFile(new URL(spec.file, root), 'utf8'), spec);
+    const [before, after] = spec.edits[0];
+    const legacy = original.replace(before, after);
+    const patched = patchedAgentSource(legacy, spec);
+    assert.equal(patched, patchedAgentSource(original, spec));
+    assert.doesNotMatch(patched, /delete\s+files you did not create/);
+    assert.match(patched, /Never stash, reset, checkout, restore or clean the working tree:/);
+    assert.match(patched, /any irreversible action only on the\s+user's explicit request/);
+    assert.match(patched, /Back up only when changes risk irreversible loss/);
 });
 
 test('rendered rules omit optional mandates while retaining safety and English briefing contracts', () => {
@@ -65,6 +78,7 @@ test('rendered rules omit optional mandates while retaining safety and English b
     assert.match(shared, /Current or external information discovery→`web_search`/);
     assert.match(shared, /any irreversible action only on the\s+user's explicit request/);
     assert.match(shared, /Never stash, reset, checkout, restore or clean/);
+    assert.doesNotMatch(shared, /delete\s+files you did not create/);
     assert.match(shared, /Back up only when changes risk irreversible loss/);
     assert.match(shared, /Check required behavior, exact outputs and essential integrity, security/);
     assert.match(shared, /rerun only failed or invalidated\s+checks/i);

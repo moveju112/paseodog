@@ -56,9 +56,22 @@ export const WORK_METHOD_RULE_PATCHES = [
     {
         file: 'src/rules/shared/45-destructive.md',
         blob: '7601ab703645bcf6cf3d0531247102a52b33dfd2',
+        previousEditCount: 1,
         edits: [[
             '<!-- tools: git -->\n- Separate-branch work goes into a managed worktree through `git`.',
             '<!-- PaseoDog: 별도 브랜치 작업의 managed worktree 사용을 강제하지 않는다. -->',
+        ], [
+            [
+                '- Never stash, reset, checkout, restore or clean the working tree, or delete',
+                '  files you did not create: it may hold other agents\' or the user\'s',
+                '  uncommitted work. Use a copy or managed snapshot for before/after',
+                '  comparisons.',
+            ].join('\n'),
+            [
+                '- Never stash, reset, checkout, restore or clean the working tree: it may',
+                '  hold other agents\' or the user\'s uncommitted work. Use a copy or managed',
+                '  snapshot for before/after comparisons.',
+            ].join('\n'),
         ]],
     },
     {
