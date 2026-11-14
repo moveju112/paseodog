@@ -356,7 +356,7 @@ export function UsageMonitor({ theme, layout }: PluginSurfaceProps) {
                             key: JSON.stringify([model.provider, model.model, item.effort, item.fast ?? null]),
                             label: `${agentLabel} ${model.provider} ${model.model} ${item.effort || 'effort 미기록'} Fast ${fastLabel(item.fast)} 사용량`,
                             cells: [index ? '' : `${model.provider} · ${model.model}`, item.effort || '미기록',
-                                fastLabel(item.fast), speed(item.outputTokensPerSecond), number(item.turns),
+                                item.fast === true ? 'O' : '', speed(item.outputTokensPerSecond), number(item.turns),
                                 number(item.tokens)] })))} />
                 </Card>;
             })}
